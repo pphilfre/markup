@@ -16,6 +16,9 @@ import {
   Italic,
   Strikethrough,
   Settings,
+  LogIn,
+  LogOut,
+  User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,10 +30,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { useEditorStore } from "@/lib/store";
+import { useAuthState } from "@/components/convex-client-provider";
+
 
 /** Small inline kbd badge for keybind hints */
 function Kbd({ children }: { children: React.ReactNode }) {
@@ -46,6 +52,7 @@ export function Sidebar() {
   const insertSnippet = useEditorStore((s) => s.insertSnippet);
   const wrapSelection = useEditorStore((s) => s.wrapSelection);
   const [headingOpen, setHeadingOpen] = useState(false);
+  const { isAuthenticated, user, isLoading: authLoading } = useAuthState();
 
   return (
     <aside className="flex h-full w-12 flex-col items-center border-r border-border bg-card py-2">
@@ -287,8 +294,68 @@ export function Sidebar() {
         </Tooltip>
       </div>
 
-      {/* Bottom: Settings button */}
+      {/* Bottom: Auth + Settings */}
       <Separator className="my-1 w-6" />
+
+      {/* Auth button */}
+      {!authLoading && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {isAuthenticated ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  >
+                    {user?.profilePictureUrl ? (
+                      <img
+                        src={user.profilePictureUrl}
+                        alt=""
+                        className="h-5 w-5 rounded-full"
+                      />
+                    ) : (
+                      <User className="h-4 w-4" />
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="right" align="end">
+                  <div className="px-2 py-1.5">
+                    <p className="text-xs font-medium">
+                      {user?.firstName} {user?.lastName}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {user?.email}
+                    </p>
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <a href="/api/auth/signout" className="flex w-full items-center gap-2">
+                      <LogOut className="h-3.5 w-3.5" />
+                      Sign out
+                    </a>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <a href="/api/auth/signin">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                >
+                  <LogIn className="h-4 w-4" />
+                </Button>
+              </a>
+            )}
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            {isAuthenticated ? `${user?.email}` : "Sign in to sync"}
+          </TooltipContent>
+        </Tooltip>
+      )}
+
       <Tooltip>
         <TooltipTrigger asChild>
           <Button

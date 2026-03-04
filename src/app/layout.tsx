@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ConvexClientProvider } from "@/components/convex-client-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -183,9 +184,11 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased h-screen overflow-hidden`}
       >
-        <TooltipProvider delayDuration={300}>
-          {children}
-        </TooltipProvider>
+        <ConvexClientProvider>
+          <TooltipProvider delayDuration={300}>
+            {children}
+          </TooltipProvider>
+        </ConvexClientProvider>
       </body>
     </html>
   );

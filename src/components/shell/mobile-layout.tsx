@@ -40,6 +40,7 @@ import { FileTree } from "@/components/shell/file-tree";
 import { SpotlightSearch } from "@/components/shell/spotlight-search";
 import { SettingsPanel } from "@/components/shell/settings-panel";
 import { ThemeSync } from "@/components/theme-provider";
+import { ConvexSync } from "@/lib/convex-sync";
 import { InfoButton } from "@/components/shell/info-button";
 import {
   DropdownMenu,
@@ -485,6 +486,7 @@ export function MobileLayout() {
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden mobile-safe-top">
       <ThemeSync />
+      <ConvexSync />
       <SpotlightSearch />
       <SettingsPanel />
 

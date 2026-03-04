@@ -5,6 +5,7 @@ import { SpotlightSearch } from "@/components/shell/spotlight-search";
 import { SettingsPanel } from "@/components/shell/settings-panel";
 import { ThemeSync } from "@/components/theme-provider";
 import { MobileLayout } from "@/components/shell/mobile-layout";
+import { ConvexSync } from "@/lib/convex-sync";
 import { useEditorStore } from "@/lib/store";
 import { useGlobalKeybinds } from "@/lib/keybinds";
 import { useIsMobile } from "@/lib/use-mobile";
@@ -40,6 +41,7 @@ export default function Home() {
   return (
     <div className="flex h-screen">
       <ThemeSync />
+      <ConvexSync />
       <SpotlightSearch />
       <SettingsPanel />
       <Sidebar />
