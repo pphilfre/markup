@@ -4,13 +4,16 @@ import { Sidebar, TabBar, MainContent, FileTree } from "@/components/shell";
 import { SpotlightSearch } from "@/components/shell/spotlight-search";
 import { SettingsPanel } from "@/components/shell/settings-panel";
 import { ThemeSync } from "@/components/theme-provider";
+import { MobileLayout } from "@/components/shell/mobile-layout";
 import { useEditorStore } from "@/lib/store";
 import { useGlobalKeybinds } from "@/lib/keybinds";
+import { useIsMobile } from "@/lib/use-mobile";
 import { useEffect } from "react";
 
 export default function Home() {
   const hydrated = useEditorStore((s) => s._hydrated);
   const hydrate = useEditorStore((s) => s.hydrate);
+  const isMobile = useIsMobile();
 
   // Hydrate from IndexedDB on mount
   useEffect(() => {
@@ -28,6 +31,12 @@ export default function Home() {
     );
   }
 
+  // Mobile layout — completely rearranged for small screens
+  if (isMobile) {
+    return <MobileLayout />;
+  }
+
+  // Desktop layout — unchanged
   return (
     <div className="flex h-screen">
       <ThemeSync />

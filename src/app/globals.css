@@ -420,3 +420,80 @@
 .markdown-body h6 {
   color: var(--accent-color, #7c3aed) !important;
 }
+
+/* ── Mobile-specific styles ──────────────────────────────────────────────── */
+
+/* Hide scrollbar for mobile tab strips and toolbars */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Better touch targets on mobile */
+@media (max-width: 767px) {
+  /* Prevent text selection while scrolling toolbars */
+  .mobile-toolbar-scroll {
+    -webkit-overflow-scrolling: touch;
+    user-select: none;
+  }
+
+  /* Prevent overscroll bounce on mobile */
+  html, body {
+    overscroll-behavior: none;
+  }
+
+  /* Adjust CodeMirror for mobile */
+  .cm-editor {
+    font-size: 14px !important;
+  }
+
+  .cm-scroller {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Make inputs larger for touch */
+  .cm-editor .cm-content {
+    padding: 8px 12px !important;
+  }
+
+  /* Thinner line numbers on mobile */
+  .cm-lineNumbers {
+    min-width: 28px !important;
+  }
+
+  .cm-lineNumbers .cm-gutterElement {
+    padding: 0 4px 0 4px !important;
+    font-size: 10px !important;
+  }
+
+  /* Preview padding on mobile */
+  .markdown-body {
+    padding: 12px !important;
+    font-size: 14px !important;
+  }
+
+  /* File tree overlay takes full width of its container */
+  .mobile-file-tree aside {
+    width: 100% !important;
+  }
+
+  /* Settings panel adjustments */
+  .fixed.inset-0.z-50 .max-w-sm {
+    max-width: calc(100vw - 2rem) !important;
+  }
+}
+
+/* Safe area padding for mobile devices with notches */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  @media (max-width: 767px) {
+    .mobile-safe-bottom {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .mobile-safe-top {
+      padding-top: env(safe-area-inset-top);
+    }
+  }
+}
