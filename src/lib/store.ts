@@ -6,7 +6,7 @@ import { EditorView } from "@codemirror/view";
 // Types
 // ---------------------------------------------------------------------------
 
-export type ViewMode = "editor" | "split" | "preview";
+export type ViewMode = "editor" | "split" | "preview" | "graph";
 export type Theme = "dark" | "light";
 
 export interface Tab {
@@ -14,6 +14,7 @@ export interface Tab {
   title: string;
   content: string;
   folderId: string | null; // null = root
+  tags: string[]; // user-defined tags
 }
 
 export interface Folder {
@@ -92,6 +93,11 @@ interface EditorState {
   updateTitle: (id: string, title: string) => void;
   renameTab: (id: string, title: string) => void;
 
+  // Tags
+  addTag: (tabId: string, tag: string) => void;
+  removeTag: (tabId: string, tag: string) => void;
+  getAllTags: () => string[];
+
   // View
   toggleView: () => void;
   setViewMode: (mode: ViewMode) => void;
@@ -121,6 +127,7 @@ function newTab(folderId: string | null = null): Tab {
     title: `Untitled-${tabCounter}.md`,
     content: "",
     folderId,
+    tags: [],
   };
 }
 
@@ -278,7 +285,7 @@ export const useEditorStore = create<EditorState>()(
         tabCounter = maxNum;
 
         set({
-          tabs: saved.tabs.map((t) => ({ ...t, folderId: t.folderId ?? null })),
+          tabs: saved.tabs.map((t) => ({ ...t, folderId: t.folderId ?? null, tags: t.tags ?? [] })),
           activeTabId: saved.activeTabId,
           viewMode: saved.viewMode,
           theme: saved.theme ?? "dark",
@@ -354,9 +361,35 @@ export const useEditorStore = create<EditorState>()(
         tabs: s.tabs.map((t) => (t.id === id ? { ...t, title } : t)),
       })),
 
+    // ── Tags ───────────────────────────────────────────────────────────
+    addTag: (tabId, tag) =>
+      set((s) => ({
+        tabs: s.tabs.map((t) =>
+          t.id === tabId && !t.tags.includes(tag)
+            ? { ...t, tags: [...t.tags, tag] }
+            : t
+        ),
+      })),
+
+    removeTag: (tabId, tag) =>
+      set((s) => ({
+        tabs: s.tabs.map((t) =>
+          t.id === tabId
+            ? { ...t, tags: t.tags.filter((tg) => tg !== tag) }
+            : t
+        ),
+      })),
+
+    getAllTags: () => {
+      const { tabs } = get();
+      const tagSet = new Set<string>();
+      tabs.forEach((t) => t.tags.forEach((tag) => tagSet.add(tag)));
+      return Array.from(tagSet).sort();
+    },
+
     toggleView: () =>
       set((s) => {
-        const cycle: ViewMode[] = ["editor", "split", "preview"];
+        const cycle: ViewMode[] = ["editor", "split", "preview", "graph"];
         const idx = cycle.indexOf(s.viewMode);
         return { viewMode: cycle[(idx + 1) % cycle.length] };
       }),

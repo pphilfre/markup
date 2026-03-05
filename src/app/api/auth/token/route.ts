@@ -15,6 +15,7 @@ export async function GET() {
 
     return NextResponse.json({
       accessToken: session.accessToken,
+      sessionId: "sessionId" in session ? session.sessionId : null,
       user: session.user
         ? {
             id: session.user.id,

@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { EditorState } from "@codemirror/state";
 import { EditorView, ViewUpdate, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, rectangularSelection } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { Prec } from "@codemirror/state";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { bracketMatching, indentOnInput, foldGutter, foldKeymap, HighlightStyle, syntaxHighlighting } from "@codemirror/language";
@@ -13,6 +14,91 @@ import { tags } from "@lezer/highlight";
 import { useEditorStore } from "@/lib/store";
 import { darkTheme, darkHighlightStyle, lightTheme, lightHighlightStyle } from "./theme";
 import { EditorContextMenu } from "./context-menu";
+
+// ── Smart list indentation ────────────────────────────────────────────────
+// Handles Enter in lists, Tab/Shift-Tab for indent/dedent
+
+const listContinueRegex = /^(\s*)([-*+]|(\d+)\.) (\[[ x]\] )?/;
+
+function smartListKeymap() {
+  return Prec.high(
+    keymap.of([
+      {
+        key: "Enter",
+        run: (view: EditorView) => {
+          const { state } = view;
+          const { from } = state.selection.main;
+          const line = state.doc.lineAt(from);
+          const match = line.text.match(listContinueRegex);
+          if (!match) return false;
+
+          const [fullMatch, indent, marker, num, checkbox] = match;
+          // If the line is ONLY the list prefix (empty item), remove it
+          if (line.text.trim() === fullMatch.trim()) {
+            view.dispatch({
+              changes: { from: line.from, to: line.to, insert: "" },
+              selection: { anchor: line.from },
+            });
+            return true;
+          }
+
+          // Build continuation
+          let nextMarker = marker;
+          if (num !== undefined) {
+            nextMarker = (parseInt(num, 10) + 1) + ".";
+          }
+          const prefix = checkbox ? `${indent}${nextMarker} [ ] ` : `${indent}${nextMarker} `;
+          view.dispatch({
+            changes: { from, to: from, insert: "\n" + prefix },
+            selection: { anchor: from + 1 + prefix.length },
+          });
+          return true;
+        },
+      },
+      {
+        key: "Tab",
+        run: (view: EditorView) => {
+          const { state } = view;
+          const { from, to } = state.selection.main;
+          const line = state.doc.lineAt(from);
+          if (!listContinueRegex.test(line.text)) return false;
+          // Indent: first line or selected lines
+          const startLine = state.doc.lineAt(from);
+          const endLine = state.doc.lineAt(to);
+          const changes: { from: number; to: number; insert: string }[] = [];
+          for (let i = startLine.number; i <= endLine.number; i++) {
+            const l = state.doc.line(i);
+            changes.push({ from: l.from, to: l.from, insert: "  " });
+          }
+          view.dispatch({ changes });
+          return true;
+        },
+      },
+      {
+        key: "Shift-Tab",
+        run: (view: EditorView) => {
+          const { state } = view;
+          const { from, to } = state.selection.main;
+          const line = state.doc.lineAt(from);
+          if (!listContinueRegex.test(line.text)) return false;
+          const startLine = state.doc.lineAt(from);
+          const endLine = state.doc.lineAt(to);
+          const changes: { from: number; to: number; insert: string }[] = [];
+          for (let i = startLine.number; i <= endLine.number; i++) {
+            const l = state.doc.line(i);
+            if (l.text.startsWith("  ")) {
+              changes.push({ from: l.from, to: l.from + 2, insert: "" });
+            } else if (l.text.startsWith("\t")) {
+              changes.push({ from: l.from, to: l.from + 1, insert: "" });
+            }
+          }
+          if (changes.length) view.dispatch({ changes });
+          return true;
+        },
+      },
+    ])
+  );
+}
 
 export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => void } = {}) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -92,6 +178,7 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
         foldGutter(),
         highlightSelectionMatches(),
         history(),
+        smartListKeymap(),
         formattingKeymap,
         keymap.of([
           ...defaultKeymap,
@@ -105,10 +192,10 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
         ...(theme === "dark"
           ? [darkTheme, darkHighlightStyle]
           : [lightTheme, lightHighlightStyle]),
-        // Override heading colour with user's accent colour
+        // Override heading colour with user's accent colour (no visual rendering)
         syntaxHighlighting(
           HighlightStyle.define([
-            { tag: tags.heading, color: settings.accentColor, fontWeight: "bold" },
+            { tag: tags.heading, color: settings.accentColor },
           ])
         ),
         EditorView.lineWrapping,

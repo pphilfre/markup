@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Plus, X, Download, FolderArchive, Sun, Moon, PenLine, Eye, Columns2 } from "lucide-react";
+import { Plus, X, Download, FolderArchive, Sun, Moon, PenLine, Eye, Columns2, Network } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
@@ -192,9 +192,9 @@ export function TabBar() {
           <div
             className="absolute top-0.5 bottom-0.5 rounded-sm bg-background shadow-sm transition-transform duration-200 ease-out"
             style={{
-              width: "calc(33.333% - 1px)",
+              width: "calc(25% - 1px)",
               transform: `translateX(${
-                viewMode === "editor" ? "0%" : viewMode === "split" ? "100%" : "200%"
+                viewMode === "editor" ? "0%" : viewMode === "split" ? "100%" : viewMode === "preview" ? "200%" : "300%"
               })`,
             }}
           />
@@ -203,6 +203,7 @@ export function TabBar() {
               { mode: "editor" as ViewMode, icon: PenLine, label: "Editor" },
               { mode: "split" as ViewMode, icon: Columns2, label: "Split" },
               { mode: "preview" as ViewMode, icon: Eye, label: "Preview" },
+              { mode: "graph" as ViewMode, icon: Network, label: "Graph" },
             ] as const
           ).map(({ mode, icon: Icon, label }) => (
             <Tooltip key={mode}>

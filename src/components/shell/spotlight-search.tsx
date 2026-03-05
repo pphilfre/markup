@@ -16,6 +16,7 @@ import {
   Plus,
   Download,
   FolderPlus,
+  FolderOpen,
   PanelLeftClose,
   PanelLeft,
 } from "lucide-react";
@@ -153,6 +154,7 @@ export function SpotlightSearch() {
   const listRef = useRef<HTMLDivElement>(null);
 
   const tabs = useEditorStore((s) => s.tabs);
+  const folders = useEditorStore((s) => s.folders);
   const switchTab = useEditorStore((s) => s.switchTab);
   const features = useFeatures();
 
@@ -195,6 +197,26 @@ export function SpotlightSearch() {
     return searchText(tabs, textQuery);
   }, [isTextSearch, textQuery, tabs]);
 
+  // File matches: search by filename (shown in default mode when query is non-empty)
+  const fileMatches = useMemo(() => {
+    if (isTextSearch) return [];
+    const q = query.toLowerCase().trim();
+    if (!q) return [];
+    return tabs.filter((t) =>
+      t.title.toLowerCase().includes(q)
+    );
+  }, [query, isTextSearch, tabs]);
+
+  // Folder matches: search by folder name
+  const folderMatches = useMemo(() => {
+    if (isTextSearch) return [];
+    const q = query.toLowerCase().trim();
+    if (!q) return [];
+    return folders.filter((f) =>
+      f.name.toLowerCase().includes(q)
+    );
+  }, [query, isTextSearch, folders]);
+
   const filteredFeatures = useMemo(() => {
     if (isTextSearch) return [];
     const q = query.toLowerCase().trim();
@@ -206,7 +228,25 @@ export function SpotlightSearch() {
     );
   }, [query, isTextSearch, features]);
 
-  const totalItems = isTextSearch ? textResults.length : filteredFeatures.length;
+  // Combined items: files first, then folders, then features
+  type ResultItem =
+    | { kind: "file"; tab: typeof tabs[0] }
+    | { kind: "folder"; folder: typeof folders[0] }
+    | { kind: "feature"; feature: Feature }
+    | { kind: "text"; match: TextMatch };
+
+  const allItems = useMemo<ResultItem[]>(() => {
+    if (isTextSearch) {
+      return textResults.map((m) => ({ kind: "text" as const, match: m }));
+    }
+    return [
+      ...fileMatches.map((tab) => ({ kind: "file" as const, tab })),
+      ...folderMatches.map((folder) => ({ kind: "folder" as const, folder })),
+      ...filteredFeatures.map((feature) => ({ kind: "feature" as const, feature })),
+    ];
+  }, [isTextSearch, textResults, fileMatches, folderMatches, filteredFeatures]);
+
+  const totalItems = allItems.length;
 
   // Reset selection on filter change
   useEffect(() => {
@@ -220,13 +260,25 @@ export function SpotlightSearch() {
     active?.scrollIntoView({ block: "nearest" });
   }, [selectedIndex]);
 
+  const toggleFileTree = useEditorStore((s) => s.toggleFileTree);
+  const expandFolderById = useCallback(
+    (folderId: string) => {
+      // Focus the sidebar and open the folder — open the file tree if closed
+      const s = useEditorStore.getState();
+      if (!s.fileTreeOpen) toggleFileTree();
+    },
+    [toggleFileTree]
+  );
+
   const execute = useCallback(
     (index: number) => {
-      if (isTextSearch) {
-        const match = textResults[index];
-        if (match) {
-          switchTab(match.tabId);
-          // Scroll to matched line — retry until editor view is ready
+      const item = allItems[index];
+      if (!item) { setOpen(false); return; }
+
+      switch (item.kind) {
+        case "text": {
+          switchTab(item.match.tabId);
+          const match = item.match;
           const tryScroll = (attempts: number) => {
             const view = useEditorStore.getState().editorView;
             if (view && view.state.doc.lines >= match.lineNumber) {
@@ -237,31 +289,27 @@ export function SpotlightSearch() {
                 selection: { anchor: line.from + Math.max(0, match.matchIndex) },
                 scrollIntoView: true,
               });
-              // Also force a second scroll for reliability
-              requestAnimationFrame(() => {
-                try {
-                  const { EditorView: EV } = require("@codemirror/view");
-                  view.dispatch({
-                    effects: EV.scrollIntoView(line.from, { y: "center" }),
-                  });
-                } catch {
-                  // fallback already handled by scrollIntoView: true above
-                }
-                view.focus();
-              });
+              requestAnimationFrame(() => view.focus());
             } else if (attempts > 0) {
               setTimeout(() => tryScroll(attempts - 1), 50);
             }
           };
           tryScroll(10);
+          break;
         }
-      } else {
-        const feature = filteredFeatures[index];
-        if (feature) feature.action();
+        case "file":
+          switchTab(item.tab.id);
+          break;
+        case "folder":
+          expandFolderById(item.folder.id);
+          break;
+        case "feature":
+          item.feature.action();
+          break;
       }
       setOpen(false);
     },
-    [isTextSearch, textResults, filteredFeatures, switchTab]
+    [allItems, switchTab, expandFolderById]
   );
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -300,7 +348,7 @@ export function SpotlightSearch() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Search features… or ?query for text search"
+            placeholder="Search files, folders, features… or ?query for text"
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
           />
           <kbd className="hidden sm:inline-flex items-center rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
@@ -310,69 +358,100 @@ export function SpotlightSearch() {
 
         {/* Results list */}
         <div ref={listRef} className="max-h-64 overflow-y-auto p-1">
-          {isTextSearch ? (
-            textResults.length === 0 ? (
-              <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-                {textQuery ? "No matches found" : "Type after ? to search text in all files"}
-              </p>
-            ) : (
-              textResults.map((match, i) => (
-                <button
-                  key={`${match.tabId}-${match.lineNumber}-${i}`}
-                  data-active={i === selectedIndex}
-                  onClick={() => execute(i)}
-                  className={cn(
-                    "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-                    i === selectedIndex
-                      ? "bg-accent text-accent-foreground"
-                      : "text-foreground hover:bg-muted"
-                  )}
-                >
-                  <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium truncate">
-                        {match.tabTitle}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">
-                        :{match.lineNumber}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">
-                      {match.lineContent.trim()}
-                    </p>
-                  </div>
-                </button>
-              ))
-            )
-          ) : filteredFeatures.length === 0 ? (
+          {allItems.length === 0 ? (
             <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-              No matching features
+              {isTextSearch && !textQuery
+                ? "Type after ? to search text in all files"
+                : "No results found"}
             </p>
           ) : (
-            filteredFeatures.map((feature, i) => (
-              <button
-                key={feature.label}
-                data-active={i === selectedIndex}
-                onClick={() => execute(i)}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-                  i === selectedIndex
-                    ? "bg-accent text-accent-foreground"
-                    : "text-foreground hover:bg-muted"
-                )}
-              >
-                <span className="text-muted-foreground">{feature.icon}</span>
-                <span>{feature.label}</span>
-              </button>
-            ))
+            allItems.map((item, i) => {
+              const isActive = i === selectedIndex;
+              const cls = cn(
+                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                isActive
+                  ? "bg-accent text-accent-foreground"
+                  : "text-foreground hover:bg-muted"
+              );
+
+              switch (item.kind) {
+                case "file": {
+                  const folder = folders.find((f) => f.id === item.tab.folderId);
+                  return (
+                    <button
+                      key={`file-${item.tab.id}`}
+                      data-active={isActive}
+                      onClick={() => execute(i)}
+                      className={cls}
+                    >
+                      <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="truncate">{item.tab.title}</span>
+                      {folder && (
+                        <span className="ml-auto text-[10px] text-muted-foreground/60 truncate max-w-[80px]">
+                          {folder.name}
+                        </span>
+                      )}
+                    </button>
+                  );
+                }
+                case "folder":
+                  return (
+                    <button
+                      key={`folder-${item.folder.id}`}
+                      data-active={isActive}
+                      onClick={() => execute(i)}
+                      className={cls}
+                    >
+                      <FolderOpen className="h-3.5 w-3.5 shrink-0" style={{ color: item.folder.color }} />
+                      <span className="truncate">{item.folder.name}</span>
+                      <span className="ml-auto text-[10px] text-muted-foreground/60">folder</span>
+                    </button>
+                  );
+                case "feature":
+                  return (
+                    <button
+                      key={`feat-${item.feature.label}`}
+                      data-active={isActive}
+                      onClick={() => execute(i)}
+                      className={cls}
+                    >
+                      <span className="text-muted-foreground">{item.feature.icon}</span>
+                      <span>{item.feature.label}</span>
+                    </button>
+                  );
+                case "text":
+                  return (
+                    <button
+                      key={`text-${item.match.tabId}-${item.match.lineNumber}-${i}`}
+                      data-active={isActive}
+                      onClick={() => execute(i)}
+                      className={cn(cls, "items-start")}
+                    >
+                      <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium truncate">
+                            {item.match.tabTitle}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            :{item.match.lineNumber}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                          {item.match.lineContent.trim()}
+                        </p>
+                      </div>
+                    </button>
+                  );
+              }
+            })
           )}
         </div>
 
         {/* Footer hint */}
         <div className="flex items-center justify-between border-t border-border px-3 py-1.5">
           <span className="text-[10px] text-muted-foreground">
-            {isTextSearch ? "Text search across all files" : "Feature search"}
+            {isTextSearch ? "Text search across all files" : "Files, folders & features"}
           </span>
           <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
             <kbd className="rounded border border-border bg-muted px-1 py-0.5 font-mono">↑↓</kbd>
@@ -385,5 +464,3 @@ export function SpotlightSearch() {
     </div>
   );
 }
-
-// (EditorView.scrollIntoView is now used inline in the execute callback)

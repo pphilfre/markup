@@ -31,6 +31,12 @@ import {
   FolderOpen,
   Search,
   PanelLeft,
+  LogIn,
+  LogOut,
+  User,
+  Network,
+  Shield,
+  Monitor,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -42,10 +48,14 @@ import { SettingsPanel } from "@/components/shell/settings-panel";
 import { ThemeSync } from "@/components/theme-provider";
 import { ConvexSync } from "@/lib/convex-sync";
 import { InfoButton } from "@/components/shell/info-button";
+import { GraphView } from "@/components/shell/graph-view";
+import { useAuthState } from "@/components/convex-client-provider";
+import { UserAccountPanel } from "@/components/shell/user-account-panel";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -62,6 +72,7 @@ function MobileHeader({
   const theme = useEditorStore((s) => s.theme);
   const toggleTheme = useEditorStore((s) => s.toggleTheme);
   const hideMd = useEditorStore((s) => s.settings.hideMdExtensions);
+  const { isAuthenticated, user, isLoading: authLoading } = useAuthState();
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const displayName = activeTab
@@ -97,6 +108,68 @@ function MobileHeader({
         <Search className="h-4 w-4" />
       </Button>
 
+      {/* Auth button */}
+      {!authLoading && (
+        isAuthenticated ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 text-muted-foreground"
+              >
+                {user?.profilePictureUrl ? (
+                  <img
+                    src={user.profilePictureUrl}
+                    alt=""
+                    className="h-5 w-5 rounded-full"
+                  />
+                ) : (
+                  <User className="h-4 w-4" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <div className="px-2 py-1.5">
+                <p className="text-xs font-medium">
+                  {user?.firstName} {user?.lastName}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {user?.email}
+                </p>
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => document.dispatchEvent(new CustomEvent("open-user-account", { detail: "profile" }))}>
+                <User className="mr-2 h-3.5 w-3.5" /> Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => document.dispatchEvent(new CustomEvent("open-user-account", { detail: "sessions" }))}>
+                <Monitor className="mr-2 h-3.5 w-3.5" /> Sessions
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => document.dispatchEvent(new CustomEvent("open-user-account", { detail: "security" }))}>
+                <Shield className="mr-2 h-3.5 w-3.5" /> Security
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <a href="/api/auth/signout" className="flex w-full items-center gap-2">
+                  <LogOut className="h-3.5 w-3.5" />
+                  Sign out
+                </a>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <a href="/api/auth/signin">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0 text-muted-foreground"
+            >
+              <LogIn className="h-4 w-4" />
+            </Button>
+          </a>
+        )
+      )}
+
       {/* Theme toggle */}
       <Button
         variant="ghost"
@@ -130,11 +203,14 @@ function MobileTabStrip() {
         {tabs.map((tab) => {
           const name = hideMd && tab.title.endsWith(".md") ? tab.title.slice(0, -3) : tab.title;
           return (
-            <button
+            <div
               key={tab.id}
+              role="tab"
+              tabIndex={0}
               onClick={() => switchTab(tab.id)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") switchTab(tab.id); }}
               className={cn(
-                "flex shrink-0 items-center gap-1.5 px-3 h-9 text-xs border-r border-border transition-colors",
+                "flex shrink-0 items-center gap-1.5 px-3 h-9 text-xs border-r border-border transition-colors cursor-pointer",
                 tab.id === activeTabId
                   ? "bg-background text-foreground"
                   : "text-muted-foreground"
@@ -150,7 +226,7 @@ function MobileTabStrip() {
               >
                 <X className="h-2.5 w-2.5" />
               </button>
-            </button>
+            </div>
           );
         })}
       </div>
@@ -175,6 +251,7 @@ function MobileViewToggle() {
     { mode: "editor", icon: PenLine, label: "Edit" },
     { mode: "split", icon: Columns2, label: "Split" },
     { mode: "preview", icon: Eye, label: "Preview" },
+    { mode: "graph", icon: Network, label: "Graph" },
   ];
 
   return (
@@ -396,6 +473,14 @@ function MobileContent() {
     );
   }
 
+  if (viewMode === "graph") {
+    return (
+      <main className="flex flex-1 flex-col overflow-hidden bg-background">
+        <GraphView />
+      </main>
+    );
+  }
+
   if (viewMode === "split") {
     // On mobile, split view stacks vertically
     return (
@@ -489,6 +574,7 @@ export function MobileLayout() {
       <ConvexSync />
       <SpotlightSearch />
       <SettingsPanel />
+      <UserAccountPanel />
 
       {/* Header */}
       <MobileHeader

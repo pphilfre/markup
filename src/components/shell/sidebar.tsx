@@ -19,6 +19,8 @@ import {
   LogIn,
   LogOut,
   User,
+  Shield,
+  Monitor,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +38,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useEditorStore } from "@/lib/store";
 import { useAuthState } from "@/components/convex-client-provider";
+import { UserAccountPanel } from "@/components/shell/user-account-panel";
 
 
 /** Small inline kbd badge for keybind hints */
@@ -330,6 +333,16 @@ export function Sidebar() {
                     </p>
                   </div>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => document.dispatchEvent(new CustomEvent("open-user-account", { detail: "profile" }))}>
+                    <User className="mr-2 h-3.5 w-3.5" /> Profile
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => document.dispatchEvent(new CustomEvent("open-user-account", { detail: "sessions" }))}>
+                    <Monitor className="mr-2 h-3.5 w-3.5" /> Sessions
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => document.dispatchEvent(new CustomEvent("open-user-account", { detail: "security" }))}>
+                    <Shield className="mr-2 h-3.5 w-3.5" /> Security
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
                     <a href="/api/auth/signout" className="flex w-full items-center gap-2">
                       <LogOut className="h-3.5 w-3.5" />
@@ -371,6 +384,8 @@ export function Sidebar() {
           Settings <Kbd>Alt+S</Kbd>
         </TooltipContent>
       </Tooltip>
+
+      <UserAccountPanel />
     </aside>
   );
 }

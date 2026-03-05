@@ -3,6 +3,7 @@
 import { useRef, useCallback } from "react";
 import { useEditorStore } from "@/lib/store";
 import { MarkdownEditor, MarkdownPreview } from "@/components/editor";
+import { GraphView } from "@/components/shell/graph-view";
 
 export function MainContent() {
   const viewMode = useEditorStore((s) => s.viewMode);
@@ -52,6 +53,14 @@ export function MainContent() {
     fontSize: settings.fontSize,
     lineHeight: settings.lineHeight,
   };
+
+  if (viewMode === "graph") {
+    return (
+      <main className="flex flex-1 overflow-hidden bg-background">
+        <GraphView />
+      </main>
+    );
+  }
 
   if (!activeTabId) {
     return (

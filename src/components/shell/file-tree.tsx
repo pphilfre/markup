@@ -15,6 +15,7 @@ import {
   Pencil,
   PanelLeftClose,
   PanelLeft,
+  Tag,
   ChevronsDownUp,
   ChevronsUpDown,
   ArrowDownAZ,
@@ -314,7 +315,13 @@ function FileItem({
   hideMd: boolean;
 }) {
   const renameTab = useEditorStore((s) => s.renameTab);
+  const addTag = useEditorStore((s) => s.addTag);
+  const removeTag = useEditorStore((s) => s.removeTag);
+  const getAllTags = useEditorStore((s) => s.getAllTags);
   const [renaming, setRenaming] = useState(false);
+  const [addingTag, setAddingTag] = useState(false);
+  const [newTag, setNewTag] = useState("");
+  const tagInputRef = useRef<HTMLInputElement>(null);
 
   const displayName = hideMd && tab.title.endsWith(".md")
     ? tab.title.slice(0, -3)
@@ -336,42 +343,144 @@ function FileItem({
     e.dataTransfer.effectAllowed = "move";
   };
 
+  const commitTag = () => {
+    const t = newTag.trim().toLowerCase();
+    if (t) addTag(tab.id, t);
+    setNewTag("");
+    setAddingTag(false);
+  };
+
+  const allTags = getAllTags();
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <button
-          onClick={onSwitch}
-          draggable
-          onDragStart={onDragStart}
-          className={cn(
-            "flex w-full items-center gap-1.5 rounded-sm px-3 py-1 text-xs transition-colors cursor-grab active:cursor-grabbing",
-            isActive
-              ? "bg-accent text-accent-foreground"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+        <div className="group">
+          <button
+            onClick={onSwitch}
+            draggable
+            onDragStart={onDragStart}
+            className={cn(
+              "flex w-full items-center gap-1.5 rounded-sm px-3 py-1 text-xs transition-colors cursor-grab active:cursor-grabbing",
+              isActive
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            <FileText className="h-3 w-3 shrink-0" />
+            {renaming ? (
+              <InlineRename
+                initial={tab.title}
+                onCommit={(v) => {
+                  renameTab(tab.id, v.endsWith(".md") ? v : v + ".md");
+                  setRenaming(false);
+                }}
+                onCancel={() => setRenaming(false)}
+              />
+            ) : (
+              <span className="truncate">{displayName}</span>
+            )}
+          </button>
+          {/* Tag chips */}
+          {tab.tags.length > 0 && (
+            <div className="flex flex-wrap gap-0.5 px-3 pb-0.5">
+              {tab.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center rounded-sm px-1 py-0 text-[9px] leading-tight"
+                  style={{
+                    background: "var(--accent-color, #7c3aed)20",
+                    color: "var(--accent-color, #7c3aed)",
+                  }}
+                >
+                  #{tag}
+                </span>
+              ))}
+            </div>
           )}
-        >
-          <FileText className="h-3 w-3 shrink-0" />
-          {renaming ? (
-            <InlineRename
-              initial={tab.title}
-              onCommit={(v) => {
-                renameTab(tab.id, v.endsWith(".md") ? v : v + ".md");
-                setRenaming(false);
-              }}
-              onCancel={() => setRenaming(false)}
-            />
-          ) : (
-            <span className="truncate">{displayName}</span>
-          )}
-        </button>
+        </div>
       </ContextMenuTrigger>
-      <ContextMenuContent>
+      <ContextMenuContent className="w-48">
         <ContextMenuItem onClick={() => setRenaming(true)}>
           <Pencil className="mr-2 h-3.5 w-3.5" /> Rename
         </ContextMenuItem>
         <ContextMenuItem onClick={exportFile}>
           <Download className="mr-2 h-3.5 w-3.5" /> Download
         </ContextMenuItem>
+        <ContextMenuSeparator />
+        {/* Tag management */}
+        <div className="px-2 py-1.5">
+          <p className="text-[10px] font-medium text-muted-foreground mb-1 flex items-center gap-1">
+            <Tag className="h-3 w-3" /> Tags
+          </p>
+          <div className="flex flex-wrap gap-1 mb-1">
+            {tab.tags.map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex items-center gap-0.5 rounded-sm px-1.5 py-0.5 text-[10px]"
+                style={{
+                  background: "var(--accent-color, #7c3aed)20",
+                  color: "var(--accent-color, #7c3aed)",
+                }}
+              >
+                #{tag}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeTag(tab.id, tag);
+                  }}
+                  className="ml-0.5 opacity-60 hover:opacity-100"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+          {addingTag ? (
+            <input
+              ref={tagInputRef}
+              autoFocus
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              onBlur={commitTag}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitTag();
+                if (e.key === "Escape") { setNewTag(""); setAddingTag(false); }
+                e.stopPropagation();
+              }}
+              placeholder="tag name"
+              className="w-full rounded-sm border border-border bg-background px-1.5 py-0.5 text-[10px] outline-none"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setAddingTag(true);
+              }}
+              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              + Add tag
+            </button>
+          )}
+          {/* Quick-add: show existing tags not yet on this file */}
+          {allTags.filter((t) => !tab.tags.includes(t)).length > 0 && !addingTag && (
+            <div className="mt-1 flex flex-wrap gap-0.5">
+              {allTags.filter((t) => !tab.tags.includes(t)).slice(0, 6).map((tag) => (
+                <button
+                  key={tag}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    addTag(tab.id, tag);
+                  }}
+                  className="rounded-sm border border-border px-1 py-0 text-[9px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  +{tag}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <ContextMenuSeparator />
         <ContextMenuItem
           onClick={onClose}

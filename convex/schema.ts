@@ -41,6 +41,7 @@ export default defineSchema({
     title: v.string(),
     content: v.string(),
     folderId: v.union(v.string(), v.null()),
+    tags: v.optional(v.array(v.string())),
   })
     .index("by_user", ["userId"])
     .index("by_user_tab", ["userId", "tabId"]),

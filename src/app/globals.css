@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "@radix-ui/themes/styles.css";
+@import "@workos-inc/widgets/styles.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -421,6 +423,20 @@
   color: var(--accent-color, #7c3aed) !important;
 }
 
+/* ── Admonition styles ──────────────────────────────────────────────────── */
+.admonition {
+  font-size: 14px;
+}
+.admonition p {
+  margin: 0.25em 0;
+}
+.admonition p:first-child {
+  margin-top: 0;
+}
+.admonition p:last-child {
+  margin-bottom: 0;
+}
+
 /* ── Mobile-specific styles ──────────────────────────────────────────────── */
 
 /* Hide scrollbar for mobile tab strips and toolbars */
@@ -496,4 +512,188 @@
       padding-top: env(safe-area-inset-top);
     }
   }
+}
+
+/* ── Syntax highlighting for code blocks (dark mode) ─────────────────── */
+
+.dark .markdown-body pre code.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 0;
+}
+.dark .markdown-body code.hljs {
+  padding: 3px 5px;
+}
+
+.dark .hljs {
+  color: #c9d1d9;
+  background: transparent;
+}
+
+.dark .hljs-keyword,
+.dark .hljs-selector-tag,
+.dark .hljs-built_in {
+  color: #ff7b72;
+}
+
+.dark .hljs-string,
+.dark .hljs-attr,
+.dark .hljs-addition {
+  color: #a5d6ff;
+}
+
+.dark .hljs-title,
+.dark .hljs-title.class_,
+.dark .hljs-title.function_ {
+  color: #d2a8ff;
+}
+
+.dark .hljs-comment,
+.dark .hljs-quote {
+  color: #8b949e;
+  font-style: italic;
+}
+
+.dark .hljs-number,
+.dark .hljs-literal {
+  color: #79c0ff;
+}
+
+.dark .hljs-variable,
+.dark .hljs-template-variable {
+  color: #ffa657;
+}
+
+.dark .hljs-type,
+.dark .hljs-params {
+  color: #ffa657;
+}
+
+.dark .hljs-deletion {
+  color: #ffdcd7;
+  background: #67060c;
+}
+
+.dark .hljs-regexp {
+  color: #7ee787;
+}
+
+.dark .hljs-symbol,
+.dark .hljs-bullet {
+  color: #f2cc60;
+}
+
+.dark .hljs-meta,
+.dark .hljs-selector-id,
+.dark .hljs-selector-class {
+  color: #d2a8ff;
+}
+
+.dark .hljs-emphasis {
+  font-style: italic;
+}
+
+.dark .hljs-strong {
+  font-weight: 700;
+}
+
+.dark .hljs-link {
+  text-decoration: underline;
+}
+
+/* ── Syntax highlighting for code blocks (light mode) ────────────────── */
+
+.light .markdown-body pre code.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 0;
+}
+.light .markdown-body code.hljs {
+  padding: 3px 5px;
+}
+
+.light .hljs {
+  color: #24292f;
+  background: transparent;
+}
+
+.light .hljs-keyword,
+.light .hljs-selector-tag,
+.light .hljs-built_in {
+  color: #cf222e;
+}
+
+.light .hljs-string,
+.light .hljs-attr,
+.light .hljs-addition {
+  color: #0a3069;
+}
+
+.light .hljs-title,
+.light .hljs-title.class_,
+.light .hljs-title.function_ {
+  color: #8250df;
+}
+
+.light .hljs-comment,
+.light .hljs-quote {
+  color: #6e7781;
+  font-style: italic;
+}
+
+.light .hljs-number,
+.light .hljs-literal {
+  color: #0550ae;
+}
+
+.light .hljs-variable,
+.light .hljs-template-variable {
+  color: #953800;
+}
+
+.light .hljs-type,
+.light .hljs-params {
+  color: #953800;
+}
+
+.light .hljs-deletion {
+  color: #82071e;
+  background: #ffebe9;
+}
+
+.light .hljs-regexp {
+  color: #116329;
+}
+
+.light .hljs-symbol,
+.light .hljs-bullet {
+  color: #953800;
+}
+
+.light .hljs-meta,
+.light .hljs-selector-id,
+.light .hljs-selector-class {
+  color: #8250df;
+}
+
+.light .hljs-emphasis {
+  font-style: italic;
+}
+
+.light .hljs-strong {
+  font-weight: 700;
+}
+
+.light .hljs-link {
+  text-decoration: underline;
+}
+
+/* Ensure WorkOS widget dialogs render above our z-50 account panel */
+body > .rt-BaseDialogOverlay,
+.rt-BaseDialogOverlay {
+  z-index: 100 !important;
+}
+body > .rt-BaseDialogOverlay .rt-BaseDialogContent,
+.rt-BaseDialogOverlay .rt-BaseDialogContent {
+  z-index: 101 !important;
 }
