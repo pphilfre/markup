@@ -108,16 +108,17 @@ function MobileHeader({
         {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
       </Button>
 
-      <a href="/api/auth/signin">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0 text-muted-foreground"
-          title="Sign in"
-        >
+      <Button
+        asChild
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 shrink-0 text-muted-foreground"
+        aria-label="Sign in"
+      >
+        <a href="/api/auth/signin" aria-label="Sign in">
           <LogIn className="h-4 w-4" />
-        </Button>
-      </a>
+        </a>
+      </Button>
     </div>
   );
 }
