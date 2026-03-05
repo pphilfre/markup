@@ -32,7 +32,6 @@ import {
   FolderOpen,
   Search,
   PanelLeft,
-  LogIn,
   LogOut,
   User,
   Network,
