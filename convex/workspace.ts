@@ -17,6 +17,38 @@ const settingsValidator = v.object({
   editorMargin: v.number(),
   accentColor: v.string(),
   hideMdExtensions: v.boolean(),
+  // Typography
+  letterSpacing: v.optional(v.number()),
+  maxLineWidth: v.optional(v.number()),
+  showInvisibleCharacters: v.optional(v.boolean()),
+  // Markdown
+  autoCloseBrackets: v.optional(v.boolean()),
+  autoCloseMarkdownFormatting: v.optional(v.boolean()),
+  autoFormatLists: v.optional(v.boolean()),
+  continueListOnEnter: v.optional(v.boolean()),
+  smartQuotes: v.optional(v.boolean()),
+  smartDashes: v.optional(v.boolean()),
+  convertTabsToSpaces: v.optional(v.boolean()),
+  // Editing
+  wordWrap: v.optional(v.boolean()),
+  highlightCurrentLine: v.optional(v.boolean()),
+  highlightMatchingBrackets: v.optional(v.boolean()),
+  cursorAnimation: v.optional(v.string()),
+  multiCursorSupport: v.optional(v.boolean()),
+  // Appearance - Theme
+  themeMode: v.optional(v.string()),
+  // Appearance - UI
+  sidebarPosition: v.optional(v.string()),
+  sidebarWidth: v.optional(v.number()),
+  compactMode: v.optional(v.boolean()),
+  showIconsInSidebar: v.optional(v.boolean()),
+  showFileExtensions: v.optional(v.boolean()),
+  iconTheme: v.optional(v.string()),
+  // Appearance - Editor Look
+  codeBlockTheme: v.optional(v.string()),
+  headingStyle: v.optional(v.string()),
+  linkStyle: v.optional(v.string()),
+  checkboxStyle: v.optional(v.string()),
 });
 
 const profileValidator = v.object({

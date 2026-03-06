@@ -21,6 +21,12 @@ import {
   ArrowDownAZ,
   ArrowUpZA,
   User,
+  Pin,
+  PinOff,
+  Filter,
+  X,
+  Share2,
+  FileOutput,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,6 +55,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useEditorStore, Folder, Tab } from "@/lib/store";
+
+const TAG_PALETTE = [
+  "#7c3aed", "#6366f1", "#ec4899", "#f43f5e",
+  "#f97316", "#22c55e", "#06b6d4", "#3b82f6",
+];
 
 const FOLDER_PALETTE = [
   "#6366f1", "#8b5cf6", "#ec4899", "#f43f5e",
@@ -141,6 +152,7 @@ function FolderItem({
   toggleExpand,
   hideMd,
   sortAsc,
+  tabFilter,
 }: {
   folder: Folder;
   tabs: Tab[];
@@ -148,6 +160,7 @@ function FolderItem({
   toggleExpand: (id: string) => void;
   hideMd: boolean;
   sortAsc: boolean | null;
+  tabFilter?: (tab: Tab) => boolean;
 }) {
   const [renaming, setRenaming] = useState(false);
   const renameFolder = useEditorStore((s) => s.renameFolder);
@@ -155,12 +168,12 @@ function FolderItem({
   const deleteFolder = useEditorStore((s) => s.deleteFolder);
   const createTab = useEditorStore((s) => s.createTab);
   const switchTab = useEditorStore((s) => s.switchTab);
-  const closeTab = useEditorStore((s) => s.closeTab);
+  const deleteTab = useEditorStore((s) => s.deleteTab);
   const moveTabToFolder = useEditorStore((s) => s.moveTabToFolder);
   const activeTabId = useEditorStore((s) => s.activeTabId);
 
   const expanded = expandedFolders.has(folder.id);
-  let folderTabs = tabs.filter((t) => t.folderId === folder.id);
+  let folderTabs = tabs.filter((t) => t.folderId === folder.id && (!tabFilter || tabFilter(t)));
 
   // Sort
   if (sortAsc === true) folderTabs = [...folderTabs].sort((a, b) => a.title.localeCompare(b.title));
@@ -289,7 +302,7 @@ function FolderItem({
                 tab={tab}
                 isActive={tab.id === activeTabId}
                 onSwitch={() => switchTab(tab.id)}
-                onClose={() => closeTab(tab.id)}
+                onClose={() => deleteTab(tab.id)}
                 hideMd={hideMd}
               />
             ))
@@ -315,9 +328,17 @@ function FileItem({
   hideMd: boolean;
 }) {
   const renameTab = useEditorStore((s) => s.renameTab);
+  const switchTab = useEditorStore((s) => s.switchTab);
   const addTag = useEditorStore((s) => s.addTag);
   const removeTag = useEditorStore((s) => s.removeTag);
   const getAllTags = useEditorStore((s) => s.getAllTags);
+  const togglePin = useEditorStore((s) => s.togglePin);
+  const tagColors = useEditorStore((s) => s.tagColors);
+  const setTagColor = useEditorStore((s) => s.setTagColor);
+  const getTagColor = useCallback(
+    (tag: string) => tagColors[tag] || "#7c3aed",
+    [tagColors]
+  );
   const [renaming, setRenaming] = useState(false);
   const [addingTag, setAddingTag] = useState(false);
   const [newTag, setNewTag] = useState("");
@@ -380,6 +401,9 @@ function FileItem({
             ) : (
               <span className="truncate">{displayName}</span>
             )}
+            {tab.pinned && (
+              <Pin className="ml-auto h-2.5 w-2.5 shrink-0 text-muted-foreground/60" />
+            )}
           </button>
           {/* Tag chips */}
           {tab.tags.length > 0 && (
@@ -389,8 +413,8 @@ function FileItem({
                   key={tag}
                   className="inline-flex items-center rounded-sm px-1 py-0 text-[9px] leading-tight"
                   style={{
-                    background: "var(--accent-color, #7c3aed)20",
-                    color: "var(--accent-color, #7c3aed)",
+                    background: `${getTagColor(tag)}20`,
+                    color: getTagColor(tag),
                   }}
                 >
                   #{tag}
@@ -400,27 +424,45 @@ function FileItem({
           )}
         </div>
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-48">
+      <ContextMenuContent className="w-52">
+        <ContextMenuItem onClick={() => togglePin(tab.id)}>
+          {tab.pinned
+            ? <><PinOff className="mr-2 h-3.5 w-3.5" /> Unpin</>
+            : <><Pin className="mr-2 h-3.5 w-3.5" /> Pin to Top</>
+          }
+        </ContextMenuItem>
         <ContextMenuItem onClick={() => setRenaming(true)}>
           <Pencil className="mr-2 h-3.5 w-3.5" /> Rename
         </ContextMenuItem>
         <ContextMenuItem onClick={exportFile}>
           <Download className="mr-2 h-3.5 w-3.5" /> Download
         </ContextMenuItem>
+        <ContextMenuItem onClick={() => {
+          switchTab(tab.id);
+          document.dispatchEvent(new CustomEvent("open-share"));
+        }}>
+          <Share2 className="mr-2 h-3.5 w-3.5" /> Share
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => {
+          switchTab(tab.id);
+          document.dispatchEvent(new CustomEvent("open-export"));
+        }}>
+          <FileOutput className="mr-2 h-3.5 w-3.5" /> Export As…
+        </ContextMenuItem>
         <ContextMenuSeparator />
         {/* Tag management */}
         <div className="px-2 py-1.5">
-          <p className="text-[10px] font-medium text-muted-foreground mb-1 flex items-center gap-1">
+          <p className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
             <Tag className="h-3 w-3" /> Tags
           </p>
-          <div className="flex flex-wrap gap-1 mb-1">
+          <div className="flex flex-wrap gap-1 mb-1.5">
             {tab.tags.map((tag) => (
               <span
                 key={tag}
-                className="inline-flex items-center gap-0.5 rounded-sm px-1.5 py-0.5 text-[10px]"
+                className="inline-flex items-center gap-0.5 rounded-sm px-1.5 py-0.5 text-xs"
                 style={{
-                  background: "var(--accent-color, #7c3aed)20",
-                  color: "var(--accent-color, #7c3aed)",
+                  background: `${getTagColor(tag)}20`,
+                  color: getTagColor(tag),
                 }}
               >
                 #{tag}
@@ -433,6 +475,23 @@ function FileItem({
                 >
                   ×
                 </button>
+                {/* Color swatches */}
+                <span className="ml-1 inline-flex gap-0.5">
+                  {TAG_PALETTE.map((c) => (
+                    <button
+                      key={c}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTagColor(tag, c);
+                      }}
+                      className={cn(
+                        "h-2.5 w-2.5 rounded-full border",
+                        getTagColor(tag) === c ? "border-foreground scale-125" : "border-transparent opacity-60 hover:opacity-100"
+                      )}
+                      style={{ background: c }}
+                    />
+                  ))}
+                </span>
               </span>
             ))}
           </div>
@@ -449,7 +508,7 @@ function FileItem({
                 e.stopPropagation();
               }}
               placeholder="tag name"
-              className="w-full rounded-sm border border-border bg-background px-1.5 py-0.5 text-[10px] outline-none"
+              className="w-full rounded-sm border border-border bg-background px-1.5 py-0.5 text-xs outline-none"
               onClick={(e) => e.stopPropagation()}
             />
           ) : (
@@ -458,14 +517,14 @@ function FileItem({
                 e.stopPropagation();
                 setAddingTag(true);
               }}
-              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
               + Add tag
             </button>
           )}
           {/* Quick-add: show existing tags not yet on this file */}
           {allTags.filter((t) => !tab.tags.includes(t)).length > 0 && !addingTag && (
-            <div className="mt-1 flex flex-wrap gap-0.5">
+            <div className="mt-1.5 flex flex-wrap gap-1">
               {allTags.filter((t) => !tab.tags.includes(t)).slice(0, 6).map((tag) => (
                 <button
                   key={tag}
@@ -473,7 +532,7 @@ function FileItem({
                     e.stopPropagation();
                     addTag(tab.id, tag);
                   }}
-                  className="rounded-sm border border-border px-1 py-0 text-[9px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  className="rounded-sm border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 >
                   +{tag}
                 </button>
@@ -592,16 +651,53 @@ export function FileTree() {
   const createFolder = useEditorStore((s) => s.createFolder);
   const createTab = useEditorStore((s) => s.createTab);
   const switchTab = useEditorStore((s) => s.switchTab);
-  const closeTab = useEditorStore((s) => s.closeTab);
+  const deleteTab = useEditorStore((s) => s.deleteTab);
   const moveTabToFolder = useEditorStore((s) => s.moveTabToFolder);
   const activeTabId = useEditorStore((s) => s.activeTabId);
-  const hideMd = useEditorStore((s) => s.settings.hideMdExtensions);
+  const hideMd = useEditorStore((s) => s.settings.hideMdExtensions || !s.settings.showFileExtensions);
+  const getAllTags = useEditorStore((s) => s.getAllTags);
+  const tagColors = useEditorStore((s) => s.tagColors);
+  const setTagColor = useEditorStore((s) => s.setTagColor);
+
+  /** Get the color for a tag, falling back to the default palette color */
+  const getTagColor = useCallback(
+    (tag: string) => tagColors[tag] || "#7c3aed",
+    [tagColors]
+  );
 
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
     new Set()
   );
   // null = no sort, true = A-Z, false = Z-A
   const [sortAsc, setSortAsc] = useState<boolean | null>(null);
+  // Tag filter
+  const [activeTagFilters, setActiveTagFilters] = useState<Set<string>>(new Set());
+  const [tagFilterOpen, setTagFilterOpen] = useState(false);
+
+  const allTags = getAllTags();
+
+  const toggleTagFilter = useCallback((tag: string) => {
+    setActiveTagFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(tag)) next.delete(tag);
+      else next.add(tag);
+      return next;
+    });
+  }, []);
+
+  const clearTagFilters = useCallback(() => {
+    setActiveTagFilters(new Set());
+    setTagFilterOpen(false);
+  }, []);
+
+  // Filter function: tab passes if it has ALL active tag filters
+  const tabPassesFilter = useCallback(
+    (tab: Tab) => {
+      if (activeTagFilters.size === 0) return true;
+      return Array.from(activeTagFilters).every((tag) => tab.tags.includes(tag));
+    },
+    [activeTagFilters]
+  );
 
   const toggleExpand = useCallback((id: string) => {
     setExpandedFolders((prev) => {
@@ -615,10 +711,14 @@ export function FileTree() {
   const collapseAll = () => setExpandedFolders(new Set());
   const expandAll = () => setExpandedFolders(new Set(folders.map((f) => f.id)));
 
-  // Root-level tabs (no folder)
-  let rootTabs = tabs.filter((t) => !t.folderId);
+  // Root-level tabs (no folder), filtered
+  let rootTabs = tabs.filter((t) => !t.folderId && tabPassesFilter(t));
   if (sortAsc === true) rootTabs = [...rootTabs].sort((a, b) => a.title.localeCompare(b.title));
   else if (sortAsc === false) rootTabs = [...rootTabs].sort((a, b) => b.title.localeCompare(a.title));
+
+  // Separate pinned and unpinned root tabs
+  const pinnedRootTabs = rootTabs.filter((t) => t.pinned);
+  const unpinnedRootTabs = rootTabs.filter((t) => !t.pinned);
 
   // Drop on root area — move file out of folder
   const onRootDragOver = (e: React.DragEvent) => {
@@ -725,6 +825,26 @@ export function FileTree() {
               {expandedFolders.size > 0 ? "Collapse All" : "Expand All"}
             </TooltipContent>
           </Tooltip>
+          {/* Tag filter */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setTagFilterOpen((prev) => !prev)}
+                className={cn(
+                  "h-6 w-6 text-muted-foreground hover:text-foreground",
+                  (tagFilterOpen || activeTagFilters.size > 0) && "text-foreground"
+                )}
+              >
+                <Tag className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {tagFilterOpen ? "Hide Tags" : "Filter by Tags"}
+              {activeTagFilters.size > 0 && ` (${activeTagFilters.size})`}
+            </TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -748,6 +868,75 @@ export function FileTree() {
         <ProfileSelector />
       </div>
 
+      {/* Tag filter panel */}
+      {tagFilterOpen && allTags.length > 0 && (
+        <div className="px-2 py-1.5 border-b border-border/50 bg-muted/30">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Filter by Tags</p>
+            {activeTagFilters.size > 0 && (
+              <button
+                onClick={clearTagFilters}
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {allTags.map((tag) => (
+              <button
+                key={tag}
+                onClick={() => toggleTagFilter(tag)}
+                className={cn(
+                  "rounded-sm px-1.5 py-0.5 text-[10px] border transition-colors",
+                  activeTagFilters.has(tag)
+                    ? "border-transparent font-medium"
+                    : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+                style={
+                  activeTagFilters.has(tag)
+                    ? {
+                        background: `${getTagColor(tag)}20`,
+                        color: getTagColor(tag),
+                      }
+                    : undefined
+                }
+              >
+                #{tag}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Active filter chips (when panel is closed) */}
+      {!tagFilterOpen && activeTagFilters.size > 0 && (
+        <div className="flex items-center gap-1 px-2 py-1 border-b border-border/50 bg-muted/30">
+          <Filter className="h-2.5 w-2.5 shrink-0 text-muted-foreground" />
+          <div className="flex flex-wrap gap-0.5 flex-1">
+            {Array.from(activeTagFilters).map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex items-center gap-0.5 rounded-sm px-1 py-0 text-[9px] leading-tight"
+                style={{
+                  background: `${getTagColor(tag)}20`,
+                  color: getTagColor(tag),
+                }}
+              >
+                #{tag}
+                <button onClick={() => toggleTagFilter(tag)} className="opacity-60 hover:opacity-100">×</button>
+              </span>
+            ))}
+          </div>
+          <button
+            onClick={clearTagFilters}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
+
       {/* Tree content — right-click context menu on empty space */}
       <ContextMenu>
         <ContextMenuTrigger asChild>
@@ -756,6 +945,27 @@ export function FileTree() {
             onDragOver={onRootDragOver}
             onDrop={onRootDrop}
           >
+            {/* Pinned files (across all folders) */}
+            {tabs.some((t) => t.pinned && tabPassesFilter(t)) && (
+              <div className="mb-1 pb-1 border-b border-border/50">
+                <p className="px-2 py-0.5 text-[10px] text-muted-foreground/50 uppercase tracking-wider flex items-center gap-1">
+                  <Pin className="h-2.5 w-2.5" /> Pinned
+                </p>
+                {tabs
+                  .filter((t) => t.pinned && tabPassesFilter(t))
+                  .map((tab) => (
+                    <FileItem
+                      key={`pinned-${tab.id}`}
+                      tab={tab}
+                      isActive={tab.id === activeTabId}
+                      onSwitch={() => switchTab(tab.id)}
+                      onClose={() => deleteTab(tab.id)}
+                      hideMd={hideMd}
+                    />
+                  ))}
+              </div>
+            )}
+
             {/* Folders */}
             {folders.map((folder) => (
               <FolderItem
@@ -766,24 +976,25 @@ export function FileTree() {
                 toggleExpand={toggleExpand}
                 hideMd={hideMd}
                 sortAsc={sortAsc}
+                tabFilter={tabPassesFilter}
               />
             ))}
 
             {/* Root files (no folder) */}
-            {folders.length > 0 && rootTabs.length > 0 && (
+            {folders.length > 0 && unpinnedRootTabs.length > 0 && (
               <div className="mt-1 pt-1 border-t border-border/50">
                 <p className="px-2 py-0.5 text-[10px] text-muted-foreground/50 uppercase tracking-wider">
                   Unsorted
                 </p>
               </div>
             )}
-            {rootTabs.map((tab) => (
+            {unpinnedRootTabs.map((tab) => (
               <FileItem
                 key={tab.id}
                 tab={tab}
                 isActive={tab.id === activeTabId}
                 onSwitch={() => switchTab(tab.id)}
-                onClose={() => closeTab(tab.id)}
+                onClose={() => deleteTab(tab.id)}
                 hideMd={hideMd}
               />
             ))}

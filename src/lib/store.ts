@@ -6,8 +6,9 @@ import { EditorView } from "@codemirror/view";
 // Types
 // ---------------------------------------------------------------------------
 
-export type ViewMode = "editor" | "split" | "preview" | "graph";
+export type ViewMode = "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap";
 export type Theme = "dark" | "light";
+export type ThemeMode = "light" | "dark" | "system";
 
 export interface Tab {
   id: string;
@@ -15,6 +16,7 @@ export interface Tab {
   content: string;
   folderId: string | null; // null = root
   tags: string[]; // user-defined tags
+  pinned: boolean;
 }
 
 export interface Folder {
@@ -38,6 +40,38 @@ export interface Settings {
   editorMargin: number; // px horizontal padding
   accentColor: string; // hex
   hideMdExtensions: boolean;
+  // Typography
+  letterSpacing: number; // em
+  maxLineWidth: number; // ch, 0 = unlimited
+  showInvisibleCharacters: boolean;
+  // Markdown
+  autoCloseBrackets: boolean;
+  autoCloseMarkdownFormatting: boolean;
+  autoFormatLists: boolean;
+  continueListOnEnter: boolean;
+  smartQuotes: boolean;
+  smartDashes: boolean;
+  convertTabsToSpaces: boolean;
+  // Editing
+  wordWrap: boolean;
+  highlightCurrentLine: boolean;
+  highlightMatchingBrackets: boolean;
+  cursorAnimation: "smooth" | "blink" | "none";
+  multiCursorSupport: boolean;
+  // Appearance - Theme
+  themeMode: ThemeMode;
+  // Appearance - UI
+  sidebarPosition: "left" | "right";
+  sidebarWidth: number; // px
+  compactMode: boolean;
+  showIconsInSidebar: boolean;
+  showFileExtensions: boolean;
+  iconTheme: "default" | "minimal" | "colorful";
+  // Appearance - Editor Look
+  codeBlockTheme: "github" | "monokai" | "dracula" | "nord" | "one-dark" | "solarized";
+  headingStyle: "default" | "underlined" | "bordered" | "highlighted";
+  linkStyle: "default" | "underlined" | "colored" | "button";
+  checkboxStyle: "default" | "rounded" | "filled" | "minimal";
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -48,10 +82,43 @@ export const DEFAULT_SETTINGS: Settings = {
   editorMargin: 24,
   accentColor: "#7c3aed",
   hideMdExtensions: false,
+  // Typography
+  letterSpacing: 0,
+  maxLineWidth: 0,
+  showInvisibleCharacters: false,
+  // Markdown
+  autoCloseBrackets: true,
+  autoCloseMarkdownFormatting: true,
+  autoFormatLists: true,
+  continueListOnEnter: true,
+  smartQuotes: false,
+  smartDashes: false,
+  convertTabsToSpaces: true,
+  // Editing
+  wordWrap: true,
+  highlightCurrentLine: true,
+  highlightMatchingBrackets: true,
+  cursorAnimation: "blink",
+  multiCursorSupport: true,
+  // Appearance - Theme
+  themeMode: "dark",
+  // Appearance - UI
+  sidebarPosition: "left",
+  sidebarWidth: 44,
+  compactMode: false,
+  showIconsInSidebar: true,
+  showFileExtensions: true,
+  iconTheme: "default",
+  // Appearance - Editor Look
+  codeBlockTheme: "github",
+  headingStyle: "default",
+  linkStyle: "default",
+  checkboxStyle: "default",
 };
 
 interface EditorState {
   tabs: Tab[];
+  openTabIds: string[]; // IDs of tabs visible in the tab bar
   activeTabId: string | null;
   viewMode: ViewMode;
   theme: Theme;
@@ -88,6 +155,8 @@ interface EditorState {
   // Tab actions
   createTab: (folderId?: string | null) => void;
   closeTab: (id: string) => void;
+  deleteTab: (id: string) => void;
+  openTab: (id: string) => void;
   switchTab: (id: string) => void;
   updateContent: (id: string, content: string) => void;
   updateTitle: (id: string, title: string) => void;
@@ -97,6 +166,11 @@ interface EditorState {
   addTag: (tabId: string, tag: string) => void;
   removeTag: (tabId: string, tag: string) => void;
   getAllTags: () => string[];
+  tagColors: Record<string, string>;
+  setTagColor: (tag: string, color: string) => void;
+
+  // Pin
+  togglePin: (tabId: string) => void;
 
   // View
   toggleView: () => void;
@@ -128,6 +202,7 @@ function newTab(folderId: string | null = null): Tab {
     content: "",
     folderId,
     tags: [],
+    pinned: false,
   };
 }
 
@@ -158,6 +233,7 @@ const DEFAULT_PROFILES: Profile[] = [
 
 interface PersistedState {
   tabs: Tab[];
+  openTabIds: string[];
   activeTabId: string | null;
   viewMode: ViewMode;
   theme: Theme;
@@ -166,6 +242,7 @@ interface PersistedState {
   fileTreeOpen: boolean;
   profiles: Profile[];
   activeProfileId: string;
+  tagColors: Record<string, string>;
 }
 
 async function saveToStorage(state: PersistedState) {
@@ -186,6 +263,7 @@ async function loadFromStorage(): Promise<PersistedState | null> {
 export const useEditorStore = create<EditorState>()(
   subscribeWithSelector((set, get) => ({
     tabs: [],
+    openTabIds: [],
     activeTabId: null,
     viewMode: "editor",
     theme: "dark",
@@ -196,6 +274,7 @@ export const useEditorStore = create<EditorState>()(
     fileTreeOpen: true,
     profiles: [...DEFAULT_PROFILES],
     activeProfileId: DEFAULT_PROFILE_ID,
+    tagColors: {},
 
     setEditorView: (view) => set({ editorView: view }),
 
@@ -285,7 +364,8 @@ export const useEditorStore = create<EditorState>()(
         tabCounter = maxNum;
 
         set({
-          tabs: saved.tabs.map((t) => ({ ...t, folderId: t.folderId ?? null, tags: t.tags ?? [] })),
+          tabs: saved.tabs.map((t) => ({ ...t, folderId: t.folderId ?? null, tags: t.tags ?? [], pinned: t.pinned ?? false })),
+          openTabIds: saved.openTabIds ?? saved.tabs.map((t) => t.id),
           activeTabId: saved.activeTabId,
           viewMode: saved.viewMode,
           theme: saved.theme ?? "dark",
@@ -294,12 +374,14 @@ export const useEditorStore = create<EditorState>()(
           fileTreeOpen: saved.fileTreeOpen ?? true,
           profiles: saved.profiles?.length ? saved.profiles : [...DEFAULT_PROFILES],
           activeProfileId: saved.activeProfileId ?? DEFAULT_PROFILE_ID,
+          tagColors: saved.tagColors ?? {},
           _hydrated: true,
         });
       } else {
         const tab = newTab();
         set({
           tabs: [tab],
+          openTabIds: [tab.id],
           activeTabId: tab.id,
           _hydrated: true,
         });
@@ -310,33 +392,64 @@ export const useEditorStore = create<EditorState>()(
       const tab = newTab(folderId);
       set((s) => ({
         tabs: [...s.tabs, tab],
+        openTabIds: [...s.openTabIds, tab.id],
         activeTabId: tab.id,
         viewMode: s.viewMode === "preview" ? "editor" : s.viewMode,
       }));
     },
 
     closeTab: (id) => {
-      const { tabs, activeTabId } = get();
-      const idx = tabs.findIndex((t) => t.id === id);
+      const { openTabIds, activeTabId } = get();
+      const idx = openTabIds.indexOf(id);
       if (idx === -1) return;
 
-      const next = tabs.filter((t) => t.id !== id);
+      const nextOpen = openTabIds.filter((tid) => tid !== id);
 
       let nextActive = activeTabId;
       if (activeTabId === id) {
-        if (next.length === 0) {
+        if (nextOpen.length === 0) {
           nextActive = null;
-        } else if (idx >= next.length) {
-          nextActive = next[next.length - 1].id;
+        } else if (idx >= nextOpen.length) {
+          nextActive = nextOpen[nextOpen.length - 1];
         } else {
-          nextActive = next[idx].id;
+          nextActive = nextOpen[idx];
         }
       }
 
-      set({ tabs: next, activeTabId: nextActive });
+      set({ openTabIds: nextOpen, activeTabId: nextActive });
     },
 
-    switchTab: (id) => set({ activeTabId: id }),
+    deleteTab: (id) => {
+      const { tabs, openTabIds, activeTabId } = get();
+      const next = tabs.filter((t) => t.id !== id);
+      const nextOpen = openTabIds.filter((tid) => tid !== id);
+
+      let nextActive = activeTabId;
+      if (activeTabId === id) {
+        if (nextOpen.length === 0) {
+          nextActive = null;
+        } else {
+          const idx = openTabIds.indexOf(id);
+          nextActive = idx >= nextOpen.length ? nextOpen[nextOpen.length - 1] : nextOpen[idx];
+        }
+      }
+
+      set({ tabs: next, openTabIds: nextOpen, activeTabId: nextActive });
+    },
+
+    openTab: (id) => {
+      set((s) => ({
+        openTabIds: s.openTabIds.includes(id) ? s.openTabIds : [...s.openTabIds, id],
+        activeTabId: id,
+        ...(s.viewMode === 'whiteboard' || s.viewMode === 'mindmap' ? { viewMode: 'editor' as ViewMode } : {}),
+      }));
+    },
+
+    switchTab: (id) => set((s) => ({
+      activeTabId: id,
+      openTabIds: s.openTabIds.includes(id) ? s.openTabIds : [...s.openTabIds, id],
+      ...(s.viewMode === 'whiteboard' || s.viewMode === 'mindmap' ? { viewMode: 'editor' as ViewMode } : {}),
+    })),
 
     updateContent: (id, content) =>
       set((s) => ({
@@ -387,9 +500,21 @@ export const useEditorStore = create<EditorState>()(
       return Array.from(tagSet).sort();
     },
 
+    setTagColor: (tag, color) =>
+      set((s) => ({
+        tagColors: { ...s.tagColors, [tag]: color },
+      })),
+
+    togglePin: (tabId) =>
+      set((s) => ({
+        tabs: s.tabs.map((t) =>
+          t.id === tabId ? { ...t, pinned: !t.pinned } : t
+        ),
+      })),
+
     toggleView: () =>
       set((s) => {
-        const cycle: ViewMode[] = ["editor", "split", "preview", "graph"];
+        const cycle: ViewMode[] = ["editor", "split", "preview", "graph", "whiteboard", "mindmap"];
         const idx = cycle.indexOf(s.viewMode);
         return { viewMode: cycle[(idx + 1) % cycle.length] };
       }),
@@ -493,6 +618,7 @@ let persistTimeout: ReturnType<typeof setTimeout> | null = null;
 useEditorStore.subscribe(
   (s) => ({
     tabs: s.tabs,
+    openTabIds: s.openTabIds,
     activeTabId: s.activeTabId,
     viewMode: s.viewMode,
     theme: s.theme,
@@ -501,6 +627,7 @@ useEditorStore.subscribe(
     fileTreeOpen: s.fileTreeOpen,
     profiles: s.profiles,
     activeProfileId: s.activeProfileId,
+    tagColors: s.tagColors,
   }),
   (slice) => {
     if (persistTimeout) clearTimeout(persistTimeout);

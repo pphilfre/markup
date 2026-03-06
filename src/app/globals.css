@@ -697,3 +697,269 @@ body > .rt-BaseDialogOverlay .rt-BaseDialogContent,
 .rt-BaseDialogOverlay .rt-BaseDialogContent {
   z-index: 101 !important;
 }
+
+/* ── Compact mode ────────────────────────────────────────────────────────── */
+.compact-mode {
+  --compact-spacing: 0.75;
+}
+.compact-mode .markdown-body {
+  padding: 4px 12px !important;
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+}
+.compact-mode .markdown-body h1 { font-size: 1.6em; margin-top: 0.75em; margin-bottom: 0.4em; }
+.compact-mode .markdown-body h2 { font-size: 1.3em; margin-top: 0.75em; margin-bottom: 0.4em; }
+.compact-mode .markdown-body h3 { font-size: 1.1em; margin-top: 0.5em; margin-bottom: 0.3em; }
+.compact-mode .markdown-body p { margin-bottom: 0.5em; }
+
+/* ── Heading styles ──────────────────────────────────────────────────────── */
+
+/* Underlined */
+[data-heading-style="underlined"] .markdown-body h1,
+[data-heading-style="underlined"] .markdown-body h2,
+[data-heading-style="underlined"] .markdown-body h3,
+[data-heading-style="underlined"] .markdown-body h4 {
+  border-bottom: 2px solid var(--accent-color, #7c3aed);
+  padding-bottom: 0.3em;
+}
+
+/* Bordered */
+[data-heading-style="bordered"] .markdown-body h1,
+[data-heading-style="bordered"] .markdown-body h2,
+[data-heading-style="bordered"] .markdown-body h3,
+[data-heading-style="bordered"] .markdown-body h4 {
+  border-left: 4px solid var(--accent-color, #7c3aed);
+  padding-left: 0.75em;
+}
+
+/* Highlighted */
+.dark [data-heading-style="highlighted"] .markdown-body h1,
+.dark [data-heading-style="highlighted"] .markdown-body h2,
+.dark [data-heading-style="highlighted"] .markdown-body h3,
+.dark [data-heading-style="highlighted"] .markdown-body h4 {
+  background: oklch(0.269 0 0);
+  padding: 0.25em 0.5em;
+  border-radius: 4px;
+}
+.light [data-heading-style="highlighted"] .markdown-body h1,
+.light [data-heading-style="highlighted"] .markdown-body h2,
+.light [data-heading-style="highlighted"] .markdown-body h3,
+.light [data-heading-style="highlighted"] .markdown-body h4 {
+  background: oklch(0.95 0 0);
+  padding: 0.25em 0.5em;
+  border-radius: 4px;
+}
+
+/* ── Link styles ─────────────────────────────────────────────────────────── */
+
+/* Underlined */
+[data-link-style="underlined"] .markdown-body a {
+  text-decoration: underline !important;
+  text-underline-offset: 2px;
+}
+
+/* Colored */
+[data-link-style="colored"] .markdown-body a {
+  color: var(--accent-color, #7c3aed) !important;
+  text-decoration: none !important;
+  font-weight: 500;
+}
+
+/* Button */
+.dark [data-link-style="button"] .markdown-body a {
+  display: inline-block;
+  background: oklch(0.269 0 0);
+  padding: 0.1em 0.5em;
+  border-radius: 4px;
+  text-decoration: none !important;
+  font-size: 0.9em;
+}
+.light [data-link-style="button"] .markdown-body a {
+  display: inline-block;
+  background: oklch(0.95 0 0);
+  padding: 0.1em 0.5em;
+  border-radius: 4px;
+  text-decoration: none !important;
+  font-size: 0.9em;
+}
+
+/* ── Checkbox styles ─────────────────────────────────────────────────────── */
+
+/* Rounded */
+[data-checkbox-style="rounded"] .markdown-body input[type="checkbox"] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--accent-color, #7c3aed);
+  border-radius: 50%;
+  vertical-align: middle;
+  cursor: pointer;
+  position: relative;
+}
+[data-checkbox-style="rounded"] .markdown-body input[type="checkbox"]:checked {
+  background: var(--accent-color, #7c3aed);
+}
+[data-checkbox-style="rounded"] .markdown-body input[type="checkbox"]:checked::after {
+  content: "✓";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+/* Filled */
+[data-checkbox-style="filled"] .markdown-body input[type="checkbox"] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--accent-color, #7c3aed);
+  border-radius: 3px;
+  vertical-align: middle;
+  cursor: pointer;
+  position: relative;
+}
+[data-checkbox-style="filled"] .markdown-body input[type="checkbox"]:checked {
+  background: var(--accent-color, #7c3aed);
+  border-color: var(--accent-color, #7c3aed);
+}
+[data-checkbox-style="filled"] .markdown-body input[type="checkbox"]:checked::after {
+  content: "✓";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+/* Minimal */
+[data-checkbox-style="minimal"] .markdown-body input[type="checkbox"] {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  vertical-align: middle;
+  cursor: pointer;
+  opacity: 0.5;
+  position: relative;
+}
+[data-checkbox-style="minimal"] .markdown-body input[type="checkbox"]:checked {
+  opacity: 1;
+  border-color: var(--accent-color, #7c3aed);
+}
+[data-checkbox-style="minimal"] .markdown-body input[type="checkbox"]:checked::after {
+  content: "✓";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--accent-color, #7c3aed);
+  font-size: 10px;
+}
+
+/* ── Code block themes ───────────────────────────────────────────────────── */
+
+/* Monokai */
+[data-code-theme="monokai"] .hljs { color: #f8f8f2; }
+[data-code-theme="monokai"] .markdown-body pre { background: #272822 !important; }
+[data-code-theme="monokai"] .hljs-keyword,
+[data-code-theme="monokai"] .hljs-selector-tag,
+[data-code-theme="monokai"] .hljs-built_in { color: #f92672; }
+[data-code-theme="monokai"] .hljs-string,
+[data-code-theme="monokai"] .hljs-attr,
+[data-code-theme="monokai"] .hljs-addition { color: #e6db74; }
+[data-code-theme="monokai"] .hljs-title,
+[data-code-theme="monokai"] .hljs-title.function_ { color: #a6e22e; }
+[data-code-theme="monokai"] .hljs-comment,
+[data-code-theme="monokai"] .hljs-quote { color: #75715e; font-style: italic; }
+[data-code-theme="monokai"] .hljs-number,
+[data-code-theme="monokai"] .hljs-literal { color: #ae81ff; }
+[data-code-theme="monokai"] .hljs-variable,
+[data-code-theme="monokai"] .hljs-template-variable { color: #fd971f; }
+[data-code-theme="monokai"] .hljs-type,
+[data-code-theme="monokai"] .hljs-params { color: #66d9ef; }
+
+/* Dracula */
+[data-code-theme="dracula"] .hljs { color: #f8f8f2; }
+[data-code-theme="dracula"] .markdown-body pre { background: #282a36 !important; }
+[data-code-theme="dracula"] .hljs-keyword,
+[data-code-theme="dracula"] .hljs-selector-tag,
+[data-code-theme="dracula"] .hljs-built_in { color: #ff79c6; }
+[data-code-theme="dracula"] .hljs-string,
+[data-code-theme="dracula"] .hljs-attr,
+[data-code-theme="dracula"] .hljs-addition { color: #f1fa8c; }
+[data-code-theme="dracula"] .hljs-title,
+[data-code-theme="dracula"] .hljs-title.function_ { color: #50fa7b; }
+[data-code-theme="dracula"] .hljs-comment,
+[data-code-theme="dracula"] .hljs-quote { color: #6272a4; font-style: italic; }
+[data-code-theme="dracula"] .hljs-number,
+[data-code-theme="dracula"] .hljs-literal { color: #bd93f9; }
+[data-code-theme="dracula"] .hljs-variable,
+[data-code-theme="dracula"] .hljs-template-variable { color: #ffb86c; }
+[data-code-theme="dracula"] .hljs-type,
+[data-code-theme="dracula"] .hljs-params { color: #8be9fd; }
+
+/* Nord */
+[data-code-theme="nord"] .hljs { color: #d8dee9; }
+[data-code-theme="nord"] .markdown-body pre { background: #2e3440 !important; }
+[data-code-theme="nord"] .hljs-keyword,
+[data-code-theme="nord"] .hljs-selector-tag,
+[data-code-theme="nord"] .hljs-built_in { color: #81a1c1; }
+[data-code-theme="nord"] .hljs-string,
+[data-code-theme="nord"] .hljs-attr,
+[data-code-theme="nord"] .hljs-addition { color: #a3be8c; }
+[data-code-theme="nord"] .hljs-title,
+[data-code-theme="nord"] .hljs-title.function_ { color: #88c0d0; }
+[data-code-theme="nord"] .hljs-comment,
+[data-code-theme="nord"] .hljs-quote { color: #616e88; font-style: italic; }
+[data-code-theme="nord"] .hljs-number,
+[data-code-theme="nord"] .hljs-literal { color: #b48ead; }
+[data-code-theme="nord"] .hljs-variable,
+[data-code-theme="nord"] .hljs-template-variable { color: #d08770; }
+[data-code-theme="nord"] .hljs-type,
+[data-code-theme="nord"] .hljs-params { color: #ebcb8b; }
+
+/* One Dark */
+[data-code-theme="one-dark"] .hljs { color: #abb2bf; }
+[data-code-theme="one-dark"] .markdown-body pre { background: #282c34 !important; }
+[data-code-theme="one-dark"] .hljs-keyword,
+[data-code-theme="one-dark"] .hljs-selector-tag,
+[data-code-theme="one-dark"] .hljs-built_in { color: #c678dd; }
+[data-code-theme="one-dark"] .hljs-string,
+[data-code-theme="one-dark"] .hljs-attr,
+[data-code-theme="one-dark"] .hljs-addition { color: #98c379; }
+[data-code-theme="one-dark"] .hljs-title,
+[data-code-theme="one-dark"] .hljs-title.function_ { color: #61afef; }
+[data-code-theme="one-dark"] .hljs-comment,
+[data-code-theme="one-dark"] .hljs-quote { color: #5c6370; font-style: italic; }
+[data-code-theme="one-dark"] .hljs-number,
+[data-code-theme="one-dark"] .hljs-literal { color: #d19a66; }
+[data-code-theme="one-dark"] .hljs-variable,
+[data-code-theme="one-dark"] .hljs-template-variable { color: #e06c75; }
+[data-code-theme="one-dark"] .hljs-type,
+[data-code-theme="one-dark"] .hljs-params { color: #e5c07b; }
+
+/* Solarized */
+[data-code-theme="solarized"] .hljs { color: #839496; }
+[data-code-theme="solarized"] .markdown-body pre { background: #002b36 !important; }
+[data-code-theme="solarized"] .hljs-keyword,
+[data-code-theme="solarized"] .hljs-selector-tag,
+[data-code-theme="solarized"] .hljs-built_in { color: #859900; }
+[data-code-theme="solarized"] .hljs-string,
+[data-code-theme="solarized"] .hljs-attr,
+[data-code-theme="solarized"] .hljs-addition { color: #2aa198; }
+[data-code-theme="solarized"] .hljs-title,
+[data-code-theme="solarized"] .hljs-title.function_ { color: #268bd2; }
+[data-code-theme="solarized"] .hljs-comment,
+[data-code-theme="solarized"] .hljs-quote { color: #586e75; font-style: italic; }
+[data-code-theme="solarized"] .hljs-number,
+[data-code-theme="solarized"] .hljs-literal { color: #d33682; }
+[data-code-theme="solarized"] .hljs-variable,
+[data-code-theme="solarized"] .hljs-template-variable { color: #cb4b16; }
+[data-code-theme="solarized"] .hljs-type,
+[data-code-theme="solarized"] .hljs-params { color: #b58900; }

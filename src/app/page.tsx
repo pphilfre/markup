@@ -6,15 +6,35 @@ import { SettingsPanel } from "@/components/shell/settings-panel";
 import { ThemeSync } from "@/components/theme-provider";
 import { MobileLayout } from "@/components/shell/mobile-layout";
 import { ConvexSync } from "@/lib/convex-sync";
+import { SharedNoteViewer } from "@/components/shell/shared-note-viewer";
 import { useEditorStore } from "@/lib/store";
 import { useGlobalKeybinds } from "@/lib/keybinds";
 import { useIsMobile } from "@/lib/use-mobile";
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 export default function Home() {
   const hydrated = useEditorStore((s) => s._hydrated);
   const hydrate = useEditorStore((s) => s.hydrate);
   const isMobile = useIsMobile();
+  const sidebarPosition = useEditorStore((s) => s.settings.sidebarPosition);
+  const compactMode = useEditorStore((s) => s.settings.compactMode);
+
+  // Check for shared note URL parameter
+  const [shareId, setShareId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const note = params.get("note");
+    if (note) {
+      setShareId(note);
+    }
+  }, []);
+
+  const handleBackFromShared = useCallback(() => {
+    setShareId(null);
+    // Clean the URL
+    window.history.replaceState({}, "", window.location.pathname);
+  }, []);
 
   // Hydrate from IndexedDB on mount
   useEffect(() => {
@@ -23,6 +43,11 @@ export default function Home() {
 
   // Register global keyboard shortcuts
   useGlobalKeybinds();
+
+  // Show shared note viewer if ?note= parameter is present
+  if (shareId) {
+    return <SharedNoteViewer shareId={shareId} onBack={handleBackFromShared} />;
+  }
 
   if (!hydrated) {
     return (
@@ -37,19 +62,26 @@ export default function Home() {
     return <MobileLayout />;
   }
 
-  // Desktop layout — unchanged
+  // Desktop layout — respects appearance settings
+  const sidebarElements = (
+    <>
+      <Sidebar />
+      <FileTree />
+    </>
+  );
+
   return (
-    <div className="flex h-screen">
+    <div className={`flex h-screen${compactMode ? " compact-mode" : ""}`}>
       <ThemeSync />
       <ConvexSync />
       <SpotlightSearch />
       <SettingsPanel />
-      <Sidebar />
-      <FileTree />
+      {sidebarPosition === "left" && sidebarElements}
       <div className="flex flex-1 flex-col overflow-hidden">
         <TabBar />
         <MainContent />
       </div>
+      {sidebarPosition === "right" && sidebarElements}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Plus, X, Download, FolderArchive, Sun, Moon, PenLine, Eye, Columns2, Network } from "lucide-react";
+import { Plus, X, Download, FolderArchive, Sun, Moon, PenLine, Eye, Columns2, Network, Share2, FileOutput, PenTool, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
@@ -12,6 +12,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useEditorStore, ViewMode } from "@/lib/store";
 import { InfoButton } from "./info-button";
+import { ShareDialog } from "./share-dialog";
+import { ExportDialog } from "./export-dialog";
 
 function TabItem({ id, title, isActive }: { id: string; title: string; isActive: boolean }) {
   const switchTab = useEditorStore((s) => s.switchTab);
@@ -89,12 +91,27 @@ function TabItem({ id, title, isActive }: { id: string; title: string; isActive:
 
 export function TabBar() {
   const tabs = useEditorStore((s) => s.tabs);
+  const openTabIds = useEditorStore((s) => s.openTabIds);
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const createTab = useEditorStore((s) => s.createTab);
   const theme = useEditorStore((s) => s.theme);
   const toggleTheme = useEditorStore((s) => s.toggleTheme);
   const viewMode = useEditorStore((s) => s.viewMode);
   const setViewMode = useEditorStore((s) => s.setViewMode);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+
+  // Listen for custom events to open share / export dialogs
+  useEffect(() => {
+    const onShare = () => setShareOpen(true);
+    const onExport = () => setExportOpen(true);
+    document.addEventListener("open-share", onShare);
+    document.addEventListener("open-export", onExport);
+    return () => {
+      document.removeEventListener("open-share", onShare);
+      document.removeEventListener("open-export", onExport);
+    };
+  }, []);
 
   const exportSingle = () => {
     const tab = tabs.find((t) => t.id === activeTabId);
@@ -124,11 +141,13 @@ export function TabBar() {
     URL.revokeObjectURL(url);
   };
 
+  const openTabs = openTabIds.map((id) => tabs.find((t) => t.id === id)).filter(Boolean) as typeof tabs;
+
   return (
     <div className="flex h-10 items-center border-b border-border bg-card">
       <ScrollArea className="flex-1">
         <div className="flex items-center">
-          {tabs.map((tab) => (
+          {openTabs.map((tab) => (
             <TabItem
               key={tab.id}
               id={tab.id}
@@ -183,6 +202,34 @@ export function TabBar() {
           <TooltipContent>Export all tabs (.zip)</TooltipContent>
         </Tooltip>
 
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setExportOpen(true)}
+              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+            >
+              <FileOutput className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Export (MD / JSON / HTML / PDF)</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShareOpen(true)}
+              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+            >
+              <Share2 className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Share note</TooltipContent>
+        </Tooltip>
+
         {/* Separator */}
         <div className="mx-1 h-5 w-px bg-border" />
 
@@ -192,9 +239,9 @@ export function TabBar() {
           <div
             className="absolute top-0.5 bottom-0.5 rounded-sm bg-background shadow-sm transition-transform duration-200 ease-out"
             style={{
-              width: "calc(25% - 1px)",
+              width: "calc(16.666% - 1px)",
               transform: `translateX(${
-                viewMode === "editor" ? "0%" : viewMode === "split" ? "100%" : viewMode === "preview" ? "200%" : "300%"
+                viewMode === "editor" ? "0%" : viewMode === "split" ? "100%" : viewMode === "preview" ? "200%" : viewMode === "graph" ? "300%" : viewMode === "whiteboard" ? "400%" : "500%"
               })`,
             }}
           />
@@ -204,6 +251,8 @@ export function TabBar() {
               { mode: "split" as ViewMode, icon: Columns2, label: "Split" },
               { mode: "preview" as ViewMode, icon: Eye, label: "Preview" },
               { mode: "graph" as ViewMode, icon: Network, label: "Graph" },
+              { mode: "whiteboard" as ViewMode, icon: PenTool, label: "Whiteboard" },
+              { mode: "mindmap" as ViewMode, icon: GitBranch, label: "Mindmap" },
             ] as const
           ).map(({ mode, icon: Icon, label }) => (
             <Tooltip key={mode}>
@@ -252,6 +301,9 @@ export function TabBar() {
         {/* Info button */}
         <InfoButton />
       </div>
+
+      <ShareDialog open={shareOpen} onOpenChange={setShareOpen} />
+      <ExportDialog open={exportOpen} onOpenChange={setExportOpen} />
     </div>
   );
 }

@@ -29,6 +29,7 @@ export const upsert = mutation({
     content: v.string(),
     folderId: v.union(v.string(), v.null()),
     tags: v.optional(v.array(v.string())),
+    pinned: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const { userId, tabId, ...data } = args;
@@ -59,6 +60,7 @@ export const syncAll = mutation({
         content: v.string(),
         folderId: v.union(v.string(), v.null()),
         tags: v.optional(v.array(v.string())),
+        pinned: v.optional(v.boolean()),
       })
     ),
   },
@@ -90,6 +92,7 @@ export const syncAll = mutation({
           content: tab.content,
           folderId: tab.folderId,
           tags: tab.tags,
+          pinned: tab.pinned,
         });
       } else {
         await ctx.db.insert("tabs", { userId, ...tab });

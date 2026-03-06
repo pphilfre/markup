@@ -19,6 +19,8 @@ import {
   FolderOpen,
   PanelLeftClose,
   PanelLeft,
+  Share2,
+  FileOutput,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/lib/store";
@@ -107,6 +109,18 @@ function useFeatures(): Feature[] {
         keywords: ["settings", "preferences", "config", "font", "size"],
         icon: <Settings className="h-4 w-4" />,
         action: () => document.dispatchEvent(new CustomEvent("open-settings")),
+      },
+      {
+        label: "Share Note",
+        keywords: ["share", "collaborate", "link", "publish"],
+        icon: <Share2 className="h-4 w-4" />,
+        action: () => document.dispatchEvent(new CustomEvent("open-share")),
+      },
+      {
+        label: "Export",
+        keywords: ["export", "download", "pdf", "html", "json", "markdown"],
+        icon: <FileOutput className="h-4 w-4" />,
+        action: () => document.dispatchEvent(new CustomEvent("open-export")),
       },
     ],
     [wrapSelection, toggleTheme, setViewMode, createTab, createFolder, toggleFileTree, theme]

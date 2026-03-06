@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useEditorStore, DEFAULT_SETTINGS } from "@/lib/store";
+import { useEditorStore, DEFAULT_SETTINGS, type Settings } from "@/lib/store";
 import { useAuthState } from "@/components/convex-client-provider";
 
 /**
@@ -43,6 +43,13 @@ export function ConvexSync() {
   const upsertUser = useMutation(api.users.upsert);
   const saveWorkspace = useMutation(api.workspace.save);
   const syncAllTabs = useMutation(api.tabs.syncAll);
+  const updateSharedContent = useMutation(api.sharing.updateContent);
+
+  // Track which tabs are shared so we can push updates
+  const sharedTabs = useQuery(
+    api.sharing.listByOwner,
+    userId ? { ownerUserId: userId } : "skip"
+  );
 
   const isHydrating = useRef(false);
   const hasHydratedFromConvex = useRef(false);
@@ -51,6 +58,8 @@ export function ConvexSync() {
   // Track what we last pushed so we can distinguish our own echoes
   const lastPushedTabs = useRef<string>("");
   const lastPushedWorkspace = useRef<string>("");
+  // Track shared note content to detect collaborator edits
+  const lastSharedContent = useRef<Map<string, string>>(new Map());
 
   // ── Helper: push current local state to Convex ─────────────────────
   const pushCurrentState = useCallback(() => {
@@ -63,10 +72,11 @@ export function ConvexSync() {
       content: t.content,
       folderId: t.folderId,
       tags: t.tags,
+      pinned: t.pinned,
     }));
 
     lastPushedTabs.current = JSON.stringify(
-      tabsPayload.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [] }))
+      tabsPayload.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false }))
     );
     lastPushedWorkspace.current = JSON.stringify({
       activeTabId: slice.activeTabId,
@@ -76,6 +86,21 @@ export function ConvexSync() {
     });
 
     syncAllTabs({ userId, tabs: tabsPayload }).catch(console.error);
+
+    // Sync shared note content in real-time
+    if (sharedTabs) {
+      const sharedTabIds = new Set(sharedTabs.map((s) => s.tabId));
+      for (const t of slice.tabs) {
+        if (sharedTabIds.has(t.id)) {
+          updateSharedContent({
+            ownerUserId: userId,
+            tabId: t.id,
+            title: t.title,
+            content: t.content,
+          }).catch(console.error);
+        }
+      }
+    }
 
     saveWorkspace({
       userId,
@@ -94,7 +119,7 @@ export function ConvexSync() {
       profiles: slice.profiles.map((p) => ({ id: p.id, name: p.name })),
       activeProfileId: slice.activeProfileId,
     }).catch(console.error);
-  }, [userId, syncAllTabs, saveWorkspace]);
+  }, [userId, syncAllTabs, saveWorkspace, sharedTabs, updateSharedContent]);
 
   // ── Online / Offline detection ─────────────────────────────────────
   useEffect(() => {
@@ -146,19 +171,21 @@ export function ConvexSync() {
         content: t.content,
         folderId: t.folderId ?? null,
         tags: t.tags ?? [],
+        pinned: t.pinned ?? false,
       }));
 
       useEditorStore.setState({
         tabs,
+        openTabIds: tabs.map((t) => t.id),
         activeTabId: workspace.activeTabId,
         folders: workspace.folders.map((f) => ({
           ...f,
           parentId: f.parentId ?? null,
         })),
-        viewMode: workspace.viewMode as "editor" | "split" | "preview" | "graph",
+        viewMode: workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap",
         theme: workspace.theme as "dark" | "light",
         fileTreeOpen: workspace.fileTreeOpen,
-        settings: { ...DEFAULT_SETTINGS, ...workspace.settings },
+        settings: { ...DEFAULT_SETTINGS, ...workspace.settings } as Settings,
         profiles: workspace.profiles?.length
           ? workspace.profiles
           : [{ id: "default", name: "Personal" }],
@@ -168,7 +195,7 @@ export function ConvexSync() {
 
       // Record what we just loaded as our "last pushed" baseline
       lastPushedTabs.current = JSON.stringify(
-        remoteTabs.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [] }))
+        remoteTabs.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false }))
       );
       lastPushedWorkspace.current = JSON.stringify({
         activeTabId: workspace.activeTabId,
@@ -193,6 +220,7 @@ export function ConvexSync() {
           content: t.content,
           folderId: t.folderId,
           tags: t.tags,
+          pinned: t.pinned,
         })),
       }).catch(console.error);
 
@@ -224,7 +252,7 @@ export function ConvexSync() {
 
     // Check if tabs changed from what we last pushed
     const incomingTabsKey = JSON.stringify(
-      remoteTabs.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [] }))
+      remoteTabs.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false }))
     );
 
     if (incomingTabsKey !== lastPushedTabs.current) {
@@ -237,22 +265,32 @@ export function ConvexSync() {
         content: t.content,
         folderId: t.folderId ?? null,
         tags: t.tags ?? [],
+        pinned: t.pinned ?? false,
       }));
 
       const currentActiveId = useEditorStore.getState().activeTabId;
+      const currentOpenTabIds = useEditorStore.getState().openTabIds;
       const activeStillExists = tabs.some((t) => t.id === currentActiveId);
+      // Keep existing open tabs that still exist, add any new ones
+      const tabIdSet = new Set(tabs.map((t) => t.id));
+      const updatedOpenTabIds = currentOpenTabIds.filter((id) => tabIdSet.has(id));
+      // Add any new tabs that weren't in the old set
+      for (const t of tabs) {
+        if (!updatedOpenTabIds.includes(t.id)) updatedOpenTabIds.push(t.id);
+      }
 
       useEditorStore.setState({
         tabs,
+        openTabIds: updatedOpenTabIds,
         activeTabId: activeStillExists ? currentActiveId : workspace.activeTabId,
         folders: workspace.folders.map((f) => ({
           ...f,
           parentId: f.parentId ?? null,
         })),
-        viewMode: workspace.viewMode as "editor" | "split" | "preview" | "graph",
+        viewMode: workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap",
         theme: workspace.theme as "dark" | "light",
         fileTreeOpen: workspace.fileTreeOpen,
-        settings: { ...DEFAULT_SETTINGS, ...workspace.settings },
+        settings: { ...DEFAULT_SETTINGS, ...workspace.settings } as Settings,
         profiles: workspace.profiles?.length
           ? workspace.profiles
           : [{ id: "default", name: "Personal" }],
@@ -266,6 +304,55 @@ export function ConvexSync() {
       });
     }
   }, [remoteTabs, workspace]);
+
+  // ── Reverse sync: apply collaborator edits on shared notes back to owner ──
+  useEffect(() => {
+    if (!hasHydratedFromConvex.current || !sharedTabs) return;
+
+    const applyCollabUpdates = () => {
+      // If another sync is in progress, retry after it clears
+      if (isHydrating.current) {
+        requestAnimationFrame(applyCollabUpdates);
+        return;
+      }
+
+      let changed = false;
+      const updates: Array<{ tabId: string; content: string; title: string }> = [];
+
+      for (const shared of sharedTabs) {
+        if (shared.permission !== "edit") continue;
+        const lastContent = lastSharedContent.current.get(shared.tabId);
+        // Also compare with the owner's current local content to avoid no-ops
+        const localTab = useEditorStore.getState().tabs.find((t) => t.id === shared.tabId);
+        const localContent = localTab?.content;
+        // Only process if we have a baseline (skip initial load)
+        // AND the shared content differs from our local content
+        if (lastContent !== undefined && shared.content !== lastContent && shared.content !== localContent) {
+          updates.push({ tabId: shared.tabId, content: shared.content, title: shared.title });
+          changed = true;
+        }
+        lastSharedContent.current.set(shared.tabId, shared.content);
+      }
+
+      if (changed) {
+        const currentTabs = useEditorStore.getState().tabs;
+        const newTabs = currentTabs.map((t) => {
+          const update = updates.find((u) => u.tabId === t.id);
+          if (update) return { ...t, content: update.content, title: update.title };
+          return t;
+        });
+        isHydrating.current = true;
+        useEditorStore.setState({ tabs: newTabs });
+        // Also update lastPushedTabs to prevent main sync from overwriting
+        lastPushedTabs.current = JSON.stringify(
+          newTabs.map((t) => ({ tabId: t.id, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false }))
+        );
+        requestAnimationFrame(() => { isHydrating.current = false; });
+      }
+    };
+
+    applyCollabUpdates();
+  }, [sharedTabs]);
 
   // ── Persist store changes → Convex (debounced 500ms) ───────────────
   useEffect(() => {

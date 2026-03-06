@@ -37,6 +37,8 @@ import {
   Network,
   Shield,
   Monitor,
+  PenTool,
+  GitBranch,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -49,6 +51,8 @@ import { ThemeSync } from "@/components/theme-provider";
 import { ConvexSync } from "@/lib/convex-sync";
 import { InfoButton } from "@/components/shell/info-button";
 import { GraphView } from "@/components/shell/graph-view";
+import { WhiteboardView } from "@/components/shell/whiteboard";
+import { MindmapView } from "@/components/shell/mindmap";
 import { useAuthState } from "@/components/convex-client-provider";
 import { UserAccountPanel } from "@/components/shell/user-account-panel";
 import {
@@ -264,6 +268,8 @@ function MobileViewToggle() {
     { mode: "split", icon: Columns2, label: "Split" },
     { mode: "preview", icon: Eye, label: "Preview" },
     { mode: "graph", icon: Network, label: "Graph" },
+    { mode: "whiteboard", icon: PenTool, label: "Draw" },
+    { mode: "mindmap", icon: GitBranch, label: "Mind" },
   ];
 
   return (
@@ -489,6 +495,22 @@ function MobileContent() {
     return (
       <main className="flex flex-1 flex-col overflow-hidden bg-background">
         <GraphView />
+      </main>
+    );
+  }
+
+  if (viewMode === "whiteboard") {
+    return (
+      <main className="flex flex-1 flex-col overflow-hidden bg-background">
+        <WhiteboardView />
+      </main>
+    );
+  }
+
+  if (viewMode === "mindmap") {
+    return (
+      <main className="flex flex-1 flex-col overflow-hidden bg-background">
+        <MindmapView />
       </main>
     );
   }

@@ -9,6 +9,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { useEditorStore } from "@/lib/store";
+import { Share2, FileOutput } from "lucide-react";
 
 export function EditorContextMenu({ children }: { children: React.ReactNode }) {
   const wrapSelection = useEditorStore((s) => s.wrapSelection);
@@ -74,6 +75,15 @@ export function EditorContextMenu({ children }: { children: React.ReactNode }) {
         </ContextMenuItem>
         <ContextMenuItem onClick={() => wrapSelection("`", "`")}>
           Inline Code
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onClick={() => document.dispatchEvent(new CustomEvent("open-share"))}>
+          <Share2 className="mr-2 h-3.5 w-3.5" />
+          Share Note
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => document.dispatchEvent(new CustomEvent("open-export"))}>
+          <FileOutput className="mr-2 h-3.5 w-3.5" />
+          Export
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

@@ -4,6 +4,8 @@ import { useRef, useCallback } from "react";
 import { useEditorStore } from "@/lib/store";
 import { MarkdownEditor, MarkdownPreview } from "@/components/editor";
 import { GraphView } from "@/components/shell/graph-view";
+import { WhiteboardView } from "@/components/shell/whiteboard";
+import { MindmapView } from "@/components/shell/mindmap";
 
 export function MainContent() {
   const viewMode = useEditorStore((s) => s.viewMode);
@@ -58,6 +60,22 @@ export function MainContent() {
     return (
       <main className="flex flex-1 overflow-hidden bg-background">
         <GraphView />
+      </main>
+    );
+  }
+
+  if (viewMode === "whiteboard") {
+    return (
+      <main className="flex flex-1 overflow-hidden bg-background">
+        <WhiteboardView />
+      </main>
+    );
+  }
+
+  if (viewMode === "mindmap") {
+    return (
+      <main className="flex flex-1 overflow-hidden bg-background">
+        <MindmapView />
       </main>
     );
   }

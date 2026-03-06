@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import { EditorState } from "@codemirror/state";
-import { EditorView, ViewUpdate, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, rectangularSelection } from "@codemirror/view";
+import { EditorView, ViewUpdate, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, rectangularSelection, highlightWhitespace } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { Prec } from "@codemirror/state";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
@@ -168,24 +168,23 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
       doc: activeTab.content,
       extensions: [
         lineNumbers(),
-        highlightActiveLine(),
-        highlightActiveLineGutter(),
+        ...(settings.highlightCurrentLine ? [highlightActiveLine(), highlightActiveLineGutter()] : []),
         drawSelection(),
-        rectangularSelection(),
+        ...(settings.multiCursorSupport ? [rectangularSelection()] : []),
         indentOnInput(),
-        bracketMatching(),
-        closeBrackets(),
+        ...(settings.highlightMatchingBrackets ? [bracketMatching()] : []),
+        ...(settings.autoCloseBrackets ? [closeBrackets()] : []),
         foldGutter(),
         highlightSelectionMatches(),
         history(),
-        smartListKeymap(),
+        ...(settings.continueListOnEnter ? [smartListKeymap()] : []),
         formattingKeymap,
         keymap.of([
           ...defaultKeymap,
           ...historyKeymap,
           ...searchKeymap,
           ...foldKeymap,
-          ...closeBracketsKeymap,
+          ...(settings.autoCloseBrackets ? closeBracketsKeymap : []),
           indentWithTab,
         ]),
         markdown({ base: markdownLanguage, codeLanguages: languages }),
@@ -198,7 +197,8 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
             { tag: tags.heading, color: settings.accentColor },
           ])
         ),
-        EditorView.lineWrapping,
+        ...(settings.wordWrap ? [EditorView.lineWrapping] : []),
+        ...(settings.showInvisibleCharacters ? [highlightWhitespace()] : []),
         EditorView.theme({
           "&": {
             fontFamily: settings.fontFamily,
@@ -206,13 +206,21 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
           },
           ".cm-content": {
             lineHeight: String(settings.lineHeight),
+            letterSpacing: settings.letterSpacing + "em",
+            ...(settings.maxLineWidth > 0 ? { maxWidth: settings.maxLineWidth + "ch", margin: "0 auto" } : {}),
           },
           ".cm-scroller": {
             paddingLeft: settings.editorMargin + "px",
             paddingRight: settings.editorMargin + "px",
           },
+          ...(settings.cursorAnimation === "none"
+            ? { ".cm-cursor": { animationName: "none" } }
+            : settings.cursorAnimation === "smooth"
+            ? { ".cm-cursor": { transition: "left 80ms ease, top 80ms ease" } }
+            : {}),
         }),
         EditorState.tabSize.of(settings.tabSize),
+        ...(settings.convertTabsToSpaces ? [EditorState.languageData.of(() => [{ indentOnInput: true }])] : []),
         onContentChange(activeTab.id),
       ],
     });

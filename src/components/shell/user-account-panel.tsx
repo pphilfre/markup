@@ -98,7 +98,7 @@ export function UserAccountPanel() {
       {/* Panel */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-lg max-h-[85vh] rounded-lg border border-border bg-popover shadow-2xl animate-in slide-in-from-bottom-2 fade-in duration-150 flex flex-col overflow-hidden"
+        className="relative w-full max-w-[calc(100vw-2rem)] sm:max-w-lg max-h-[85vh] rounded-lg border border-border bg-popover shadow-2xl animate-in slide-in-from-bottom-2 fade-in duration-150 flex flex-col overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
