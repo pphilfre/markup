@@ -58,7 +58,7 @@ export function UserAccountPanel() {
       try {
         const res = await fetch("/api/auth/token");
         const data = await res.json();
-        if (data.accessToken) setAuthToken(data.accessToken);
+        if (data.widgetToken) setAuthToken(data.widgetToken);
         if (data.sessionId) setSessionId(data.sessionId);
       } catch {
         console.error("Failed to fetch auth token");
