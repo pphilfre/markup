@@ -251,22 +251,28 @@ function UserSection() {
   const [widgetTab, setWidgetTab] = useState<"profile" | "sessions" | "security">("profile");
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [fetchFailed, setFetchFailed] = useState(false);
   const fetchedRef = useRef(false);
 
   useEffect(() => {
-    if (fetchedRef.current && authToken) return;
+    if (fetchedRef.current) return;
     fetchedRef.current = true;
     (async () => {
       try {
         const res = await fetch("/api/auth/token");
         const data = await res.json();
-        if (data.widgetToken) setAuthToken(data.widgetToken);
+        if (data.accessToken) {
+          setAuthToken(data.accessToken);
+        } else {
+          setFetchFailed(true);
+        }
         if (data.sessionId) setSessionId(data.sessionId);
       } catch {
         console.error("Failed to fetch auth token");
+        setFetchFailed(true);
       }
     })();
-  }, [authToken]);
+  }, []);
 
   const tabs: { id: "profile" | "sessions" | "security"; label: string; icon: typeof User }[] = [
     { id: "profile", label: "Profile", icon: User },
@@ -305,7 +311,7 @@ function UserSection() {
       {/* Widget */}
       <div className="min-h-[200px] max-h-[320px] overflow-y-auto [&_*]:!bg-transparent [&_*]:!font-inherit [&_iframe]:max-h-[280px]">
         {authToken && sessionId ? (
-          <WorkOsWidgets>
+          <WorkOsWidgets apiHostname={window.location.hostname} port={window.location.port ? Number(window.location.port) : null} https={window.location.protocol === "https:"}>
             <div style={{ display: widgetTab === "profile" ? "contents" : "none" }}>
               <UserProfile authToken={authToken} />
             </div>
@@ -318,7 +324,7 @@ function UserSection() {
           </WorkOsWidgets>
         ) : (
           <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
-            Loading authentication…
+            {fetchFailed ? "Failed to load account settings" : "Loading authentication…"}
           </div>
         )}
       </div>

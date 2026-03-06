@@ -2,9 +2,8 @@ import { withAuth } from "@workos-inc/authkit-nextjs";
 import { NextResponse } from "next/server";
 
 /**
- * Returns the WorkOS access token + a widget token for the current session.
- * The widget token is required by @workos-inc/widgets (UserProfile, etc.)
- * and is generated via the WorkOS Widgets API.
+ * Returns the WorkOS access token for the current session.
+ * Called by the Convex auth provider and WorkOS widgets on the client side.
  */
 export async function GET() {
   try {
@@ -14,33 +13,8 @@ export async function GET() {
       return NextResponse.json({ accessToken: null, user: null });
     }
 
-    // Generate a widget token for the WorkOS widgets
-    let widgetToken: string | null = null;
-    if (session.user?.id && process.env.WORKOS_API_KEY) {
-      try {
-        const res = await fetch(
-          "https://api.workos.com/user_management/widgets/token",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${process.env.WORKOS_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ userId: session.user.id }),
-          }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          widgetToken = data.token ?? null;
-        }
-      } catch {
-        // Widget token generation failed; widgets will be unavailable
-      }
-    }
-
     return NextResponse.json({
       accessToken: session.accessToken,
-      widgetToken,
       sessionId: "sessionId" in session ? session.sessionId : null,
       user: session.user
         ? {

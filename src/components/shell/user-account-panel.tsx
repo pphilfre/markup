@@ -17,7 +17,7 @@ function WidgetContent({
   sessionId: string;
 }) {
   return (
-    <WorkOsWidgets>
+    <WorkOsWidgets apiHostname={window.location.hostname} port={window.location.port ? Number(window.location.port) : null} https={window.location.protocol === "https:"}>
       <div key="profile" style={{ display: tab === "profile" ? "contents" : "none" }}>
         <UserProfile authToken={authToken} />
       </div>
@@ -52,19 +52,19 @@ export function UserAccountPanel() {
   // Fetch auth token when opened
   useEffect(() => {
     if (!open) return;
-    if (fetchedRef.current && authToken) return;
+    if (fetchedRef.current) return;
     fetchedRef.current = true;
     (async () => {
       try {
         const res = await fetch("/api/auth/token");
         const data = await res.json();
-        if (data.widgetToken) setAuthToken(data.widgetToken);
+        if (data.accessToken) setAuthToken(data.accessToken);
         if (data.sessionId) setSessionId(data.sessionId);
       } catch {
         console.error("Failed to fetch auth token");
       }
     })();
-  }, [open, authToken]);
+  }, [open]);
 
   // Close on escape
   useEffect(() => {

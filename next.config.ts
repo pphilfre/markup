@@ -8,6 +8,14 @@ const nextConfig: NextConfig = {
     "freddiephilpot.dev",
     "localhost",
   ],
+  async rewrites() {
+    return [
+      {
+        source: "/_widgets/:path*",
+        destination: "https://api.workos.com/_widgets/:path*",
+      },
+    ];
+  },
 };
 
 export default nextConfig;
