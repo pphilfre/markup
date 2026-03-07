@@ -39,6 +39,7 @@ import { Separator } from "@/components/ui/separator";
 import { useEditorStore } from "@/lib/store";
 import { useAuthState } from "@/components/convex-client-provider";
 import { UserAccountPanel } from "@/components/shell/user-account-panel";
+import { signIn, signOut } from "@/lib/tauri";
 
 
 /** Small inline kbd badge for keybind hints */
@@ -357,24 +358,21 @@ export function Sidebar() {
                     <Shield className="mr-2 h-3.5 w-3.5" /> Security
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <a href="/api/auth/signout" className="flex w-full items-center gap-2">
-                      <LogOut className="h-3.5 w-3.5" />
-                      Sign out
-                    </a>
+                  <DropdownMenuItem onClick={() => signOut(() => window.location.reload())}>
+                    <LogOut className="h-3.5 w-3.5 mr-2" />
+                    Sign out
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <a href="/api/auth/signin">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`${btnSize} text-muted-foreground hover:text-foreground`}
-                >
-                  <LogIn className={iconSize} />
-                </Button>
-              </a>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`${btnSize} text-muted-foreground hover:text-foreground`}
+                onClick={() => signIn(() => window.location.reload())}
+              >
+                <LogIn className={iconSize} />
+              </Button>
             )}
           </TooltipTrigger>
           <TooltipContent side={tooltipSide}>

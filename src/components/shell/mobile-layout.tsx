@@ -50,6 +50,7 @@ import { WhiteboardView } from "@/components/shell/whiteboard";
 import { MindmapView } from "@/components/shell/mindmap";
 import { useAuthState } from "@/components/convex-client-provider";
 import { UserAccountPanel } from "@/components/shell/user-account-panel";
+import { signIn, signOut } from "@/lib/tauri";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -152,12 +153,13 @@ function MobileNavBar({
         isAuthenticated ? (
           <MobileMoreMenu />
         ) : (
-          <a href="/api/auth/signin">
-            <button className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium bg-primary text-primary-foreground active:opacity-80 transition-opacity">
-              <LogIn className="h-3.5 w-3.5" />
-              <span>Sign in</span>
-            </button>
-          </a>
+          <button
+            onClick={() => signIn(() => window.location.reload())}
+            className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium bg-primary text-primary-foreground active:opacity-80 transition-opacity"
+          >
+            <LogIn className="h-3.5 w-3.5" />
+            <span>Sign in</span>
+          </button>
         )
       )}
     </div>
@@ -238,11 +240,9 @@ function MobileMoreMenu() {
           Export all (.zip)
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild className="gap-3 py-2.5">
-          <a href="/api/auth/signout" className="flex w-full items-center gap-3">
-            <LogOut className="h-4 w-4" />
-            Sign out
-          </a>
+        <DropdownMenuItem onClick={() => signOut(() => window.location.reload())} className="gap-3 py-2.5">
+          <LogOut className="h-4 w-4" />
+          Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

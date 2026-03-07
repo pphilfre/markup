@@ -12,6 +12,8 @@ export function isTauri(): boolean {
   return "__TAURI_INTERNALS__" in window;
 }
 
+const DEPLOYED_URL = "https://markup.freddiephilpot.dev";
+
 /**
  * Base URL for server API calls.
  *
@@ -23,9 +25,7 @@ export function isTauri(): boolean {
  */
 export function apiBase(): string {
   if (!isTauri()) return "";
-  return (
-    process.env.NEXT_PUBLIC_API_URL || "https://markup-editor.vercel.app"
-  );
+  return process.env.NEXT_PUBLIC_API_URL || DEPLOYED_URL;
 }
 
 /**
@@ -43,4 +43,55 @@ export async function openExternal(url: string): Promise<void> {
     }
   }
   window.location.href = url;
+}
+
+/**
+ * Trigger sign-in. On web, navigates to the API route. In Tauri, opens the
+ * system browser and polls the backend until the session is established.
+ *
+ * @param onAuthenticated - callback fired once the session is active
+ */
+export async function signIn(onAuthenticated?: () => void): Promise<void> {
+  const base = apiBase();
+  if (!isTauri()) {
+    window.location.href = `${base}/api/auth/signin`;
+    return;
+  }
+
+  // Open system browser for login
+  await openExternal(`${base}/api/auth/signin`);
+
+  // Poll the backend for the session cookie to become active
+  const poll = setInterval(async () => {
+    try {
+      const res = await fetch(`${base}/api/auth/token`, {
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.accessToken) {
+        clearInterval(poll);
+        onAuthenticated?.();
+      }
+    } catch {
+      // keep polling
+    }
+  }, 2000);
+
+  // Stop polling after 5 minutes
+  setTimeout(() => clearInterval(poll), 5 * 60 * 1000);
+}
+
+/**
+ * Trigger sign-out. On web, navigates to the signout route. In Tauri, opens
+ * the signout URL in the browser and reloads the app state.
+ */
+export async function signOut(onSignedOut?: () => void): Promise<void> {
+  const base = apiBase();
+  if (!isTauri()) {
+    window.location.href = `${base}/api/auth/signout`;
+    return;
+  }
+
+  await openExternal(`${base}/api/auth/signout`);
+  onSignedOut?.();
 }

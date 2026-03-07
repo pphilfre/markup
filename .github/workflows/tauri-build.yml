@@ -69,6 +69,6 @@ jobs:
           tagName: v__VERSION__
           releaseName: "Markup v__VERSION__"
           releaseBody: "Desktop app release for Markup."
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}

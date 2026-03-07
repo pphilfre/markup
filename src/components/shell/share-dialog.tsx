@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useAuthState } from "@/components/convex-client-provider";
-import { apiBase, openExternal } from "@/lib/tauri";
+import { signIn } from "@/lib/tauri";
 import { useEditorStore, type ViewMode } from "@/lib/store";
 import {
   Dialog,
@@ -182,7 +182,7 @@ export function ShareDialog({ open, onOpenChange, tabId }: ShareDialogProps) {
             </p>
             <Button
               onClick={() => {
-                openExternal(`${apiBase()}/api/auth/signin`);
+                signIn(() => window.location.reload());
               }}
             >
               Sign In

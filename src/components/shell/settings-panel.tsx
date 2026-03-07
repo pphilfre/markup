@@ -26,7 +26,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { apiBase, openExternal } from "@/lib/tauri";
+import { apiBase, signOut } from "@/lib/tauri";
 import { useEditorStore, DEFAULT_SETTINGS, type Settings as SettingsType } from "@/lib/store";
 import { useIsMobile } from "@/lib/use-mobile";
 import { WorkOsWidgets, UserProfile, UserSessions, UserSecurity } from "@workos-inc/widgets";
@@ -567,7 +567,7 @@ function PrivacySecuritySection() {
     const input = window.prompt("Type DELETE to confirm account deletion:");
     if (input !== "DELETE") return;
     try {
-      openExternal(`${apiBase()}/api/auth/signout`);
+      signOut(() => window.location.reload());
     } catch {
       console.error("Failed to delete account");
     }
