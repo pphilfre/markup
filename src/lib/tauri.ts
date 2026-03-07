@@ -59,45 +59,42 @@ export async function signIn(onAuthenticated?: () => void): Promise<void> {
     return;
   }
 
-  try {
-    const { start, cancel, onUrl } = await import(
-      "@fabianlars/tauri-plugin-oauth"
-    );
+  const { start, cancel, onUrl } = await import(
+    "@fabianlars/tauri-plugin-oauth"
+  );
 
-    // Start a temporary localhost server to capture the redirect
-    const port = await start({
-      response: "<html><body style=\"font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#111;color:#fff\"><p>Signed in! You can close this tab and return to Markup.</p></body></html>",
-    });
+  // Start a temporary localhost server to capture the redirect
+  const port = await start({
+    response: "<html><body style=\"font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#111;color:#fff\"><p>Signed in! You can close this tab and return to Markup.</p></body></html>",
+  });
 
-    // Listen for the redirect from the browser
-    await onUrl((url: string) => {
-      cancel(port).catch(() => {});
+  // Listen for the redirect from the browser
+  const unlisten = await onUrl((url: string) => {
+    cancel(port).catch(() => {});
+    unlisten();
 
-      const parsed = new URL(url);
-      const token = parsed.searchParams.get("token");
-      const userJson = parsed.searchParams.get("user");
+    const parsed = new URL(url);
+    const token = parsed.searchParams.get("token");
+    const userJson = parsed.searchParams.get("user");
 
-      if (token) {
-        sessionStorage.setItem("desktop_token", token);
-        if (userJson) {
-          sessionStorage.setItem("desktop_user", userJson);
-        }
-        onAuthenticated?.();
+    if (token) {
+      sessionStorage.setItem("desktop_token", token);
+      if (userJson) {
+        sessionStorage.setItem("desktop_user", userJson);
       }
-    });
+      onAuthenticated?.();
+    }
+  });
 
-    // Open auth in the system browser — the user completes sign-in there,
-    // and the deployed page.tsx relays the token back to localhost:port.
-    await openExternal(`${base}/api/auth/desktop?port=${port}`);
+  // Open auth in the system browser — the user completes sign-in there,
+  // and the deployed page.tsx relays the token back to localhost:port.
+  await openExternal(`${base}/api/auth/desktop?port=${port}`);
 
-    // Safety: cancel the server after 5 minutes
-    setTimeout(() => {
-      cancel(port).catch(() => {});
-    }, 5 * 60 * 1000);
-  } catch {
-    // Fallback: open sign-in directly in system browser (no relay)
-    await openExternal(`${base}/api/auth/signin`);
-  }
+  // Safety: cancel the server after 5 minutes
+  setTimeout(() => {
+    cancel(port).catch(() => {});
+    unlisten();
+  }, 5 * 60 * 1000);
 }
 
 /**
