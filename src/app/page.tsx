@@ -28,6 +28,32 @@ export default function Home() {
     if (note) {
       setShareId(note);
     }
+
+    // Desktop OAuth relay: after browser sign-in, redirect to the Tauri
+    // app's localhost OAuth server with the auth token.
+    const desktopPort = document.cookie
+      .split("; ")
+      .find((c) => c.startsWith("desktop_port="))
+      ?.split("=")[1];
+
+    if (desktopPort) {
+      // Clear the cookie immediately
+      document.cookie = "desktop_port=; path=/; max-age=0";
+      (async () => {
+        try {
+          const res = await fetch("/api/auth/token");
+          const data = await res.json();
+          if (data.accessToken) {
+            const userParam = data.user
+              ? `&user=${encodeURIComponent(JSON.stringify(data.user))}`
+              : "";
+            window.location.href = `http://localhost:${desktopPort}?token=${encodeURIComponent(data.accessToken)}${userParam}`;
+          }
+        } catch {
+          // If token fetch fails, just stay on the page
+        }
+      })();
+    }
   }, []);
 
   const handleBackFromShared = useCallback(() => {

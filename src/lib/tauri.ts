@@ -46,8 +46,9 @@ export async function openExternal(url: string): Promise<void> {
 }
 
 /**
- * Trigger sign-in. On web, navigates to the API route. In Tauri, opens the
- * system browser and polls the backend until the session is established.
+ * Trigger sign-in. On web, navigates to the API route. In Tauri, starts a
+ * localhost OAuth server, opens the browser to the desktop auth endpoint,
+ * and waits for the token to come back via redirect.
  *
  * @param onAuthenticated - callback fired once the session is active
  */
@@ -58,27 +59,41 @@ export async function signIn(onAuthenticated?: () => void): Promise<void> {
     return;
   }
 
-  // Open system browser for login
-  await openExternal(`${base}/api/auth/signin`);
+  try {
+    const { start, cancel, onUrl } = await import(
+      "@fabianlars/tauri-plugin-oauth"
+    );
 
-  // Poll the backend for the session cookie to become active
-  const poll = setInterval(async () => {
-    try {
-      const res = await fetch(`${base}/api/auth/token`, {
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (data.accessToken) {
-        clearInterval(poll);
+    // Start a temporary localhost server to capture the redirect
+    const port = await start();
+
+    // Listen for the redirect from the browser
+    await onUrl((url: string) => {
+      cancel(port).catch(() => {});
+
+      const parsed = new URL(url);
+      const token = parsed.searchParams.get("token");
+      const userJson = parsed.searchParams.get("user");
+
+      if (token) {
+        // Store in sessionStorage so AuthLoader can pick it up
+        sessionStorage.setItem("desktop_token", token);
+        if (userJson) {
+          sessionStorage.setItem("desktop_user", userJson);
+        }
         onAuthenticated?.();
       }
-    } catch {
-      // keep polling
-    }
-  }, 2000);
+    });
 
-  // Stop polling after 5 minutes
-  setTimeout(() => clearInterval(poll), 5 * 60 * 1000);
+    // Open the browser to the desktop auth endpoint
+    await openExternal(`${base}/api/auth/desktop?port=${port}`);
+
+    // Safety: cancel the server after 5 minutes
+    setTimeout(() => cancel(port).catch(() => {}), 5 * 60 * 1000);
+  } catch {
+    // Fallback: open sign-in directly in browser
+    await openExternal(`${base}/api/auth/signin`);
+  }
 }
 
 /**
