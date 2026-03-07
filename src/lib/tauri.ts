@@ -47,8 +47,8 @@ export async function openExternal(url: string): Promise<void> {
 
 /**
  * Trigger sign-in. On web, navigates to the API route. In Tauri, starts a
- * localhost OAuth server, opens a fresh webview popup (no existing cookies)
- * to the desktop auth endpoint, and waits for the token redirect.
+ * localhost OAuth server, opens the system browser to the desktop auth
+ * endpoint, and waits for the token redirect back to localhost.
  *
  * @param onAuthenticated - callback fired once the session is active
  */
@@ -63,21 +63,15 @@ export async function signIn(onAuthenticated?: () => void): Promise<void> {
     const { start, cancel, onUrl } = await import(
       "@fabianlars/tauri-plugin-oauth"
     );
-    const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
 
     // Start a temporary localhost server to capture the redirect
-    const port = await start();
-    let authWindow: InstanceType<typeof WebviewWindow> | null = null;
+    const port = await start({
+      response: "<html><body style=\"font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#111;color:#fff\"><p>Signed in! You can close this tab and return to Markup.</p></body></html>",
+    });
 
-    // Listen for the redirect from the auth window
+    // Listen for the redirect from the browser
     await onUrl((url: string) => {
       cancel(port).catch(() => {});
-
-      // Close the auth popup
-      if (authWindow) {
-        authWindow.close().catch(() => {});
-        authWindow = null;
-      }
 
       const parsed = new URL(url);
       const token = parsed.searchParams.get("token");
@@ -92,33 +86,16 @@ export async function signIn(onAuthenticated?: () => void): Promise<void> {
       }
     });
 
-    // Open a fresh webview window (no shared browser cookies)
-    authWindow = new WebviewWindow("auth-login", {
-      url: `${base}/api/auth/desktop?port=${port}`,
-      title: "Sign in to Markup",
-      width: 500,
-      height: 700,
-      center: true,
-      resizable: false,
-      focus: true,
-    });
-
-    // If the user closes the window manually, clean up
-    authWindow.once("tauri://destroyed", () => {
-      cancel(port).catch(() => {});
-      authWindow = null;
-    });
+    // Open auth in the system browser — the user completes sign-in there,
+    // and the deployed page.tsx relays the token back to localhost:port.
+    await openExternal(`${base}/api/auth/desktop?port=${port}`);
 
     // Safety: cancel the server after 5 minutes
     setTimeout(() => {
       cancel(port).catch(() => {});
-      if (authWindow) {
-        authWindow.close().catch(() => {});
-        authWindow = null;
-      }
     }, 5 * 60 * 1000);
   } catch {
-    // Fallback: open sign-in directly in system browser
+    // Fallback: open sign-in directly in system browser (no relay)
     await openExternal(`${base}/api/auth/signin`);
   }
 }
@@ -133,6 +110,10 @@ export async function signOut(onSignedOut?: () => void): Promise<void> {
     window.location.href = `${base}/api/auth/signout`;
     return;
   }
+
+  // Clear desktop session tokens
+  sessionStorage.removeItem("desktop_token");
+  sessionStorage.removeItem("desktop_user");
 
   await openExternal(`${base}/api/auth/signout`);
   onSignedOut?.();

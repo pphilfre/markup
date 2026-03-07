@@ -68,6 +68,24 @@ function AuthLoader() {
     fetchedRef.current = true;
 
     (async () => {
+      // In Tauri, check sessionStorage first (token stored by desktop OAuth flow)
+      const desktopToken = sessionStorage.getItem("desktop_token");
+      if (desktopToken) {
+        const userRaw = sessionStorage.getItem("desktop_user");
+        let user: WorkOSUser | null = null;
+        if (userRaw) {
+          try {
+            user = JSON.parse(userRaw);
+          } catch { /* ignore */ }
+        }
+        setAuthState({
+          isLoading: false,
+          isAuthenticated: true,
+          user,
+        });
+        return;
+      }
+
       try {
         const res = await fetch(`${apiBase()}/api/auth/token`, { credentials: "include" });
         const data = await res.json();
