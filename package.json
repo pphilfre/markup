@@ -7,7 +7,7 @@
     "dev:next": "next dev",
     "dev:convex": "npx convex dev",
     "build": "npx convex deploy --cmd 'next build'",
-    "build:tauri": "bash scripts/tauri-build.sh",
+    "build:tauri": "node scripts/tauri-build.js",
     "start": "next start",
     "lint": "eslint",
     "tauri": "tauri",

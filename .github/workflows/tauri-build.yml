@@ -52,11 +52,15 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Create env file
+        shell: bash
+        run: |
+          echo "NEXT_PUBLIC_CONVEX_URL=https://amicable-rat-773.eu-west-1.convex.cloud" > .env.local
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NEXT_PUBLIC_CONVEX_URL: ${{ secrets.NEXT_PUBLIC_CONVEX_URL }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
