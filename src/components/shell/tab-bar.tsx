@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Plus, X, Download, FolderArchive, Sun, Moon, PenLine, Eye, Columns2, Network, Share2, FileOutput, PenTool, GitBranch } from "lucide-react";
+import { Plus, X, Sun, Moon, PenLine, Eye, Columns2, Network, Share2, FileOutput, PenTool, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useEditorStore, ViewMode } from "@/lib/store";
-import { InfoButton } from "./info-button";
 import { ShareDialog } from "./share-dialog";
 import { ExportDialog } from "./export-dialog";
 
@@ -50,7 +49,7 @@ function TabItem({ id, title, isActive }: { id: string; title: string; isActive:
         setEditing(true);
       }}
       className={cn(
-        "group flex h-10 shrink-0 cursor-pointer items-center gap-2 border-r border-border px-4 text-sm transition-colors select-none",
+        "group flex h-8 shrink-0 cursor-pointer items-center gap-1.5 border-r border-border px-3 text-xs transition-colors select-none",
         isActive
           ? "bg-background text-foreground"
           : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
@@ -113,38 +112,10 @@ export function TabBar() {
     };
   }, []);
 
-  const exportSingle = () => {
-    const tab = tabs.find((t) => t.id === activeTabId);
-    if (!tab) return;
-    const blob = new Blob([tab.content], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = tab.title;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const exportZip = async () => {
-    if (tabs.length === 0) return;
-    const JSZip = (await import("jszip")).default;
-    const zip = new JSZip();
-    tabs.forEach((tab) => {
-      zip.file(tab.title, tab.content);
-    });
-    const blob = await zip.generateAsync({ type: "blob" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "markup-export.zip";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const openTabs = openTabIds.map((id) => tabs.find((t) => t.id === id)).filter(Boolean) as typeof tabs;
 
   return (
-    <div className="flex h-10 items-center border-b border-border bg-card">
+    <div className="flex h-8 items-center border-b border-border bg-card">
       <ScrollArea className="flex-1">
         <div className="flex items-center">
           {openTabs.map((tab) => (
@@ -159,16 +130,16 @@ export function TabBar() {
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
 
-      <div className="flex items-center gap-0.5 mx-1">
+      <div className="flex items-center gap-0.5 px-1 shrink-0 overflow-x-auto scrollbar-none">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
               onClick={() => createTab()}
-              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+              className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>New Tab</TooltipContent>
@@ -179,41 +150,13 @@ export function TabBar() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={exportSingle}
-              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
-            >
-              <Download className="h-3.5 w-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Export current tab (.md)</TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={exportZip}
-              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
-            >
-              <FolderArchive className="h-3.5 w-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Export all tabs (.zip)</TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
               onClick={() => setExportOpen(true)}
-              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+              className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
             >
-              <FileOutput className="h-3.5 w-3.5" />
+              <FileOutput className="h-3 w-3" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Export (MD / JSON / HTML / PDF)</TooltipContent>
+          <TooltipContent>Export</TooltipContent>
         </Tooltip>
 
         <Tooltip>
@@ -222,51 +165,44 @@ export function TabBar() {
               variant="ghost"
               size="icon"
               onClick={() => setShareOpen(true)}
-              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+              className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
             >
-              <Share2 className="h-3.5 w-3.5" />
+              <Share2 className="h-3 w-3" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Share note</TooltipContent>
+          <TooltipContent>Share</TooltipContent>
         </Tooltip>
 
-        {/* Separator */}
-        <div className="mx-1 h-5 w-px bg-border" />
+        <div className="mx-0.5 h-4 w-px bg-border" />
 
-        {/* View mode toggle group */}
-        <div className="relative flex items-center rounded-md border border-border bg-muted/50 p-0.5">
-          {/* Sliding highlight */}
-          <div
-            className="absolute top-0.5 bottom-0.5 rounded-sm bg-background shadow-sm transition-transform duration-200 ease-out"
-            style={{
-              width: "calc(16.666% - 1px)",
-              transform: `translateX(${
-                viewMode === "editor" ? "0%" : viewMode === "split" ? "100%" : viewMode === "preview" ? "200%" : viewMode === "graph" ? "300%" : viewMode === "whiteboard" ? "400%" : "500%"
-              })`,
-            }}
-          />
-          {(
-            [
-              { mode: "editor" as ViewMode, icon: PenLine, label: "Editor" },
-              { mode: "split" as ViewMode, icon: Columns2, label: "Split" },
-              { mode: "preview" as ViewMode, icon: Eye, label: "Preview" },
-              { mode: "graph" as ViewMode, icon: Network, label: "Graph" },
-              { mode: "whiteboard" as ViewMode, icon: PenTool, label: "Whiteboard" },
-              { mode: "mindmap" as ViewMode, icon: GitBranch, label: "Mindmap" },
-            ] as const
-          ).map(({ mode, icon: Icon, label }) => (
+        {/* View mode groups */}
+        <div className="relative flex items-center rounded-md border border-border bg-muted/50 p-px">
+          {(viewMode === "editor" || viewMode === "split" || viewMode === "preview") && (
+            <div
+              className="absolute top-px bottom-px rounded-sm bg-background shadow-sm transition-transform duration-200 ease-out"
+              style={{
+                width: "calc(33.333% - 1px)",
+                transform: `translateX(${
+                  viewMode === "editor" ? "0%" : viewMode === "split" ? "100%" : "200%"
+                })`,
+              }}
+            />
+          )}
+          {([
+            { mode: "editor" as ViewMode, icon: PenLine, label: "Editor" },
+            { mode: "split" as ViewMode, icon: Columns2, label: "Split" },
+            { mode: "preview" as ViewMode, icon: Eye, label: "Preview" },
+          ] as const).map(({ mode, icon: Icon, label }) => (
             <Tooltip key={mode}>
               <TooltipTrigger asChild>
                 <button
                   onClick={() => setViewMode(mode)}
                   className={cn(
-                    "relative z-10 flex h-5 w-6 items-center justify-center rounded-sm transition-colors",
-                    viewMode === mode
-                      ? "text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
+                    "relative z-10 flex h-5 w-5 items-center justify-center rounded-sm transition-colors",
+                    viewMode === mode ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  <Icon className="h-3 w-3" />
+                  <Icon className="h-2.5 w-2.5" />
                 </button>
               </TooltipTrigger>
               <TooltipContent>{label}</TooltipContent>
@@ -274,32 +210,61 @@ export function TabBar() {
           ))}
         </div>
 
-        {/* Separator */}
-        <div className="mx-1 h-5 w-px bg-border" />
+        <div className="relative flex items-center rounded-md border border-border bg-muted/50 p-px">
+          {(viewMode === "graph" || viewMode === "whiteboard" || viewMode === "mindmap") && (
+            <div
+              className="absolute top-px bottom-px rounded-sm bg-background shadow-sm transition-transform duration-200 ease-out"
+              style={{
+                width: "calc(33.333% - 1px)",
+                transform: `translateX(${
+                  viewMode === "graph" ? "0%" : viewMode === "whiteboard" ? "100%" : "200%"
+                })`,
+              }}
+            />
+          )}
+          {([
+            { mode: "graph" as ViewMode, icon: Network, label: "Graph" },
+            { mode: "whiteboard" as ViewMode, icon: PenTool, label: "Whiteboard" },
+            { mode: "mindmap" as ViewMode, icon: GitBranch, label: "Mindmap" },
+          ] as const).map(({ mode, icon: Icon, label }) => (
+            <Tooltip key={mode}>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setViewMode(mode)}
+                  className={cn(
+                    "relative z-10 flex h-5 w-5 items-center justify-center rounded-sm transition-colors",
+                    viewMode === mode ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Icon className="h-2.5 w-2.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{label}</TooltipContent>
+            </Tooltip>
+          ))}
+        </div>
 
-        {/* Theme toggle */}
+        <div className="mx-0.5 h-4 w-px bg-border" />
+
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
               onClick={toggleTheme}
-              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+              className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
             >
               {theme === "dark" ? (
-                <Sun className="h-3.5 w-3.5" />
+                <Sun className="h-3 w-3" />
               ) : (
-                <Moon className="h-3.5 w-3.5" />
+                <Moon className="h-3 w-3" />
               )}
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            {theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            {theme === "dark" ? "Light Mode" : "Dark Mode"}
           </TooltipContent>
         </Tooltip>
-
-        {/* Info button */}
-        <InfoButton />
       </div>
 
       <ShareDialog open={shareOpen} onOpenChange={setShareOpen} />

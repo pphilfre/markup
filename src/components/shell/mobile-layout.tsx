@@ -27,18 +27,14 @@ import {
   Settings,
   ChevronLeft,
   LogIn,
-  ChevronRight,
   Menu,
-  FolderOpen,
   Search,
-  PanelLeft,
   LogOut,
   User,
   Network,
-  Shield,
-  Monitor,
   PenTool,
   GitBranch,
+  MoreHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -49,7 +45,6 @@ import { SpotlightSearch } from "@/components/shell/spotlight-search";
 import { SettingsPanel } from "@/components/shell/settings-panel";
 import { ThemeSync } from "@/components/theme-provider";
 import { ConvexSync } from "@/lib/convex-sync";
-import { InfoButton } from "@/components/shell/info-button";
 import { GraphView } from "@/components/shell/graph-view";
 import { WhiteboardView } from "@/components/shell/whiteboard";
 import { MindmapView } from "@/components/shell/mindmap";
@@ -62,144 +57,199 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
-// ── Mobile Header ─────────────────────────────────────────────────────────
-function MobileHeader({
+// ── Mobile Navigation Bar (Apple-style top bar) ───────────────────────────
+function MobileNavBar({
   onToggleFileTree,
   fileTreeOpen,
 }: {
   onToggleFileTree: () => void;
   fileTreeOpen: boolean;
 }) {
-  const tabs = useEditorStore((s) => s.tabs);
   const activeTabId = useEditorStore((s) => s.activeTabId);
-  const theme = useEditorStore((s) => s.theme);
-  const toggleTheme = useEditorStore((s) => s.toggleTheme);
+  const tabs = useEditorStore((s) => s.tabs);
   const hideMd = useEditorStore((s) => s.settings.hideMdExtensions);
-  const { isAuthenticated, user, isLoading: authLoading } = useAuthState();
+  const { isAuthenticated, isLoading: authLoading } = useAuthState();
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
+  const renameTab = useEditorStore((s) => s.renameTab);
   const displayName = activeTab
     ? hideMd && activeTab.title.endsWith(".md")
       ? activeTab.title.slice(0, -3)
       : activeTab.title
     : "Markup";
 
-  return (
-    <div className="flex h-11 items-center border-b border-border bg-card px-2 gap-1 shrink-0">
-      {/* Menu / File tree toggle */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={onToggleFileTree}
-        className="h-8 w-8 shrink-0 text-muted-foreground"
-      >
-        {fileTreeOpen ? <ChevronLeft className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-      </Button>
+  const [editingName, setEditingName] = useState(false);
+  const [draft, setDraft] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
-      {/* Active file name */}
-      <div className="flex-1 min-w-0 text-center">
-        <span className="text-sm font-medium truncate block">{displayName}</span>
+  useEffect(() => {
+    if (editingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
+    }
+  }, [editingName]);
+
+  const commitRename = () => {
+    const trimmed = draft.trim();
+    if (trimmed && activeTab) {
+      renameTab(activeTab.id, trimmed.endsWith(".md") ? trimmed : trimmed + ".md");
+    }
+    setEditingName(false);
+  };
+
+  return (
+    <div className="flex h-[44px] items-center border-b border-border bg-card/95 backdrop-blur-md px-1.5 gap-0.5 shrink-0">
+      {/* Left: File tree toggle */}
+      <button
+        onClick={onToggleFileTree}
+        className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground active:bg-muted/60 transition-colors"
+      >
+        {fileTreeOpen ? <ChevronLeft className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+      </button>
+
+      {/* Center: Active file name — double-click/tap to rename */}
+      <div
+        className="flex-1 min-w-0 text-center"
+        onDoubleClick={() => {
+          if (activeTab) {
+            setDraft(activeTab.title);
+            setEditingName(true);
+          }
+        }}
+      >
+        {editingName ? (
+          <input
+            ref={nameInputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitRename();
+              if (e.key === "Escape") setEditingName(false);
+            }}
+            className="w-full text-center text-[15px] font-semibold bg-transparent outline-none border-b border-primary/50"
+          />
+        ) : (
+          <span className="text-[15px] font-semibold truncate block">{displayName}</span>
+        )}
       </div>
 
-      {/* Search */}
-      <Button
-        variant="ghost"
-        size="icon"
+      {/* Right: Actions */}
+      <button
         onClick={() => document.dispatchEvent(new CustomEvent("open-spotlight"))}
-        className="h-8 w-8 shrink-0 text-muted-foreground"
+        className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground active:bg-muted/60 transition-colors"
       >
-        <Search className="h-4 w-4" />
-      </Button>
+        <Search className="h-[18px] w-[18px]" />
+      </button>
 
-      {/* Auth button */}
       {!authLoading && (
         isAuthenticated ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 text-muted-foreground"
-              >
-                {user?.profilePictureUrl ? (
-                  <img
-                    src={user.profilePictureUrl}
-                    alt=""
-                    className="h-5 w-5 rounded-full"
-                  />
-                ) : (
-                  <User className="h-4 w-4" />
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <div className="px-2 py-1.5">
-                <p className="text-xs font-medium">
-                  {user?.firstName} {user?.lastName}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {user?.email}
-                </p>
-              </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => document.dispatchEvent(new CustomEvent("open-user-account", { detail: "profile" }))}>
-                <User className="mr-2 h-3.5 w-3.5" /> Profile
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => document.dispatchEvent(new CustomEvent("open-user-account", { detail: "sessions" }))}>
-                <Monitor className="mr-2 h-3.5 w-3.5" /> Sessions
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => document.dispatchEvent(new CustomEvent("open-user-account", { detail: "security" }))}>
-                <Shield className="mr-2 h-3.5 w-3.5" /> Security
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <a href="/api/auth/signout" className="flex w-full items-center gap-2">
-                  <LogOut className="h-3.5 w-3.5" />
-                  Sign out
-                </a>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <MobileMoreMenu />
         ) : (
           <a href="/api/auth/signin">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 shrink-0 text-muted-foreground"
-            >
-              <LogIn className="h-4 w-4" />
-            </Button>
+            <button className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium bg-primary text-primary-foreground active:opacity-80 transition-opacity">
+              <LogIn className="h-3.5 w-3.5" />
+              <span>Sign in</span>
+            </button>
           </a>
         )
       )}
-
-      {/* Theme toggle */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={toggleTheme}
-        className="h-8 w-8 shrink-0 text-muted-foreground"
-      >
-        {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-      </Button>
-
-      <Button
-        asChild
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 shrink-0 text-muted-foreground"
-        aria-label="Sign in"
-      >
-        <a href="/api/auth/signin" aria-label="Sign in">
-          <LogIn className="h-4 w-4" />
-        </a>
-      </Button>
     </div>
   );
 }
 
-// ── Mobile Tab Strip (horizontal scrollable) ──────────────────────────────
+// ── More menu (replaces profile dropdown on mobile) ───────────────────────
+function MobileMoreMenu() {
+  const theme = useEditorStore((s) => s.theme);
+  const toggleTheme = useEditorStore((s) => s.toggleTheme);
+  const tabs = useEditorStore((s) => s.tabs);
+  const activeTabId = useEditorStore((s) => s.activeTabId);
+  const { user } = useAuthState();
+
+  const exportSingle = () => {
+    const tab = tabs.find((t) => t.id === activeTabId);
+    if (!tab) return;
+    const blob = new Blob([tab.content], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = tab.title;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportZip = async () => {
+    if (tabs.length === 0) return;
+    const JSZip = (await import("jszip")).default;
+    const zip = new JSZip();
+    tabs.forEach((tab) => zip.file(tab.title, tab.content));
+    const blob = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "markup-export.zip";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground active:bg-muted/60 transition-colors">
+          <MoreHorizontal className="h-5 w-5" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-52">
+        {user && (
+          <>
+            <div className="px-3 py-2">
+              <p className="text-sm font-medium truncate">
+                {user.firstName} {user.lastName}
+              </p>
+              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+            </div>
+            <DropdownMenuSeparator />
+          </>
+        )}
+        <DropdownMenuItem onClick={toggleTheme} className="gap-3 py-2.5">
+          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          {theme === "dark" ? "Light mode" : "Dark mode"}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => document.dispatchEvent(new CustomEvent("open-settings"))}
+          className="gap-3 py-2.5"
+        >
+          <Settings className="h-4 w-4" />
+          Settings
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={exportSingle} className="gap-3 py-2.5">
+          <Download className="h-4 w-4" />
+          Export note (.md)
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={exportZip} className="gap-3 py-2.5">
+          <FolderArchive className="h-4 w-4" />
+          Export all (.zip)
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild className="gap-3 py-2.5">
+          <a href="/api/auth/signout" className="flex w-full items-center gap-3">
+            <LogOut className="h-4 w-4" />
+            Sign out
+          </a>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// ── Mobile Tab Strip ──────────────────────────────────────────────────────
 function MobileTabStrip() {
   const tabs = useEditorStore((s) => s.tabs);
   const activeTabId = useEditorStore((s) => s.activeTabId);
@@ -207,98 +257,155 @@ function MobileTabStrip() {
   const closeTab = useEditorStore((s) => s.closeTab);
   const createTab = useEditorStore((s) => s.createTab);
   const hideMd = useEditorStore((s) => s.settings.hideMdExtensions);
+  const openTabIds = useEditorStore((s) => s.openTabIds);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const activeElRef = useRef<HTMLDivElement>(null);
+
+  // Scroll active tab into view
+  useEffect(() => {
+    if (activeElRef.current) {
+      activeElRef.current.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }
+  }, [activeTabId]);
+
+  const openTabs = openTabIds
+    .map((id) => tabs.find((t) => t.id === id))
+    .filter(Boolean) as typeof tabs;
+
+  if (openTabs.length === 0) return null;
 
   return (
-    <div className="flex h-9 items-center border-b border-border bg-card/80 shrink-0">
+    <div className="flex h-[36px] items-center border-b border-border bg-card/60 shrink-0">
       <div
         ref={scrollRef}
         className="flex flex-1 items-center overflow-x-auto scrollbar-none"
       >
-        {tabs.map((tab) => {
+        {openTabs.map((tab) => {
           const name = hideMd && tab.title.endsWith(".md") ? tab.title.slice(0, -3) : tab.title;
+          const isActive = tab.id === activeTabId;
           return (
             <div
               key={tab.id}
+              ref={isActive ? activeElRef : undefined}
               role="tab"
               tabIndex={0}
               onClick={() => switchTab(tab.id)}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") switchTab(tab.id); }}
               className={cn(
-                "flex shrink-0 items-center gap-1.5 px-3 h-9 text-xs border-r border-border transition-colors cursor-pointer",
-                tab.id === activeTabId
-                  ? "bg-background text-foreground"
-                  : "text-muted-foreground"
+                "flex shrink-0 items-center gap-1 px-3 h-[36px] text-[13px] border-r border-border/50 transition-colors select-none",
+                isActive
+                  ? "bg-background text-foreground font-medium"
+                  : "text-muted-foreground active:bg-muted/40"
               )}
             >
-              <span className="max-w-[100px] truncate">{name}</span>
+              <FileText className="h-3 w-3 shrink-0 opacity-50" />
+              <span className="max-w-[90px] truncate">{name}</span>
+              {/* Close button — sized for touch (min 44px tap target) */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   closeTab(tab.id);
                 }}
-                className="ml-0.5 rounded-sm p-0.5 hover:bg-muted"
+                className="ml-1 flex h-7 w-7 items-center justify-center rounded-md active:bg-muted/80 transition-colors"
+                aria-label={`Close ${name}`}
               >
-                <X className="h-2.5 w-2.5" />
+                <X className="h-3.5 w-3.5" />
               </button>
             </div>
           );
         })}
       </div>
-      <Button
-        variant="ghost"
-        size="icon"
+      <button
         onClick={() => createTab()}
-        className="h-9 w-9 shrink-0 text-muted-foreground border-l border-border rounded-none"
+        className="flex h-[36px] w-11 shrink-0 items-center justify-center text-muted-foreground active:bg-muted/60 border-l border-border/50 transition-colors"
+        aria-label="New note"
       >
-        <Plus className="h-3.5 w-3.5" />
-      </Button>
+        <Plus className="h-4 w-4" />
+      </button>
     </div>
   );
 }
 
-// ── Mobile View Toggle ────────────────────────────────────────────────────
-function MobileViewToggle() {
+// ── Mobile View Segmented Control ─────────────────────────────────────────
+function MobileViewSegment() {
   const viewMode = useEditorStore((s) => s.viewMode);
   const setViewMode = useEditorStore((s) => s.setViewMode);
 
-  const modes: { mode: ViewMode; icon: typeof PenLine; label: string }[] = [
+  const editorModes: { mode: ViewMode; icon: typeof PenLine; label: string }[] = [
     { mode: "editor", icon: PenLine, label: "Edit" },
     { mode: "split", icon: Columns2, label: "Split" },
-    { mode: "preview", icon: Eye, label: "Preview" },
+    { mode: "preview", icon: Eye, label: "View" },
+  ];
+
+  const canvasModes: { mode: ViewMode; icon: typeof PenLine; label: string }[] = [
     { mode: "graph", icon: Network, label: "Graph" },
     { mode: "whiteboard", icon: PenTool, label: "Draw" },
-    { mode: "mindmap", icon: GitBranch, label: "Mind" },
+    { mode: "mindmap", icon: GitBranch, label: "Map" },
   ];
 
   return (
-    <div className="flex items-center rounded-md border border-border bg-muted/50 p-0.5">
-      {modes.map(({ mode, icon: Icon, label }) => (
-        <button
-          key={mode}
-          onClick={() => setViewMode(mode)}
-          className={cn(
-            "flex items-center gap-1 rounded-sm px-2 py-1 text-[11px] transition-colors",
-            viewMode === mode
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground"
-          )}
-        >
-          <Icon className="h-3 w-3" />
-          <span>{label}</span>
-        </button>
-      ))}
+    <div className="flex items-center justify-center gap-1.5 px-2 py-1 border-b border-border bg-card/40 shrink-0">
+      {/* Editor modes group */}
+      <div className="flex items-center rounded-lg bg-muted/50 p-[2px]">
+        {editorModes.map(({ mode, icon: Icon, label }) => (
+          <Tooltip key={mode}>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setViewMode(mode)}
+                className={cn(
+                  "flex items-center justify-center rounded-md h-7 w-8 transition-all",
+                  viewMode === mode
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground active:text-foreground"
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">{label}</TooltipContent>
+          </Tooltip>
+        ))}
+      </div>
+
+      {/* Divider */}
+      <div className="h-5 w-px bg-border shrink-0" />
+
+      {/* Canvas modes group */}
+      <div className="flex items-center rounded-lg bg-muted/50 p-[2px]">
+        {canvasModes.map(({ mode, icon: Icon, label }) => (
+          <Tooltip key={mode}>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setViewMode(mode)}
+                className={cn(
+                  "flex items-center justify-center rounded-md h-7 w-8 transition-all",
+                  viewMode === mode
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground active:text-foreground"
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">{label}</TooltipContent>
+          </Tooltip>
+        ))}
+      </div>
     </div>
   );
 }
 
-// ── Mobile Formatting Toolbar (bottom) ────────────────────────────────────
-function MobileToolbar() {
+// ── Apple-style Formatting Toolbar (sits above keyboard) ──────────────────
+function MobileFormattingBar() {
+  const viewMode = useEditorStore((s) => s.viewMode);
   const insertLinePrefix = useEditorStore((s) => s.insertLinePrefix);
   const insertSnippet = useEditorStore((s) => s.insertSnippet);
   const wrapSelection = useEditorStore((s) => s.wrapSelection);
   const [headingOpen, setHeadingOpen] = useState(false);
+
+  // Only show for editor modes
+  if (viewMode !== "editor" && viewMode !== "split") return null;
 
   const tools = [
     { icon: Bold, action: () => wrapSelection("**", "**"), label: "Bold" },
@@ -320,20 +427,20 @@ function MobileToolbar() {
   ];
 
   return (
-    <div className="flex items-center border-t border-border bg-card shrink-0">
+    <div className="flex items-center h-[44px] border-t border-border bg-card/95 backdrop-blur-md shrink-0">
       {/* Heading dropdown */}
       <DropdownMenu open={headingOpen} onOpenChange={setHeadingOpen}>
         <DropdownMenuTrigger asChild>
-          <button className="flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground active:bg-muted">
-            <Heading className="h-4 w-4" />
+          <button className="flex h-[44px] w-11 shrink-0 items-center justify-center text-muted-foreground active:bg-muted/60 transition-colors">
+            <Heading className="h-[18px] w-[18px]" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent side="top" align="start" className="min-w-[110px]">
+        <DropdownMenuContent side="top" align="start" className="min-w-[120px]">
           {[1, 2, 3, 4, 5, 6].map((level) => (
             <DropdownMenuItem
               key={level}
               onClick={() => insertLinePrefix("#".repeat(level) + " ")}
-              className="gap-2"
+              className="gap-2 py-2"
             >
               <span className="font-semibold" style={{ fontSize: `${1.3 - level * 0.1}em` }}>
                 H{level}
@@ -344,26 +451,30 @@ function MobileToolbar() {
         </DropdownMenuContent>
       </DropdownMenu>
 
+      {/* Divider */}
+      <div className="h-5 w-px bg-border/50 shrink-0" />
+
       {/* Scrollable formatting tools */}
       <div className="flex flex-1 items-center overflow-x-auto scrollbar-none">
         {tools.map(({ icon: Icon, action, label }) => (
           <button
             key={label}
             onClick={action}
-            className="flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground active:bg-muted transition-colors"
+            className="flex h-[44px] w-11 shrink-0 items-center justify-center text-muted-foreground active:bg-muted/60 transition-colors"
             aria-label={label}
           >
-            <Icon className="h-4 w-4" />
+            <Icon className="h-[18px] w-[18px]" />
           </button>
         ))}
       </div>
 
-      {/* Settings */}
+      {/* Settings shortcut */}
+      <div className="h-5 w-px bg-border/50 shrink-0" />
       <button
         onClick={() => document.dispatchEvent(new CustomEvent("open-settings"))}
-        className="flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground active:bg-muted border-l border-border"
+        className="flex h-[44px] w-11 shrink-0 items-center justify-center text-muted-foreground active:bg-muted/60 transition-colors"
       >
-        <Settings className="h-4 w-4" />
+        <Settings className="h-[18px] w-[18px]" />
       </button>
     </div>
   );
@@ -377,10 +488,10 @@ function MobileFileTreeOverlay({
   open: boolean;
   onClose: () => void;
 }) {
-  // Close file tree when a tab is switched (user tapped a file)
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const prevTabRef = useRef(activeTabId);
 
+  // Close file tree when a tab is switched (user tapped a file)
   useEffect(() => {
     if (prevTabRef.current !== activeTabId && open) {
       onClose();
@@ -393,31 +504,25 @@ function MobileFileTreeOverlay({
       {/* Backdrop */}
       {open && (
         <div
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm animate-in fade-in duration-150"
+          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px] animate-in fade-in duration-200"
           onClick={onClose}
         />
       )}
       {/* Sliding panel */}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-[280px] max-w-[85vw] bg-card border-r border-border shadow-xl transition-transform duration-200 ease-out mobile-file-tree",
+          "fixed inset-y-0 left-0 z-50 w-[300px] max-w-[85vw] bg-card border-r border-border shadow-2xl transition-transform duration-250 ease-out mobile-file-tree",
           open ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        {/* Override the FileTree to render full width inside this panel */}
         <MobileFileTreeContent onClose={onClose} />
       </div>
     </>
   );
 }
 
-/** Simplified file tree wrapper that forces open state and fills the panel */
 function MobileFileTreeContent({ onClose }: { onClose: () => void }) {
-  // Temporarily force the file tree open for mobile rendering
-  const fileTreeOpen = useEditorStore((s) => s.fileTreeOpen);
-
   useEffect(() => {
-    // Ensure the store has fileTreeOpen = true while this is mounted
     const store = useEditorStore.getState();
     if (!store.fileTreeOpen) {
       store.toggleFileTree();
@@ -426,12 +531,14 @@ function MobileFileTreeContent({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="flex h-full flex-col">
-      <FileTree />
+      <div className="flex-1 overflow-y-auto overscroll-contain">
+        <FileTree mobile onMobileClose={onClose} />
+      </div>
     </div>
   );
 }
 
-// ── Mobile Content Area (editor/preview) ──────────────────────────────────
+// ── Mobile Content Area ───────────────────────────────────────────────────
 function MobileContent() {
   const viewMode = useEditorStore((s) => s.viewMode);
   const activeTabId = useEditorStore((s) => s.activeTabId);
@@ -479,21 +586,24 @@ function MobileContent() {
 
   if (!activeTabId) {
     return (
-      <main className="flex flex-1 items-center justify-center bg-background px-4">
-        <div className="flex flex-col items-center gap-3 text-muted-foreground text-center">
-          <FileText className="h-8 w-8 opacity-40" />
-          <p className="text-sm">No file open</p>
-          <p className="text-xs text-muted-foreground/60">
-            Tap <strong>+</strong> above to create a new file
-          </p>
+      <main className="flex flex-1 items-center justify-center bg-background px-6">
+        <div className="flex flex-col items-center gap-4 text-muted-foreground text-center">
+          <FileText className="h-10 w-10 opacity-30" />
+          <div>
+            <p className="text-[15px] font-medium mb-1">No file open</p>
+            <p className="text-[13px] text-muted-foreground/60">
+              Tap <strong>+</strong> to create a new note
+            </p>
+          </div>
         </div>
       </main>
     );
   }
 
+  // Canvas-based views — fill the space, their own toolbars are repositioned via CSS
   if (viewMode === "graph") {
     return (
-      <main className="flex flex-1 flex-col overflow-hidden bg-background">
+      <main className="flex flex-1 flex-col overflow-hidden bg-background mobile-canvas-view">
         <GraphView />
       </main>
     );
@@ -501,7 +611,7 @@ function MobileContent() {
 
   if (viewMode === "whiteboard") {
     return (
-      <main className="flex flex-1 flex-col overflow-hidden bg-background">
+      <main className="flex flex-1 flex-col overflow-hidden bg-background mobile-canvas-view">
         <WhiteboardView />
       </main>
     );
@@ -509,14 +619,13 @@ function MobileContent() {
 
   if (viewMode === "mindmap") {
     return (
-      <main className="flex flex-1 flex-col overflow-hidden bg-background">
+      <main className="flex flex-1 flex-col overflow-hidden bg-background mobile-canvas-view">
         <MindmapView />
       </main>
     );
   }
 
   if (viewMode === "split") {
-    // On mobile, split view stacks vertically
     return (
       <main className="flex flex-1 flex-col overflow-hidden bg-background" style={editorStyle}>
         <div className="flex flex-1 flex-col overflow-hidden border-b border-border min-h-0">
@@ -536,63 +645,11 @@ function MobileContent() {
   );
 }
 
-// ── Mobile Export Menu ────────────────────────────────────────────────────
-function MobileExportActions() {
-  const tabs = useEditorStore((s) => s.tabs);
-  const activeTabId = useEditorStore((s) => s.activeTabId);
-
-  const exportSingle = () => {
-    const tab = tabs.find((t) => t.id === activeTabId);
-    if (!tab) return;
-    const blob = new Blob([tab.content], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = tab.title;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const exportZip = async () => {
-    if (tabs.length === 0) return;
-    const JSZip = (await import("jszip")).default;
-    const zip = new JSZip();
-    tabs.forEach((tab) => zip.file(tab.title, tab.content));
-    const blob = await zip.generateAsync({ type: "blob" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "markup-export.zip";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0 text-muted-foreground"
-        >
-          <Download className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={exportSingle}>
-          <Download className="mr-2 h-3.5 w-3.5" /> Export current (.md)
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={exportZip}>
-          <FolderArchive className="mr-2 h-3.5 w-3.5" /> Export all (.zip)
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 // ── Main Mobile Layout ────────────────────────────────────────────────────
 export function MobileLayout() {
   const [fileTreeOpen, setFileTreeOpen] = useState(false);
+  const viewMode = useEditorStore((s) => s.viewMode);
+  const isCanvasView = viewMode === "graph" || viewMode === "whiteboard" || viewMode === "mindmap";
 
   const toggleFileTree = useCallback(() => {
     setFileTreeOpen((prev) => !prev);
@@ -603,37 +660,31 @@ export function MobileLayout() {
   }, []);
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden mobile-safe-top">
+    <div className="flex h-[100dvh] flex-col overflow-hidden mobile-safe-top mobile-root">
       <ThemeSync />
       <ConvexSync />
       <SpotlightSearch />
       <SettingsPanel />
       <UserAccountPanel />
 
-      {/* Header */}
-      <MobileHeader
+      {/* Top navigation bar */}
+      <MobileNavBar
         onToggleFileTree={toggleFileTree}
         fileTreeOpen={fileTreeOpen}
       />
 
-      {/* View mode toggle + export */}
-      <div className="flex items-center justify-between border-b border-border bg-card/50 px-2 py-1 shrink-0">
-        <MobileViewToggle />
-        <div className="flex items-center gap-0.5">
-          <MobileExportActions />
-          <InfoButton />
-        </div>
-      </div>
+      {/* View mode segmented control */}
+      <MobileViewSegment />
 
-      {/* Tabs */}
-      <MobileTabStrip />
+      {/* Tab strip — hide in canvas modes for more room */}
+      {!isCanvasView && <MobileTabStrip />}
 
-      {/* Editor / Preview content */}
+      {/* Main content */}
       <MobileContent />
 
-      {/* Bottom formatting toolbar */}
+      {/* Bottom formatting toolbar — only visible in editor modes */}
       <div className="mobile-safe-bottom">
-        <MobileToolbar />
+        <MobileFormattingBar />
       </div>
 
       {/* File tree overlay */}

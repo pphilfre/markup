@@ -40,9 +40,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { useAuthState } from "@/components/convex-client-provider";
+import { useEditorStore } from "@/lib/store";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -783,9 +781,10 @@ export function WhiteboardView() {
   const containerRef = useRef<HTMLDivElement>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
 
-  // Auth for Convex persistence
-  const { isAuthenticated, user } = useAuthState();
-  const userId = user?.id ?? null;
+  // Tab-based persistence
+  const activeTabId = useEditorStore((s) => s.activeTabId);
+  const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
+  const updateContent = useEditorStore((s) => s.updateContent);
 
   // Canvas transform state
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
@@ -797,33 +796,25 @@ export function WhiteboardView() {
   const [undoStack, setUndoStack] = useState<WhiteboardElement[][]>([]);
   const [redoStack, setRedoStack] = useState<WhiteboardElement[][]>([]);
 
-  // ── Convex persistence ──────────────────────────────────────────────
-  const remoteWhiteboard = useQuery(
-    api.whiteboards.get,
-    userId ? { userId } : "skip"
-  );
-  const saveWhiteboard = useMutation(api.whiteboards.save);
-  const hydratedFromConvex = useRef(false);
+  // ── Tab-based persistence ──────────────────────────────────────────────
+  const hydratedRef = useRef(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Hydrate from Convex on first load
+  // Hydrate from tab content on mount
   useEffect(() => {
-    if (hydratedFromConvex.current) return;
-    if (!remoteWhiteboard) return;
-    hydratedFromConvex.current = true;
+    if (hydratedRef.current) return;
+    if (!activeTab) return;
+    hydratedRef.current = true;
     try {
-      const parsed = JSON.parse(remoteWhiteboard.elements);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        setElements(parsed);
+      const data = JSON.parse(activeTab.content);
+      if (data.elements && Array.isArray(data.elements) && data.elements.length > 0) {
+        setElements(data.elements);
       }
-    } catch { /* ignore parse errors */ }
-    try {
-      const parsed = JSON.parse(remoteWhiteboard.canvasSettings);
-      if (parsed && typeof parsed === "object") {
-        setCanvasSettings((prev) => ({ ...prev, ...parsed }));
+      if (data.canvasSettings && typeof data.canvasSettings === "object") {
+        setCanvasSettings((prev) => ({ ...prev, ...data.canvasSettings }));
       }
-    } catch { /* ignore parse errors */ }
-  }, [remoteWhiteboard]);
+    } catch { /* ignore parse errors - might be empty/new */ }
+  }, [activeTab]);
 
   // Detect dark mode
   const [isDark, setIsDark] = useState(true);
@@ -884,22 +875,19 @@ export function WhiteboardView() {
   const [contextMenu, setContextMenu] = useState<Point | null>(null);
   const [clipboard, setClipboard] = useState<WhiteboardElement[]>([]);
 
-  // ── Debounced save to Convex ──────────────────────────────────────
+  // ── Debounced save to tab content ──────────────────────────────────────
   useEffect(() => {
-    if (!userId || !isAuthenticated) return;
-    if (!hydratedFromConvex.current && remoteWhiteboard === undefined) return;
+    if (!hydratedRef.current) return;
+    if (!activeTabId) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
-      saveWhiteboard({
-        userId,
-        elements: JSON.stringify(elements),
-        canvasSettings: JSON.stringify(canvasSettings),
-      }).catch(console.error);
+      const data = JSON.stringify({ elements, canvasSettings });
+      updateContent(activeTabId, data);
     }, 800);
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [elements, canvasSettings, userId, isAuthenticated, saveWhiteboard, remoteWhiteboard]);
+  }, [elements, canvasSettings, activeTabId, updateContent]);
 
   // ── Undo/Redo ─────────────────────────────────────────────────────────
 
@@ -1584,7 +1572,7 @@ export function WhiteboardView() {
       )}
 
       {/* Top-left: Toolbar */}
-      <div className="absolute left-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-popover/95 backdrop-blur-sm p-1 shadow-lg">
+      <div className="absolute left-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-popover/95 backdrop-blur-sm p-1 shadow-lg mobile-canvas-toolbar">
         {tools.map(({ tool, icon: Icon, label, shortcut }) => (
           <Tooltip key={tool}>
             <TooltipTrigger asChild>
@@ -1608,7 +1596,7 @@ export function WhiteboardView() {
       </div>
 
       {/* Top-right: Actions */}
-      <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-popover/95 backdrop-blur-sm p-1 shadow-lg">
+      <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-popover/95 backdrop-blur-sm p-1 shadow-lg mobile-canvas-actions">
         <Tooltip>
           <TooltipTrigger asChild>
             <button

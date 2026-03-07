@@ -20,18 +20,21 @@ import {
   Trash2,
   HardDrive,
   Timer,
+  Info,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { useEditorStore, DEFAULT_SETTINGS, type Settings as SettingsType } from "@/lib/store";
+import { useIsMobile } from "@/lib/use-mobile";
 import { WorkOsWidgets, UserProfile, UserSessions, UserSecurity } from "@workos-inc/widgets";
 
 // ---------------------------------------------------------------------------
 // Sidebar sections
 // ---------------------------------------------------------------------------
 
-type SectionId = "general" | "user" | "appearance" | "typography" | "markdown" | "editing" | "privacy" | "data";
+type SectionId = "general" | "user" | "appearance" | "typography" | "markdown" | "editing" | "privacy" | "data" | "about";
 
 const SECTIONS: { id: SectionId; label: string; icon: typeof Settings; group?: string }[] = [
   { id: "general", label: "General", icon: Palette },
@@ -42,6 +45,7 @@ const SECTIONS: { id: SectionId; label: string; icon: typeof Settings; group?: s
   { id: "editing", label: "Editing", icon: PenTool, group: "Editor" },
   { id: "privacy", label: "Privacy & Security", icon: Lock, group: "Account" },
   { id: "data", label: "Data", icon: Database, group: "Account" },
+  { id: "about", label: "About & Contact", icon: Info },
 ];
 
 // ---------------------------------------------------------------------------
@@ -1110,6 +1114,63 @@ function AppearanceSection({
 }
 
 // ---------------------------------------------------------------------------
+// About & Contact
+// ---------------------------------------------------------------------------
+
+function AboutSection() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-sm font-semibold mb-1">About Markup</h3>
+        <p className="text-xs text-muted-foreground mb-4">
+          A minimal, powerful markdown editor with whiteboards, mindmaps, and more.
+        </p>
+      </div>
+
+      <div className="rounded-lg border border-border p-4 space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+            <User className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <p className="text-sm font-medium">Made by Freddie Philpot</p>
+            <p className="text-xs text-muted-foreground">Developer & Designer</p>
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-2">
+          <a
+            href="https://github.com/pphilfre"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted transition-colors"
+          >
+            <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>github.com/pphilfre</span>
+          </a>
+          <a
+            href="https://freddiephilpot.dev"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted transition-colors"
+          >
+            <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>freddiephilpot.dev</span>
+          </a>
+        </div>
+      </div>
+
+      <div className="text-[11px] text-muted-foreground space-y-1">
+        <p>Built with Next.js, React, and Convex</p>
+        <p>© {new Date().getFullYear()} Freddie Philpot. All rights reserved.</p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main settings panel
 // ---------------------------------------------------------------------------
 
@@ -1121,12 +1182,23 @@ export function SettingsPanel() {
   const theme = useEditorStore((s) => s.theme);
   const toggleTheme = useEditorStore((s) => s.toggleTheme);
   const panelRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
 
   // Listen for custom event
   useEffect(() => {
     const handler = () => setOpen((prev) => !prev);
     document.addEventListener("open-settings", handler);
     return () => document.removeEventListener("open-settings", handler);
+  }, []);
+
+  // Listen for navigation event (e.g., sidebar "About" button)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const section = (e as CustomEvent).detail as SectionId;
+      if (section) setActiveSection(section);
+    };
+    document.addEventListener("settings-navigate", handler);
+    return () => document.removeEventListener("settings-navigate", handler);
   }, []);
 
   // Close on Escape
@@ -1168,6 +1240,90 @@ export function SettingsPanel() {
   const editorSections = SECTIONS.filter((s) => s.group === "Editor");
   const accountSections = SECTIONS.filter((s) => s.group === "Account");
 
+  const settingsContent = (
+    <>
+      {activeSection === "general" && (
+        <GeneralSection settings={settings} update={updateSettings} reset={reset} />
+      )}
+      {activeSection === "user" && <UserSection />}
+      {activeSection === "appearance" && (
+        <AppearanceSection
+          settings={settings}
+          update={updateSettings}
+          theme={theme}
+          toggleTheme={toggleTheme}
+        />
+      )}
+      {activeSection === "typography" && (
+        <TypographySection settings={settings} update={updateSettings} />
+      )}
+      {activeSection === "markdown" && (
+        <MarkdownSection settings={settings} update={updateSettings} />
+      )}
+      {activeSection === "editing" && (
+        <EditingSection settings={settings} update={updateSettings} />
+      )}
+      {activeSection === "privacy" && <PrivacySecuritySection />}
+      {activeSection === "data" && (
+        <DataSection settings={settings} update={updateSettings} reset={reset} />
+      )}
+      {activeSection === "about" && <AboutSection />}
+    </>
+  );
+
+  const allSections = SECTIONS;
+
+  // ── Mobile: full-screen settings with horizontal tabs at top ──────
+  if (isMobile) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-popover animate-in fade-in duration-150">
+        {/* Header */}
+        <div className="flex h-[44px] items-center justify-between px-3 border-b border-border shrink-0">
+          <div className="flex items-center gap-2">
+            <Settings className="h-4 w-4 text-muted-foreground" />
+            <span className="text-[15px] font-semibold">Settings</span>
+          </div>
+          <button
+            onClick={() => setOpen(false)}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground active:bg-muted/60 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Horizontal section tabs */}
+        <nav className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border overflow-x-auto scrollbar-none shrink-0 bg-card/50">
+          {allSections.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveSection(id)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium whitespace-nowrap transition-colors shrink-0",
+                activeSection === id
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground active:text-foreground"
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {label}
+            </button>
+          ))}
+        </nav>
+
+        {/* Content — scrollable, fills remaining space */}
+        <div className="flex-1 overflow-y-auto overscroll-contain p-4">
+          {settingsContent}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-center border-t border-border px-4 py-2 shrink-0">
+          <span className="text-[11px] text-muted-foreground">Auto-saved</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Desktop: centered dialog with sidebar ─────────────────────────
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-8">
       {/* Backdrop */}
@@ -1176,7 +1332,7 @@ export function SettingsPanel() {
         onClick={() => setOpen(false)}
       />
 
-      {/* Panel — centered, never touching sides, fixed height for consistency */}
+      {/* Panel */}
       <div
         ref={panelRef}
         className="relative w-full max-w-3xl h-[70vh] rounded-lg border border-border bg-popover shadow-2xl animate-in slide-in-from-top-2 fade-in duration-150 flex flex-col overflow-hidden"
@@ -1268,31 +1424,7 @@ export function SettingsPanel() {
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-5">
-            {activeSection === "general" && (
-              <GeneralSection settings={settings} update={updateSettings} reset={reset} />
-            )}
-            {activeSection === "user" && <UserSection />}
-            {activeSection === "appearance" && (
-              <AppearanceSection
-                settings={settings}
-                update={updateSettings}
-                theme={theme}
-                toggleTheme={toggleTheme}
-              />
-            )}
-            {activeSection === "typography" && (
-              <TypographySection settings={settings} update={updateSettings} />
-            )}
-            {activeSection === "markdown" && (
-              <MarkdownSection settings={settings} update={updateSettings} />
-            )}
-            {activeSection === "editing" && (
-              <EditingSection settings={settings} update={updateSettings} />
-            )}
-            {activeSection === "privacy" && <PrivacySecuritySection />}
-            {activeSection === "data" && (
-              <DataSection settings={settings} update={updateSettings} reset={reset} />
-            )}
+            {settingsContent}
           </div>
         </div>
 

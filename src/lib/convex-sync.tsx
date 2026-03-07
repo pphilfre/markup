@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useEditorStore, DEFAULT_SETTINGS, type Settings } from "@/lib/store";
+import { useEditorStore, DEFAULT_SETTINGS, type Settings, type NoteType } from "@/lib/store";
 import { useAuthState } from "@/components/convex-client-provider";
 
 /**
@@ -73,10 +73,13 @@ export function ConvexSync() {
       folderId: t.folderId,
       tags: t.tags,
       pinned: t.pinned,
+      noteType: t.noteType ?? "note",
+      customIcon: t.customIcon,
+      iconColor: t.iconColor,
     }));
 
     lastPushedTabs.current = JSON.stringify(
-      tabsPayload.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false }))
+      tabsPayload.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: t.noteType ?? "note" }))
     );
     lastPushedWorkspace.current = JSON.stringify({
       activeTabId: slice.activeTabId,
@@ -172,6 +175,9 @@ export function ConvexSync() {
         folderId: t.folderId ?? null,
         tags: t.tags ?? [],
         pinned: t.pinned ?? false,
+        noteType: (((t as Record<string, unknown>).noteType as string) ?? "note") as NoteType,
+        customIcon: (t as Record<string, unknown>).customIcon as string | undefined,
+        iconColor: (t as Record<string, unknown>).iconColor as string | undefined,
       }));
 
       useEditorStore.setState({
@@ -221,6 +227,9 @@ export function ConvexSync() {
           folderId: t.folderId,
           tags: t.tags,
           pinned: t.pinned,
+          noteType: t.noteType ?? "note",
+          customIcon: t.customIcon,
+          iconColor: t.iconColor,
         })),
       }).catch(console.error);
 
@@ -266,6 +275,9 @@ export function ConvexSync() {
         folderId: t.folderId ?? null,
         tags: t.tags ?? [],
         pinned: t.pinned ?? false,
+        noteType: (((t as Record<string, unknown>).noteType as string) ?? "note") as NoteType,
+        customIcon: (t as Record<string, unknown>).customIcon as string | undefined,
+        iconColor: (t as Record<string, unknown>).iconColor as string | undefined,
       }));
 
       const currentActiveId = useEditorStore.getState().activeTabId;

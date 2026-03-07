@@ -38,9 +38,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { useAuthState } from "@/components/convex-client-provider";
+import { useEditorStore } from "@/lib/store";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -707,9 +705,10 @@ export function MindmapView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Auth for Convex persistence
-  const { isAuthenticated, user } = useAuthState();
-  const userId = user?.id ?? null;
+  // Tab-based persistence
+  const activeTabId = useEditorStore((s) => s.activeTabId);
+  const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
+  const updateContent = useEditorStore((s) => s.updateContent);
 
   // Canvas transform
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
@@ -756,50 +755,38 @@ export function MindmapView() {
     return () => obs.disconnect();
   }, []);
 
-  // ── Convex persistence ──────────────────────────────────────────────
-  const remoteMindmap = useQuery(api.mindmaps.get, userId ? { userId } : "skip");
-  const saveMindmap = useMutation(api.mindmaps.save);
-  const hydratedFromConvex = useRef(false);
+  // ── Tab-based persistence ──────────────────────────────────────────────
+  const hydratedRef = useRef(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Hydrate from Convex
+  // Hydrate from tab content
   useEffect(() => {
-    if (hydratedFromConvex.current) return;
-    if (!remoteMindmap) return;
-    hydratedFromConvex.current = true;
+    if (hydratedRef.current) return;
+    if (!activeTab) return;
+    hydratedRef.current = true;
     try {
-      const parsedNodes = JSON.parse(remoteMindmap.nodes);
-      if (Array.isArray(parsedNodes)) setNodes(parsedNodes);
-    } catch { /* ignore */ }
-    try {
-      const parsedConns = JSON.parse(remoteMindmap.connections);
-      if (Array.isArray(parsedConns)) setConnections(parsedConns);
-    } catch { /* ignore */ }
-    try {
-      const parsedSettings = JSON.parse(remoteMindmap.settings);
-      if (parsedSettings && typeof parsedSettings === "object") {
-        setSettings((prev) => ({ ...prev, ...parsedSettings }));
+      const data = JSON.parse(activeTab.content);
+      if (data.nodes && Array.isArray(data.nodes)) setNodes(data.nodes);
+      if (data.connections && Array.isArray(data.connections)) setConnections(data.connections);
+      if (data.settings && typeof data.settings === "object") {
+        setSettings((prev) => ({ ...prev, ...data.settings }));
       }
-    } catch { /* ignore */ }
-  }, [remoteMindmap]);
+    } catch { /* ignore parse errors */ }
+  }, [activeTab]);
 
-  // Debounced save
+  // Debounced save to tab content
   useEffect(() => {
-    if (!userId || !isAuthenticated) return;
-    if (!hydratedFromConvex.current && remoteMindmap === undefined) return;
+    if (!hydratedRef.current) return;
+    if (!activeTabId) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
-      saveMindmap({
-        userId,
-        nodes: JSON.stringify(nodes),
-        connections: JSON.stringify(connections),
-        settings: JSON.stringify(settings),
-      }).catch(console.error);
+      const data = JSON.stringify({ nodes, connections, settings });
+      updateContent(activeTabId, data);
     }, 800);
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [nodes, connections, settings, userId, isAuthenticated, saveMindmap, remoteMindmap]);
+  }, [nodes, connections, settings, activeTabId, updateContent]);
 
   // ── Undo/Redo ───────────────────────────────────────────────────────
 
@@ -1524,7 +1511,7 @@ export function MindmapView() {
       )}
 
       {/* Top-left: Toolbar */}
-      <div className="absolute left-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-popover/95 backdrop-blur-sm p-1 shadow-lg">
+      <div className="absolute left-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-popover/95 backdrop-blur-sm p-1 shadow-lg mobile-canvas-toolbar">
         {tools.map(({ tool, icon: Icon, label, shortcut }) => (
           <Tooltip key={tool}>
             <TooltipTrigger asChild>
@@ -1548,7 +1535,7 @@ export function MindmapView() {
       </div>
 
       {/* Top-right: Actions */}
-      <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-popover/95 backdrop-blur-sm p-1 shadow-lg">
+      <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-popover/95 backdrop-blur-sm p-1 shadow-lg mobile-canvas-actions">
         <Tooltip>
           <TooltipTrigger asChild>
             <button

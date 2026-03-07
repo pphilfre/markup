@@ -75,6 +75,9 @@ export default defineSchema({
     folderId: v.union(v.string(), v.null()),
     tags: v.optional(v.array(v.string())),
     pinned: v.optional(v.boolean()),
+    noteType: v.optional(v.string()),    // "note" | "whiteboard" | "mindmap"
+    customIcon: v.optional(v.string()),  // lucide icon name
+    iconColor: v.optional(v.string()),   // hex color
   })
     .index("by_user", ["userId"])
     .index("by_user_tab", ["userId", "tabId"]),

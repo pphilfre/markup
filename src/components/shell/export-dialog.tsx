@@ -58,6 +58,11 @@ function generateHtml(
   <title>${title.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    @page { size: A4; margin: 1.5cm; }
+    @media print {
+      html, body { margin: 0; padding: 0; }
+      body { padding: 0; }
+    }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: ${fontSize}px;
@@ -264,18 +269,29 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
         }
         case "pdf": {
           const html = generateHtml(tab.title, tab.content, options.fontSize);
-          const printWindow = window.open("", "_blank");
-          if (printWindow) {
-            printWindow.document.write(html);
-            printWindow.document.close();
-            // Apply scale via CSS
+          // Use a hidden iframe to avoid about:blank URL in print headers
+          const iframe = document.createElement("iframe");
+          iframe.style.position = "fixed";
+          iframe.style.right = "0";
+          iframe.style.bottom = "0";
+          iframe.style.width = "0";
+          iframe.style.height = "0";
+          iframe.style.border = "none";
+          document.body.appendChild(iframe);
+          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+          if (iframeDoc) {
+            iframeDoc.open();
+            iframeDoc.write(html);
             if (options.scale !== 1) {
-              const style = printWindow.document.createElement("style");
-              style.textContent = `@page { size: A4; margin: 1cm; } body { transform: scale(${options.scale}); transform-origin: top left; }`;
-              printWindow.document.head.appendChild(style);
+              const style = iframeDoc.createElement("style");
+              style.textContent = `body { transform: scale(${options.scale}); transform-origin: top left; }`;
+              iframeDoc.head.appendChild(style);
             }
+            iframeDoc.close();
             setTimeout(() => {
-              printWindow.print();
+              iframe.contentWindow?.print();
+              // Clean up iframe after printing
+              setTimeout(() => document.body.removeChild(iframe), 1000);
             }, 500);
           }
           onOpenChange(false);

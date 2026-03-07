@@ -9,10 +9,27 @@ import {
   forceManyBody,
   forceCenter,
   forceCollide,
+  forceX,
+  forceY,
   SimulationNodeDatum,
   SimulationLinkDatum,
 } from "d3-force";
-import { Tag, Filter, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
+import {
+  Tag,
+  Filter,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Link2,
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  Play,
+  Settings2,
+  Layers,
+  Move,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -23,11 +40,20 @@ interface GraphNode extends SimulationNodeDatum {
   title: string;
   tags: string[];
   hasContent: boolean;
+  groupId?: string;
 }
 
 interface GraphLink extends SimulationLinkDatum<GraphNode> {
   source: string | GraphNode;
   target: string | GraphNode;
+  manual?: boolean;
+}
+
+interface GraphGroup {
+  id: string;
+  name: string;
+  color: string;
+  nodeIds: Set<string>;
 }
 
 // ── Tag Colors ────────────────────────────────────────────────────────────
@@ -38,9 +64,143 @@ const TAG_COLORS = [
   "#06b6d4", "#3b82f6", "#a855f7", "#e11d48",
 ];
 
+const GROUP_COLORS = [
+  "#ef4444", "#f97316", "#eab308", "#22c55e",
+  "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899",
+];
+
 function getTagColor(tag: string, allTags: string[]): string {
   const idx = allTags.indexOf(tag);
   return TAG_COLORS[idx % TAG_COLORS.length];
+}
+
+// ── Display settings ──────────────────────────────────────────────────────
+
+interface DisplaySettings {
+  showArrows: boolean;
+  textFadeThreshold: number;
+  nodeSize: number;
+  lineThickness: number;
+  showTags: boolean;
+  showOrphans: boolean;
+}
+
+interface ForceSettings {
+  chargeStrength: number;
+  linkDistance: number;
+  linkStrength: number;
+  centerStrength: number;
+  collideRadius: number;
+}
+
+const DEFAULT_DISPLAY: DisplaySettings = {
+  showArrows: false,
+  textFadeThreshold: 0.4,
+  nodeSize: 1,
+  lineThickness: 1,
+  showTags: true,
+  showOrphans: true,
+};
+
+const DEFAULT_FORCES: ForceSettings = {
+  chargeStrength: -300,
+  linkDistance: 120,
+  linkStrength: 0.5,
+  centerStrength: 0.1,
+  collideRadius: 30,
+};
+
+// ── Collapsible panel section ─────────────────────────────────────────────
+
+function PanelSection({
+  title,
+  icon: Icon,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border-b border-border/50 last:border-b-0">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-1.5 px-2.5 py-2 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        <Icon className="h-3 w-3" />
+        <span>{title}</span>
+      </button>
+      {open && <div className="px-2.5 pb-2.5 space-y-2">{children}</div>}
+    </div>
+  );
+}
+
+function SliderRow({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] text-muted-foreground w-20 shrink-0">{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="flex-1 h-1 accent-primary cursor-pointer"
+      />
+      <span className="text-[10px] text-muted-foreground w-8 text-right tabular-nums">
+        {Number.isInteger(value) ? value : value.toFixed(1)}
+      </span>
+    </div>
+  );
+}
+
+function ToggleRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-[10px] text-muted-foreground">{label}</span>
+      <button
+        onClick={() => onChange(!checked)}
+        className={cn(
+          "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors",
+          checked ? "bg-primary" : "bg-muted"
+        )}
+      >
+        <span
+          className={cn(
+            "pointer-events-none block h-2.5 w-2.5 rounded-full bg-background shadow-sm transition-transform",
+            checked ? "translate-x-3" : "translate-x-0.5"
+          )}
+        />
+      </button>
+    </div>
+  );
 }
 
 // ── Graph View Component ──────────────────────────────────────────────────
@@ -49,6 +209,7 @@ export function GraphView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const tabs = useEditorStore((s) => s.tabs);
+  const updateContent = useEditorStore((s) => s.updateContent);
   const switchTab = useEditorStore((s) => s.switchTab);
   const theme = useEditorStore((s) => s.theme);
   const accentColor = useEditorStore((s) => s.settings.accentColor);
@@ -58,6 +219,22 @@ export function GraphView() {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
 
+  // Manual linking state
+  const [linkMode, setLinkMode] = useState(false);
+  const [linkSourceId, setLinkSourceId] = useState<string | null>(null);
+  const [manualLinks, setManualLinks] = useState<Array<{ source: string; target: string }>>([]);
+
+  // Collapsible control panel
+  const [panelOpen, setPanelOpen] = useState(false);
+
+  // Display & force settings
+  const [display, setDisplay] = useState<DisplaySettings>({ ...DEFAULT_DISPLAY });
+  const [forces, setForces] = useState<ForceSettings>({ ...DEFAULT_FORCES });
+
+  // Groups
+  const [groups, setGroups] = useState<GraphGroup[]>([]);
+  const [editingGroupName, setEditingGroupName] = useState<string | null>(null);
+
   const nodesRef = useRef<GraphNode[]>([]);
   const linksRef = useRef<GraphLink[]>([]);
   const simRef = useRef<ReturnType<typeof forceSimulation<GraphNode>> | null>(null);
@@ -65,6 +242,7 @@ export function GraphView() {
   const isPanningRef = useRef(false);
   const lastMouseRef = useRef({ x: 0, y: 0 });
   const animFrameRef = useRef<number>(0);
+  const dragMovedRef = useRef(false);
 
   // Gather all unique tags
   const allTags = useMemo(() => {
@@ -77,17 +255,17 @@ export function GraphView() {
   const { nodes, links } = useMemo(() => {
     const nodeMap = new Map<string, GraphNode>();
 
-    // Create nodes for each tab
     tabs.forEach((tab) => {
+      const group = groups.find((g) => g.nodeIds.has(tab.id));
       nodeMap.set(tab.id, {
         id: tab.id,
-        title: tab.title.replace(/\.md$/, ""),
+        title: tab.title.replace(/\.(md|canvas|mindmap)$/, ""),
         tags: tab.tags,
         hasContent: tab.content.trim().length > 0,
+        groupId: group?.id,
       });
     });
 
-    // Create links from backlinks
     const graphLinks: GraphLink[] = [];
     tabs.forEach((tab) => {
       const refs = extractBacklinks(tab.content);
@@ -100,7 +278,6 @@ export function GraphView() {
           );
         });
         if (target && target.id !== tab.id) {
-          // Avoid duplicate links
           const exists = graphLinks.some(
             (l) =>
               (l.source === tab.id && l.target === target.id) ||
@@ -113,23 +290,48 @@ export function GraphView() {
       });
     });
 
+    // Add manual links
+    manualLinks.forEach((ml) => {
+      const exists = graphLinks.some(
+        (l) =>
+          (l.source === ml.source && l.target === ml.target) ||
+          (l.source === ml.target && l.target === ml.source)
+      );
+      if (!exists) {
+        graphLinks.push({ source: ml.source, target: ml.target, manual: true });
+      }
+    });
+
     return { nodes: Array.from(nodeMap.values()), links: graphLinks };
-  }, [tabs]);
+  }, [tabs, manualLinks, groups]);
 
-  // Filter nodes by selected tags
+  // Filter nodes
   const filteredNodeIds = useMemo(() => {
-    if (selectedTags.size === 0) return new Set(nodes.map((n) => n.id));
-    return new Set(
-      nodes.filter((n) => n.tags.some((t) => selectedTags.has(t))).map((n) => n.id)
-    );
-  }, [nodes, selectedTags]);
+    let filtered = nodes;
 
-  // Initialize simulation
+    if (selectedTags.size > 0) {
+      filtered = filtered.filter((n) => n.tags.some((t) => selectedTags.has(t)));
+    }
+
+    if (!display.showOrphans) {
+      const connectedIds = new Set<string>();
+      links.forEach((l) => {
+        const sId = typeof l.source === "string" ? l.source : l.source.id;
+        const tId = typeof l.target === "string" ? l.target : l.target.id;
+        connectedIds.add(sId);
+        connectedIds.add(tId);
+      });
+      filtered = filtered.filter((n) => connectedIds.has(n.id));
+    }
+
+    return new Set(filtered.map((n) => n.id));
+  }, [nodes, selectedTags, display.showOrphans, links]);
+
+  // Initialize / update simulation
   useEffect(() => {
     const width = containerRef.current?.clientWidth ?? 800;
     const height = containerRef.current?.clientHeight ?? 600;
 
-    // Copy new positions if nodes already exist
     const oldPositions = new Map<string, { x: number; y: number }>();
     nodesRef.current.forEach((n) => {
       if (n.x !== undefined && n.y !== undefined) {
@@ -158,31 +360,32 @@ export function GraphView() {
         "link",
         forceLink<GraphNode, GraphLink>(simLinks)
           .id((d) => d.id)
-          .distance(120)
-          .strength(0.5)
+          .distance(forces.linkDistance)
+          .strength(forces.linkStrength)
       )
-      .force("charge", forceManyBody().strength(-300))
-      .force("center", forceCenter(width / 2, height / 2))
-      .force("collide", forceCollide(30))
+      .force("charge", forceManyBody().strength(forces.chargeStrength))
+      .force("center", forceCenter(width / 2, height / 2).strength(forces.centerStrength))
+      .force("collide", forceCollide(forces.collideRadius))
+      .force("x", forceX(width / 2).strength(0.02))
+      .force("y", forceY(height / 2).strength(0.02))
       .alphaDecay(0.02);
 
     simRef.current = sim;
 
-    return () => {
-      sim.stop();
-    };
-  }, [nodes, links]);
+    return () => { sim.stop(); };
+  }, [nodes, links, forces]);
 
-  // Get node color
   const getNodeColor = useCallback(
     (node: GraphNode): string => {
+      if (node.groupId) {
+        const group = groups.find((g) => g.id === node.groupId);
+        if (group) return group.color;
+      }
       if (node.tags.length === 0) return accentColor;
-      // Use color of the first matching selected tag, or first tag
-      const relevantTag =
-        node.tags.find((t) => selectedTags.has(t)) || node.tags[0];
+      const relevantTag = node.tags.find((t) => selectedTags.has(t)) || node.tags[0];
       return getTagColor(relevantTag, allTags);
     },
-    [allTags, selectedTags, accentColor]
+    [allTags, selectedTags, accentColor, groups]
   );
 
   // Render loop
@@ -205,7 +408,6 @@ export function GraphView() {
       canvas.style.height = rect.height + "px";
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      // Clear
       ctx.fillStyle = isDark ? "#0a0a0a" : "#fafafa";
       ctx.fillRect(0, 0, rect.width, rect.height);
 
@@ -215,6 +417,37 @@ export function GraphView() {
 
       const simNodes = nodesRef.current;
       const simLinks = linksRef.current;
+
+      // Draw group backgrounds
+      groups.forEach((group) => {
+        const groupNodes = simNodes.filter((n) => group.nodeIds.has(n.id) && n.x != null && n.y != null);
+        if (groupNodes.length < 2) return;
+
+        let gMinX = Infinity, gMinY = Infinity, gMaxX = -Infinity, gMaxY = -Infinity;
+        groupNodes.forEach((n) => {
+          gMinX = Math.min(gMinX, n.x!);
+          gMinY = Math.min(gMinY, n.y!);
+          gMaxX = Math.max(gMaxX, n.x!);
+          gMaxY = Math.max(gMaxY, n.y!);
+        });
+        const pad = 40;
+        ctx.beginPath();
+        const rx = gMinX - pad;
+        const ry = gMinY - pad;
+        const rw = gMaxX - gMinX + pad * 2;
+        const rh = gMaxY - gMinY + pad * 2;
+        ctx.roundRect(rx, ry, rw, rh, 12);
+        ctx.fillStyle = group.color + "15";
+        ctx.fill();
+        ctx.strokeStyle = group.color + "40";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.font = "bold 10px system-ui, sans-serif";
+        ctx.fillStyle = group.color + "80";
+        ctx.textAlign = "left";
+        ctx.fillText(group.name, rx + 8, ry + 14);
+      });
 
       // Draw links
       simLinks.forEach((link) => {
@@ -226,18 +459,63 @@ export function GraphView() {
         const targetVisible = filteredNodeIds.has(target.id);
         if (!sourceVisible && !targetVisible) return;
 
-        const isHighlighted =
-          hoveredNode === source.id || hoveredNode === target.id;
+        const isHighlighted = hoveredNode === source.id || hoveredNode === target.id;
+        const isManual = (link as GraphLink).manual;
 
         ctx.beginPath();
         ctx.moveTo(source.x, source.y);
         ctx.lineTo(target.x, target.y);
+
+        if (isManual) {
+          ctx.setLineDash([4, 4]);
+        }
+
         ctx.strokeStyle = isHighlighted
           ? (isDark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)")
           : (isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)");
-        ctx.lineWidth = isHighlighted ? 2 : 1;
+        ctx.lineWidth = (isHighlighted ? 2 : 1) * display.lineThickness;
         ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Arrows
+        if (display.showArrows) {
+          const dx = target.x - source.x;
+          const dy = target.y - source.y;
+          const len = Math.sqrt(dx * dx + dy * dy);
+          if (len > 0) {
+            const baseNodeSize = (target as GraphNode).hasContent ? 7 : 5;
+            const r = baseNodeSize * display.nodeSize;
+            const nx = dx / len;
+            const ny = dy / len;
+            const ax = target.x - nx * (r + 3);
+            const ay = target.y - ny * (r + 3);
+            const arrowSize = 6 * display.lineThickness;
+            ctx.beginPath();
+            ctx.moveTo(ax, ay);
+            ctx.lineTo(ax - arrowSize * nx + arrowSize * 0.4 * ny, ay - arrowSize * ny - arrowSize * 0.4 * nx);
+            ctx.lineTo(ax - arrowSize * nx - arrowSize * 0.4 * ny, ay - arrowSize * ny + arrowSize * 0.4 * nx);
+            ctx.closePath();
+            ctx.fillStyle = isHighlighted
+              ? (isDark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)")
+              : (isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.2)");
+            ctx.fill();
+          }
+        }
       });
+
+      // Draw link-mode indicator
+      if (linkMode && linkSourceId) {
+        const sourceNode = simNodes.find((n) => n.id === linkSourceId);
+        if (sourceNode && sourceNode.x != null && sourceNode.y != null) {
+          ctx.beginPath();
+          ctx.arc(sourceNode.x, sourceNode.y, 14 * display.nodeSize, 0, Math.PI * 2);
+          ctx.strokeStyle = accentColor;
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 3]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
 
       // Draw nodes
       simNodes.forEach((node) => {
@@ -245,22 +523,20 @@ export function GraphView() {
 
         const visible = filteredNodeIds.has(node.id);
         const isHovered = hoveredNode === node.id;
+        const isLinkSource = linkMode && linkSourceId === node.id;
         const isConnectedToHover = hoveredNode
           ? simLinks.some((l) => {
               const sId = typeof l.source === "object" ? l.source.id : l.source;
               const tId = typeof l.target === "object" ? l.target.id : l.target;
-              return (
-                (sId === hoveredNode && tId === node.id) ||
-                (tId === hoveredNode && sId === node.id)
-              );
+              return (sId === hoveredNode && tId === node.id) || (tId === hoveredNode && sId === node.id);
             })
           : false;
 
-        const opacity = !visible ? 0.15 : isHovered || isConnectedToHover ? 1 : hoveredNode ? 0.4 : 1;
-        const radius = node.hasContent ? (isHovered ? 10 : 7) : (isHovered ? 8 : 5);
+        const opacity = !visible ? 0.15 : isHovered || isConnectedToHover || isLinkSource ? 1 : hoveredNode ? 0.4 : 1;
+        const baseRadius = node.hasContent ? 7 : 5;
+        const radius = (isHovered ? baseRadius + 3 : baseRadius) * display.nodeSize;
         const color = getNodeColor(node);
 
-        // Glow for hovered node
         if (isHovered) {
           ctx.beginPath();
           ctx.arc(node.x, node.y, radius + 6, 0, Math.PI * 2);
@@ -268,25 +544,32 @@ export function GraphView() {
           ctx.fill();
         }
 
-        // Node circle
         ctx.beginPath();
         ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
         ctx.fillStyle = color;
         ctx.globalAlpha = opacity;
         ctx.fill();
 
-        // Border
         ctx.strokeStyle = isDark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.2)";
         ctx.lineWidth = 1;
         ctx.stroke();
 
-        // Label
-        if (visible && (isHovered || isConnectedToHover || zoom > 0.8 || !hoveredNode)) {
-          ctx.font = `${isHovered ? "bold " : ""}${11 / zoom > 14 ? 14 : 11}px system-ui, sans-serif`;
+        // Label — fade based on zoom
+        const textOpacity = zoom < display.textFadeThreshold ? 0 : Math.min(1, (zoom - display.textFadeThreshold) / 0.3);
+        if (visible && textOpacity > 0 && (isHovered || isConnectedToHover || !hoveredNode)) {
+          const fontSize = Math.min(14, 11 / zoom) * display.nodeSize;
+          ctx.font = `${isHovered ? "bold " : ""}${fontSize}px system-ui, sans-serif`;
           ctx.textAlign = "center";
           ctx.fillStyle = isDark ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.85)";
-          ctx.globalAlpha = opacity;
+          ctx.globalAlpha = opacity * textOpacity;
           ctx.fillText(node.title, node.x, node.y + radius + 14);
+
+          if (display.showTags && node.tags.length > 0 && (isHovered || zoom > 1.2)) {
+            ctx.font = `${Math.max(8, fontSize * 0.7)}px system-ui, sans-serif`;
+            ctx.globalAlpha = opacity * textOpacity * 0.6;
+            const tagStr = node.tags.map((t) => `#${t}`).join(" ");
+            ctx.fillText(tagStr, node.x, node.y + radius + 14 + fontSize + 2);
+          }
         }
 
         ctx.globalAlpha = 1;
@@ -297,11 +580,8 @@ export function GraphView() {
     };
 
     animFrameRef.current = requestAnimationFrame(render);
-
-    return () => {
-      cancelAnimationFrame(animFrameRef.current);
-    };
-  }, [theme, zoom, pan, filteredNodeIds, hoveredNode, getNodeColor]);
+    return () => cancelAnimationFrame(animFrameRef.current);
+  }, [theme, zoom, pan, filteredNodeIds, hoveredNode, getNodeColor, display, linkMode, linkSourceId, accentColor, groups]);
 
   // Coordinate transform helpers
   const canvasToGraph = useCallback(
@@ -317,17 +597,18 @@ export function GraphView() {
 
   const findNodeAt = useCallback(
     (gx: number, gy: number): GraphNode | null => {
-      const nodes = nodesRef.current;
-      for (let i = nodes.length - 1; i >= 0; i--) {
-        const n = nodes[i];
+      const simNodes = nodesRef.current;
+      for (let i = simNodes.length - 1; i >= 0; i--) {
+        const n = simNodes[i];
         if (n.x == null || n.y == null) continue;
         const dx = gx - n.x;
         const dy = gy - n.y;
-        if (dx * dx + dy * dy < 15 * 15) return n;
+        const hitRadius = Math.max(15, 7 * display.nodeSize + 5);
+        if (dx * dx + dy * dy < hitRadius * hitRadius) return n;
       }
       return null;
     },
-    []
+    [display.nodeSize]
   );
 
   // Mouse handlers
@@ -335,6 +616,10 @@ export function GraphView() {
     (e: React.MouseEvent) => {
       const { x, y } = canvasToGraph(e.clientX, e.clientY);
       const node = findNodeAt(x, y);
+
+      dragMovedRef.current = false;
+
+      if (linkMode) return;
 
       if (node) {
         draggingRef.current = node;
@@ -346,7 +631,7 @@ export function GraphView() {
       }
       lastMouseRef.current = { x: e.clientX, y: e.clientY };
     },
-    [canvasToGraph, findNodeAt]
+    [canvasToGraph, findNodeAt, linkMode]
   );
 
   const handleMouseMove = useCallback(
@@ -354,6 +639,8 @@ export function GraphView() {
       const dx = e.clientX - lastMouseRef.current.x;
       const dy = e.clientY - lastMouseRef.current.y;
       lastMouseRef.current = { x: e.clientX, y: e.clientY };
+
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragMovedRef.current = true;
 
       if (draggingRef.current) {
         const node = draggingRef.current;
@@ -368,15 +655,18 @@ export function GraphView() {
         return;
       }
 
-      // Hover detection
       const { x, y } = canvasToGraph(e.clientX, e.clientY);
       const node = findNodeAt(x, y);
       setHoveredNode(node?.id ?? null);
 
       const canvas = canvasRef.current;
-      if (canvas) canvas.style.cursor = node ? "pointer" : "grab";
+      if (canvas) {
+        canvas.style.cursor = linkMode
+          ? (node ? "crosshair" : "default")
+          : (node ? "pointer" : "grab");
+      }
     },
-    [canvasToGraph, findNodeAt]
+    [canvasToGraph, findNodeAt, linkMode]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -391,30 +681,137 @@ export function GraphView() {
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
-      if (isPanningRef.current) return;
+      if (dragMovedRef.current) return;
+
       const { x, y } = canvasToGraph(e.clientX, e.clientY);
       const node = findNodeAt(x, y);
+
+      if (linkMode) {
+        if (!node) return;
+        if (!linkSourceId) {
+          setLinkSourceId(node.id);
+        } else if (node.id !== linkSourceId) {
+          const sourceTab = tabs.find((t) => t.id === linkSourceId);
+          const targetTab = tabs.find((t) => t.id === node.id);
+          if (sourceTab && targetTab) {
+            const targetName = targetTab.title.replace(/\.md$/, "");
+            if (!sourceTab.content.includes(`[[${targetName}]]`)) {
+              const newContent = sourceTab.content.trim()
+                ? sourceTab.content + `\n\n[[${targetName}]]`
+                : `[[${targetName}]]`;
+              updateContent(sourceTab.id, newContent);
+            }
+            setManualLinks((prev) => [...prev, { source: linkSourceId, target: node.id }]);
+          }
+          setLinkSourceId(null);
+        }
+        return;
+      }
+
       if (node) {
         switchTab(node.id);
       }
     },
+    [canvasToGraph, findNodeAt, switchTab, linkMode, linkSourceId, tabs, updateContent]
+  );
+
+  const handleDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      const { x, y } = canvasToGraph(e.clientX, e.clientY);
+      const node = findNodeAt(x, y);
+      if (node) switchTab(node.id);
+    },
     [canvasToGraph, findNodeAt, switchTab]
   );
 
-  // Attach wheel listener with { passive: false } to allow preventDefault
+  // Wheel
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
       setZoom((z) => Math.max(0.2, Math.min(3, z * delta)));
     };
-
     canvas.addEventListener("wheel", onWheel, { passive: false });
     return () => canvas.removeEventListener("wheel", onWheel);
   }, []);
+
+  // Touch handlers
+  const touchStartRef = useRef<{ x: number; y: number; dist: number } | null>(null);
+  const touchMovedRef = useRef(false);
+  const lastTapRef = useRef<{ time: number; x: number; y: number }>({ time: 0, x: 0, y: 0 });
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchMovedRef.current = false;
+    if (e.touches.length === 1) {
+      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, dist: 0 };
+    } else if (e.touches.length === 2) {
+      const dx = e.touches[1].clientX - e.touches[0].clientX;
+      const dy = e.touches[1].clientY - e.touches[0].clientY;
+      touchStartRef.current = {
+        x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+        dist: Math.sqrt(dx * dx + dy * dy),
+      };
+    }
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    if (!touchStartRef.current) return;
+
+    touchMovedRef.current = true;
+
+    if (e.touches.length === 1) {
+      const dx = e.touches[0].clientX - touchStartRef.current.x;
+      const dy = e.touches[0].clientY - touchStartRef.current.y;
+      setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
+      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, dist: 0 };
+    } else if (e.touches.length === 2) {
+      const dx = e.touches[1].clientX - e.touches[0].clientX;
+      const dy = e.touches[1].clientY - e.touches[0].clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+      const panDx = cx - touchStartRef.current.x;
+      const panDy = cy - touchStartRef.current.y;
+      setPan((p) => ({ x: p.x + panDx, y: p.y + panDy }));
+
+      if (touchStartRef.current.dist > 0) {
+        const scale = dist / touchStartRef.current.dist;
+        setZoom((z) => Math.max(0.2, Math.min(3, z * scale)));
+      }
+
+      touchStartRef.current = { x: cx, y: cy, dist };
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+
+    // Detect tap (no significant move) and double-tap
+    if (!touchMovedRef.current && start && e.changedTouches.length === 1) {
+      const touch = e.changedTouches[0];
+      const now = Date.now();
+      const last = lastTapRef.current;
+      const dx = touch.clientX - last.x;
+      const dy = touch.clientY - last.y;
+      const timeDiff = now - last.time;
+
+      if (timeDiff < 400 && Math.abs(dx) < 30 && Math.abs(dy) < 30) {
+        // Double tap — open note
+        const { x, y } = canvasToGraph(touch.clientX, touch.clientY);
+        const node = findNodeAt(x, y);
+        if (node) switchTab(node.id);
+        lastTapRef.current = { time: 0, x: 0, y: 0 };
+      } else {
+        lastTapRef.current = { time: now, x: touch.clientX, y: touch.clientY };
+      }
+    }
+  }, [canvasToGraph, findNodeAt, switchTab]);
 
   const resetView = useCallback(() => {
     const container = containerRef.current;
@@ -431,7 +828,6 @@ export function GraphView() {
       return;
     }
 
-    // Compute bounding box of all nodes
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const n of simNodes) {
       if (n.x != null && n.y != null) {
@@ -473,11 +869,47 @@ export function GraphView() {
     });
   }, []);
 
+  const animateGraph = useCallback(() => {
+    simRef.current?.alpha(1).restart();
+  }, []);
+
+  const addGroup = useCallback(() => {
+    const id = crypto.randomUUID();
+    setGroups((prev) => [
+      ...prev,
+      {
+        id,
+        name: `Group ${prev.length + 1}`,
+        color: GROUP_COLORS[prev.length % GROUP_COLORS.length],
+        nodeIds: new Set<string>(),
+      },
+    ]);
+  }, []);
+
+  const removeGroup = useCallback((id: string) => {
+    setGroups((prev) => prev.filter((g) => g.id !== id));
+  }, []);
+
+  const toggleNodeInGroup = useCallback((groupId: string, nodeId: string) => {
+    setGroups((prev) =>
+      prev.map((g) => {
+        if (g.id !== groupId) {
+          const next = new Set(g.nodeIds);
+          next.delete(nodeId);
+          return { ...g, nodeIds: next };
+        }
+        const next = new Set(g.nodeIds);
+        if (next.has(nodeId)) next.delete(nodeId);
+        else next.add(nodeId);
+        return { ...g, nodeIds: next };
+      })
+    );
+  }, []);
+
   return (
-    <div ref={containerRef} className="flex flex-1 flex-col overflow-hidden relative">
-      {/* Controls overlay */}
+    <div ref={containerRef} className="flex flex-1 flex-col overflow-hidden relative select-none">
+      {/* Top-left: zoom + link controls */}
       <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
-        {/* Zoom controls */}
         <div className="flex items-center gap-0.5 rounded-md border border-border bg-card/90 backdrop-blur-sm p-0.5">
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setZoom((z) => Math.min(3, z * 1.2))}>
             <ZoomIn className="h-3.5 w-3.5" />
@@ -489,69 +921,284 @@ export function GraphView() {
             <Maximize2 className="h-3.5 w-3.5" />
           </Button>
         </div>
+
+        <Button
+          variant={linkMode ? "default" : "ghost"}
+          size="sm"
+          className={cn("h-6 gap-1 px-2 text-[10px]", linkMode && "bg-primary text-primary-foreground")}
+          onClick={() => {
+            setLinkMode(!linkMode);
+            setLinkSourceId(null);
+          }}
+        >
+          <Link2 className="h-3 w-3" />
+          {linkMode ? (linkSourceId ? "Click target…" : "Click source…") : "Link"}
+        </Button>
+
+        {linkMode && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={() => { setLinkMode(false); setLinkSourceId(null); }}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        )}
       </div>
 
-      {/* Tag filter panel */}
-      {allTags.length > 0 && (
-        <div className="absolute top-3 right-3 z-10 max-w-[200px]">
-          <div className="rounded-md border border-border bg-card/90 backdrop-blur-sm p-2">
-            <p className="text-[10px] font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
-              <Filter className="h-3 w-3" /> Filter by tag
-            </p>
-            <div className="flex flex-wrap gap-1">
-              {allTags.map((tag) => {
-                const isSelected = selectedTags.has(tag);
-                const color = getTagColor(tag, allTags);
-                return (
-                  <button
-                    key={tag}
-                    onClick={() => toggleTag(tag)}
-                    className={cn(
-                      "rounded-sm px-1.5 py-0.5 text-[10px] border transition-colors",
-                      isSelected
-                        ? "border-transparent text-white"
-                        : "border-border text-muted-foreground hover:text-foreground"
+      {/* Right panel: collapsible settings */}
+      <div className="absolute top-3 right-3 z-10 max-w-[220px]">
+        <div className="rounded-md border border-border bg-card/90 backdrop-blur-sm overflow-hidden">
+          <button
+            onClick={() => setPanelOpen(!panelOpen)}
+            className="flex w-full items-center gap-1.5 px-2.5 py-2 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {panelOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            <Settings2 className="h-3 w-3" />
+            <span>Graph Settings</span>
+          </button>
+
+          {panelOpen && (
+            <div className="border-t border-border/50 max-h-[calc(100vh-120px)] overflow-y-auto">
+              {/* Filters */}
+              <PanelSection title="Filters" icon={Filter} defaultOpen>
+                <ToggleRow
+                  label="Show tags"
+                  checked={display.showTags}
+                  onChange={(v) => setDisplay((d) => ({ ...d, showTags: v }))}
+                />
+                <ToggleRow
+                  label="Show orphans"
+                  checked={display.showOrphans}
+                  onChange={(v) => setDisplay((d) => ({ ...d, showOrphans: v }))}
+                />
+                {allTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {allTags.map((tag) => {
+                      const isSelected = selectedTags.has(tag);
+                      const color = getTagColor(tag, allTags);
+                      return (
+                        <button
+                          key={tag}
+                          onClick={() => toggleTag(tag)}
+                          className={cn(
+                            "rounded-sm px-1.5 py-0.5 text-[10px] border transition-colors",
+                            isSelected
+                              ? "border-transparent text-white"
+                              : "border-border text-muted-foreground hover:text-foreground"
+                          )}
+                          style={isSelected ? { background: color } : { background: color + "15" }}
+                        >
+                          #{tag}
+                        </button>
+                      );
+                    })}
+                    {selectedTags.size > 0 && (
+                      <button
+                        onClick={() => setSelectedTags(new Set())}
+                        className="rounded-sm px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+                      >
+                        Clear
+                      </button>
                     )}
-                    style={
-                      isSelected
-                        ? { background: color }
-                        : { background: color + "15" }
-                    }
+                  </div>
+                )}
+              </PanelSection>
+
+              {/* Groups */}
+              <PanelSection title="Groups" icon={Layers}>
+                <div className="space-y-2">
+                  {groups.map((group) => (
+                    <div key={group.id} className="rounded border border-border/50 p-1.5 space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full shrink-0"
+                          style={{ background: group.color }}
+                        />
+                        {editingGroupName === group.id ? (
+                          <input
+                            autoFocus
+                            defaultValue={group.name}
+                            className="flex-1 bg-transparent text-[10px] outline-none border-b border-primary/50"
+                            onBlur={(e) => {
+                              const v = e.target.value.trim();
+                              if (v) setGroups((prev) => prev.map((g) => g.id === group.id ? { ...g, name: v } : g));
+                              setEditingGroupName(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                              if (e.key === "Escape") setEditingGroupName(null);
+                            }}
+                          />
+                        ) : (
+                          <span
+                            className="flex-1 text-[10px] text-foreground cursor-pointer hover:underline"
+                            onClick={() => setEditingGroupName(group.id)}
+                          >
+                            {group.name}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => removeGroup(group.id)}
+                          className="text-muted-foreground hover:text-destructive"
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-0.5 max-h-20 overflow-y-auto">
+                        {nodes.slice(0, 30).map((n) => (
+                          <button
+                            key={n.id}
+                            onClick={() => toggleNodeInGroup(group.id, n.id)}
+                            className={cn(
+                              "rounded px-1 py-0 text-[9px] border transition-colors",
+                              group.nodeIds.has(n.id)
+                                ? "border-transparent text-white"
+                                : "border-border/50 text-muted-foreground hover:text-foreground"
+                            )}
+                            style={
+                              group.nodeIds.has(n.id)
+                                ? { background: group.color }
+                                : undefined
+                            }
+                          >
+                            {n.title.slice(0, 12)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    onClick={addGroup}
+                    className="w-full rounded border border-dashed border-border py-1 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
                   >
-                    #{tag}
+                    + New Group
                   </button>
-                );
-              })}
-              {selectedTags.size > 0 && (
-                <button
-                  onClick={() => setSelectedTags(new Set())}
-                  className="rounded-sm px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+                </div>
+              </PanelSection>
+
+              {/* Display */}
+              <PanelSection title="Display" icon={Eye}>
+                <ToggleRow
+                  label="Arrows"
+                  checked={display.showArrows}
+                  onChange={(v) => setDisplay((d) => ({ ...d, showArrows: v }))}
+                />
+                <SliderRow
+                  label="Text fade"
+                  value={display.textFadeThreshold}
+                  min={0}
+                  max={1.5}
+                  step={0.1}
+                  onChange={(v) => setDisplay((d) => ({ ...d, textFadeThreshold: v }))}
+                />
+                <SliderRow
+                  label="Node size"
+                  value={display.nodeSize}
+                  min={0.3}
+                  max={3}
+                  step={0.1}
+                  onChange={(v) => setDisplay((d) => ({ ...d, nodeSize: v }))}
+                />
+                <SliderRow
+                  label="Line thickness"
+                  value={display.lineThickness}
+                  min={0.3}
+                  max={4}
+                  step={0.1}
+                  onChange={(v) => setDisplay((d) => ({ ...d, lineThickness: v }))}
+                />
+              </PanelSection>
+
+              {/* Forces */}
+              <PanelSection title="Forces" icon={Move}>
+                <SliderRow
+                  label="Repulsion"
+                  value={Math.abs(forces.chargeStrength)}
+                  min={50}
+                  max={800}
+                  step={25}
+                  onChange={(v) => setForces((f) => ({ ...f, chargeStrength: -v }))}
+                />
+                <SliderRow
+                  label="Link dist"
+                  value={forces.linkDistance}
+                  min={30}
+                  max={300}
+                  step={10}
+                  onChange={(v) => setForces((f) => ({ ...f, linkDistance: v }))}
+                />
+                <SliderRow
+                  label="Link strength"
+                  value={forces.linkStrength}
+                  min={0.1}
+                  max={2}
+                  step={0.1}
+                  onChange={(v) => setForces((f) => ({ ...f, linkStrength: v }))}
+                />
+                <SliderRow
+                  label="Center pull"
+                  value={forces.centerStrength}
+                  min={0}
+                  max={0.5}
+                  step={0.02}
+                  onChange={(v) => setForces((f) => ({ ...f, centerStrength: v }))}
+                />
+                <SliderRow
+                  label="Collision"
+                  value={forces.collideRadius}
+                  min={10}
+                  max={80}
+                  step={5}
+                  onChange={(v) => setForces((f) => ({ ...f, collideRadius: v }))}
+                />
+              </PanelSection>
+
+              {/* Animate */}
+              <div className="px-2.5 py-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-6 gap-1.5 text-[10px]"
+                  onClick={animateGraph}
                 >
-                  Clear
-                </button>
-              )}
+                  <Play className="h-3 w-3" />
+                  Animate
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Stats */}
       <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2 text-[10px] text-muted-foreground">
         <span>{nodes.length} notes</span>
         <span>·</span>
         <span>{links.length} connections</span>
+        {manualLinks.length > 0 && (
+          <>
+            <span>·</span>
+            <span>{manualLinks.length} manual</span>
+          </>
+        )}
       </div>
 
       {/* Canvas */}
       <canvas
         ref={canvasRef}
-        className="flex-1 w-full h-full"
-        style={{ cursor: "grab" }}
+        className="flex-1 w-full h-full touch-none"
+        style={{ cursor: linkMode ? "crosshair" : "grab" }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       />
     </div>
   );

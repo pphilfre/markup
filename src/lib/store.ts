@@ -9,6 +9,7 @@ import { EditorView } from "@codemirror/view";
 export type ViewMode = "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap";
 export type Theme = "dark" | "light";
 export type ThemeMode = "light" | "dark" | "system";
+export type NoteType = "note" | "whiteboard" | "mindmap";
 
 export interface Tab {
   id: string;
@@ -17,6 +18,9 @@ export interface Tab {
   folderId: string | null; // null = root
   tags: string[]; // user-defined tags
   pinned: boolean;
+  noteType: NoteType;
+  customIcon?: string;  // lucide icon name
+  iconColor?: string;   // hex color
 }
 
 export interface Folder {
@@ -154,6 +158,8 @@ interface EditorState {
 
   // Tab actions
   createTab: (folderId?: string | null) => void;
+  createWhiteboard: (folderId?: string | null) => void;
+  createMindmap: (folderId?: string | null) => void;
   closeTab: (id: string) => void;
   deleteTab: (id: string) => void;
   openTab: (id: string) => void;
@@ -161,6 +167,7 @@ interface EditorState {
   updateContent: (id: string, content: string) => void;
   updateTitle: (id: string, title: string) => void;
   renameTab: (id: string, title: string) => void;
+  setTabIcon: (id: string, icon?: string, color?: string) => void;
 
   // Tags
   addTag: (tabId: string, tag: string) => void;
@@ -194,15 +201,22 @@ interface EditorState {
 
 let tabCounter = 0;
 
-function newTab(folderId: string | null = null): Tab {
+function newTab(folderId: string | null = null, noteType: NoteType = "note"): Tab {
   tabCounter += 1;
+  const prefix = noteType === "whiteboard" ? "Whiteboard" : noteType === "mindmap" ? "Mindmap" : "Untitled";
+  const ext = noteType === "whiteboard" ? ".canvas" : noteType === "mindmap" ? ".mindmap" : ".md";
   return {
     id: crypto.randomUUID(),
-    title: `Untitled-${tabCounter}.md`,
-    content: "",
+    title: `${prefix}-${tabCounter}${ext}`,
+    content: noteType === "note" ? "" : JSON.stringify(
+      noteType === "whiteboard"
+        ? { elements: [], canvasSettings: {} }
+        : { nodes: [], connections: [], settings: {} }
+    ),
     folderId,
     tags: [],
     pinned: false,
+    noteType,
   };
 }
 
@@ -364,7 +378,7 @@ export const useEditorStore = create<EditorState>()(
         tabCounter = maxNum;
 
         set({
-          tabs: saved.tabs.map((t) => ({ ...t, folderId: t.folderId ?? null, tags: t.tags ?? [], pinned: t.pinned ?? false })),
+          tabs: saved.tabs.map((t) => ({ ...t, folderId: t.folderId ?? null, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: (t as Tab & { noteType?: NoteType }).noteType ?? "note" })),
           openTabIds: saved.openTabIds ?? saved.tabs.map((t) => t.id),
           activeTabId: saved.activeTabId,
           viewMode: saved.viewMode,
@@ -395,6 +409,26 @@ export const useEditorStore = create<EditorState>()(
         openTabIds: [...s.openTabIds, tab.id],
         activeTabId: tab.id,
         viewMode: s.viewMode === "preview" ? "editor" : s.viewMode,
+      }));
+    },
+
+    createWhiteboard: (folderId = null) => {
+      const tab = newTab(folderId, "whiteboard");
+      set((s) => ({
+        tabs: [...s.tabs, tab],
+        openTabIds: [...s.openTabIds, tab.id],
+        activeTabId: tab.id,
+        viewMode: "whiteboard" as ViewMode,
+      }));
+    },
+
+    createMindmap: (folderId = null) => {
+      const tab = newTab(folderId, "mindmap");
+      set((s) => ({
+        tabs: [...s.tabs, tab],
+        openTabIds: [...s.openTabIds, tab.id],
+        activeTabId: tab.id,
+        viewMode: "mindmap" as ViewMode,
       }));
     },
 
@@ -438,23 +472,40 @@ export const useEditorStore = create<EditorState>()(
     },
 
     openTab: (id) => {
-      set((s) => ({
-        openTabIds: s.openTabIds.includes(id) ? s.openTabIds : [...s.openTabIds, id],
-        activeTabId: id,
-        ...(s.viewMode === 'whiteboard' || s.viewMode === 'mindmap' ? { viewMode: 'editor' as ViewMode } : {}),
-      }));
+      set((s) => {
+        const tab = s.tabs.find(t => t.id === id);
+        const nt = tab?.noteType ?? "note";
+        let vm = s.viewMode;
+        if (nt === "whiteboard") vm = "whiteboard";
+        else if (nt === "mindmap") vm = "mindmap";
+        else if (vm === "whiteboard" || vm === "mindmap") vm = "editor";
+        return {
+          openTabIds: s.openTabIds.includes(id) ? s.openTabIds : [...s.openTabIds, id],
+          activeTabId: id,
+          viewMode: vm,
+        };
+      });
     },
 
-    switchTab: (id) => set((s) => ({
-      activeTabId: id,
-      openTabIds: s.openTabIds.includes(id) ? s.openTabIds : [...s.openTabIds, id],
-      ...(s.viewMode === 'whiteboard' || s.viewMode === 'mindmap' ? { viewMode: 'editor' as ViewMode } : {}),
-    })),
+    switchTab: (id) => set((s) => {
+      const tab = s.tabs.find(t => t.id === id);
+      const nt = tab?.noteType ?? "note";
+      let vm = s.viewMode;
+      if (nt === "whiteboard") vm = "whiteboard";
+      else if (nt === "mindmap") vm = "mindmap";
+      else if (vm === "whiteboard" || vm === "mindmap") vm = "editor";
+      return {
+        activeTabId: id,
+        openTabIds: s.openTabIds.includes(id) ? s.openTabIds : [...s.openTabIds, id],
+        viewMode: vm,
+      };
+    }),
 
     updateContent: (id, content) =>
       set((s) => ({
         tabs: s.tabs.map((t) => {
           if (t.id !== id) return t;
+          if (t.noteType !== "note") return { ...t, content };
           const derived = deriveTitle(content);
           return {
             ...t,
@@ -472,6 +523,13 @@ export const useEditorStore = create<EditorState>()(
     renameTab: (id, title) =>
       set((s) => ({
         tabs: s.tabs.map((t) => (t.id === id ? { ...t, title } : t)),
+      })),
+
+    setTabIcon: (id, icon, color) =>
+      set((s) => ({
+        tabs: s.tabs.map((t) =>
+          t.id === id ? { ...t, customIcon: icon, iconColor: color } : t
+        ),
       })),
 
     // ── Tags ───────────────────────────────────────────────────────────

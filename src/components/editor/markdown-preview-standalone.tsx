@@ -55,23 +55,28 @@ function parseAdmonition(children: React.ReactNode): { type: string; content: Re
 
 // ── Mermaid diagram renderer ──────────────────────────────────────────────
 
+let standaloneMermaidCounter = 0;
+
 function MermaidBlock({ chart }: { chart: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [svg, setSvg] = useState<string>("");
   const [error, setError] = useState<string>("");
-  const idRef = useRef(`mermaid-${Math.random().toString(36).slice(2, 9)}`);
 
   useEffect(() => {
     let cancelled = false;
+    standaloneMermaidCounter += 1;
+    const renderId = `mermaid-s-${standaloneMermaidCounter}-${Date.now()}`;
+
     (async () => {
       try {
         const mermaid = (await import("mermaid")).default;
         mermaid.initialize({
           startOnLoad: false,
           theme: document.documentElement.classList.contains("dark") ? "dark" : "default",
-          securityLevel: "strict",
+          securityLevel: "loose",
+          suppressErrorRendering: true,
         });
-        const { svg: rendered } = await mermaid.render(idRef.current, chart);
+        const { svg: rendered } = await mermaid.render(renderId, chart);
         if (!cancelled) {
           setSvg(rendered);
           setError("");
@@ -81,6 +86,9 @@ function MermaidBlock({ chart }: { chart: string }) {
           setError(err instanceof Error ? err.message : "Failed to render diagram");
           setSvg("");
         }
+      } finally {
+        document.getElementById(renderId)?.remove();
+        document.getElementById(`d${renderId}`)?.remove();
       }
     })();
     return () => { cancelled = true; };
@@ -126,7 +134,11 @@ export function MarkdownPreviewStandalone({ content }: { content: string }) {
       code: ({ className, children, ...props }) => {
         const match = /language-(\w+)/.exec(className || "");
         if (match && match[1] === "mermaid") {
-          const chart = String(children).replace(/\n$/, "");
+          let chart = String(children).replace(/\n$/, "");
+          // Normalize double-space separators to newlines for single-line mermaid diagrams
+          if (!chart.includes("\n") && chart.includes("  ")) {
+            chart = chart.replace(/ {2,}/g, "\n");
+          }
           return <MermaidBlock chart={chart} />;
         }
         return (

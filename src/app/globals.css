@@ -448,6 +448,12 @@
   display: none;
 }
 
+/* Mobile root — prevent rubber-band bounce on iOS */
+.mobile-root {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Better touch targets on mobile */
 @media (max-width: 767px) {
   /* Prevent text selection while scrolling toolbars */
@@ -459,36 +465,44 @@
   /* Prevent overscroll bounce on mobile */
   html, body {
     overscroll-behavior: none;
+    overflow: hidden;
+    height: 100dvh;
   }
 
-  /* Adjust CodeMirror for mobile */
+  /* Adjust CodeMirror for mobile — larger touch targets */
   .cm-editor {
-    font-size: 14px !important;
+    font-size: 15px !important;
   }
 
   .cm-scroller {
     -webkit-overflow-scrolling: touch;
   }
 
-  /* Make inputs larger for touch */
   .cm-editor .cm-content {
-    padding: 8px 12px !important;
+    padding: 10px 14px !important;
+    min-height: 100%;
   }
 
-  /* Thinner line numbers on mobile */
+  /* Thinner, more compact line numbers on mobile */
   .cm-lineNumbers {
-    min-width: 28px !important;
+    min-width: 24px !important;
   }
 
   .cm-lineNumbers .cm-gutterElement {
-    padding: 0 4px 0 4px !important;
+    padding: 0 3px 0 3px !important;
     font-size: 10px !important;
+  }
+
+  /* Gutter area padding reduced for more content space */
+  .cm-gutters {
+    padding-left: 2px !important;
   }
 
   /* Preview padding on mobile */
   .markdown-body {
-    padding: 12px !important;
-    font-size: 14px !important;
+    padding: 14px 16px !important;
+    font-size: 15px !important;
+    line-height: 1.7 !important;
   }
 
   /* File tree overlay takes full width of its container */
@@ -496,9 +510,84 @@
     width: 100% !important;
   }
 
-  /* Settings panel adjustments */
-  .fixed.inset-0.z-50 .max-w-sm {
-    max-width: calc(100vw - 2rem) !important;
+  /* File tree: increase touch targets */
+  .mobile-file-tree button,
+  .mobile-file-tree [role="button"] {
+    min-height: 36px;
+  }
+
+  /* Canvas views (whiteboard, mindmap, graph): reposition toolbars */
+  .mobile-canvas-view [class*="absolute left-2 top-2"] {
+    overflow-x: auto;
+    max-width: calc(100vw - 16px);
+  }
+
+  /* Whiteboard / Mindmap floating toolbars: make scrollable */
+  .mobile-canvas-view > div > .absolute {
+    max-width: calc(100vw - 16px);
+  }
+
+  /* Make floating toolbars in canvas views scrollable on narrow screens */
+  .mobile-canvas-view .absolute.left-2.top-2 {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 60vw;
+    scrollbar-width: none;
+  }
+  .mobile-canvas-view .absolute.left-2.top-2::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-canvas-view .absolute.right-2.top-2 {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 40vw;
+    scrollbar-width: none;
+  }
+  .mobile-canvas-view .absolute.right-2.top-2::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Settings panel on mobile: widen range slider labels */
+  .settings-range-label {
+    width: auto !important;
+    min-width: 0 !important;
+  }
+
+  /* Canvas floating toolbars: scrollable on mobile */
+  .mobile-canvas-toolbar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: calc(100vw - 80px);
+    scrollbar-width: none;
+  }
+  .mobile-canvas-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-canvas-actions {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+  }
+  .mobile-canvas-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Stacked toolbar layout on very narrow screens */
+  @media (max-width: 400px) {
+    .mobile-canvas-toolbar {
+      max-width: calc(100vw - 16px);
+      flex-wrap: wrap;
+      max-height: 80px;
+      overflow-y: auto;
+    }
+    .mobile-canvas-actions {
+      top: auto !important;
+      bottom: 8px !important;
+      right: 8px !important;
+    }
   }
 }
 

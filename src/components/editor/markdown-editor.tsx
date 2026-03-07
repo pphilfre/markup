@@ -220,7 +220,7 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
             : {}),
         }),
         EditorState.tabSize.of(settings.tabSize),
-        ...(settings.convertTabsToSpaces ? [EditorState.languageData.of(() => [{ indentOnInput: true }])] : []),
+        ...(settings.convertTabsToSpaces ? [EditorState.languageData.of(() => [{ indentOnInput: /^\s*([-*+] |(\d+)[.)]\s|\[[ x]\]\s)/ }])] : []),
         onContentChange(activeTab.id),
       ],
     });

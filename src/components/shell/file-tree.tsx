@@ -27,6 +27,11 @@ import {
   X,
   Share2,
   FileOutput,
+  PenTool,
+  GitBranch,
+  Search,
+  Layers,
+  MoreHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,7 +59,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { useEditorStore, Folder, Tab } from "@/lib/store";
+import { useEditorStore, Folder, Tab, NoteType } from "@/lib/store";
 
 const TAG_PALETTE = [
   "#7c3aed", "#6366f1", "#ec4899", "#f43f5e",
@@ -66,6 +71,49 @@ const FOLDER_PALETTE = [
   "#f97316", "#eab308", "#22c55e", "#14b8a6",
   "#06b6d4", "#3b82f6",
 ];
+
+const ICON_COLOR_PALETTE = [
+  "#7c3aed", "#6366f1", "#3b82f6", "#06b6d4",
+  "#22c55e", "#eab308", "#f97316", "#f43f5e",
+  "#ec4899", "#a1a1aa",
+];
+
+// Curated icons for the icon picker
+const ICON_CHOICES = [
+  "FileText", "PenTool", "GitBranch", "File", "Notebook", "BookOpen",
+  "Star", "Heart", "Zap", "Flame", "Rocket", "Target",
+  "Lightbulb", "Puzzle", "Code2", "Terminal", "Globe", "Map",
+  "Music", "Camera", "Film", "Gamepad2", "Palette", "Brush",
+  "Wrench", "Shield", "Lock", "Key", "Bug", "Coffee",
+  "Leaf", "Sun", "Moon", "Cloud", "Umbrella", "Snowflake",
+  "Bell", "Flag", "Bookmark", "Archive", "Inbox", "Send",
+  "Megaphone", "Trophy", "Medal", "Crown", "Diamond", "Gem",
+  "Briefcase", "GraduationCap", "Brain", "Dna", "Atom", "Microscope",
+  "Plane", "Car", "Bike", "Ship", "Train", "Home",
+] as const;
+
+// Map of icon names to lucide components — loaded lazily to avoid importing all
+import * as LucideIcons from "lucide-react";
+
+function getLucideIcon(name?: string): React.ComponentType<{ className?: string; style?: React.CSSProperties }> | null {
+  if (!name) return null;
+  const icon = (LucideIcons as Record<string, unknown>)[name];
+  if (typeof icon === "function" || (typeof icon === "object" && icon !== null)) {
+    return icon as React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+  }
+  return null;
+}
+
+/** Get the default icon for a tab based on its noteType */
+function getTabIcon(tab: Tab): React.ComponentType<{ className?: string; style?: React.CSSProperties }> {
+  if (tab.customIcon) {
+    const custom = getLucideIcon(tab.customIcon);
+    if (custom) return custom;
+  }
+  if (tab.noteType === "whiteboard") return PenTool;
+  if (tab.noteType === "mindmap") return GitBranch;
+  return FileText;
+}
 
 // ── Inline rename input ───────────────────────────────────────────────────
 function InlineRename({
@@ -112,17 +160,19 @@ function ColorPicker({
   current,
   onPick,
   children,
+  modal,
 }: {
   current: string;
   onPick: (color: string) => void;
   children: React.ReactNode;
+  modal?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal={modal}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent side="right" align="start" className="w-auto p-2">
+      <PopoverContent side="right" align="start" className="w-auto p-2" onPointerDownOutside={(e) => { if (modal) e.preventDefault(); }}>
         <div className="grid grid-cols-5 gap-1.5">
           {FOLDER_PALETTE.map((c) => (
             <button
@@ -144,6 +194,111 @@ function ColorPicker({
   );
 }
 
+// ── Icon picker popover ───────────────────────────────────────────────────
+function IconPickerPopover({
+  tab,
+  children,
+}: {
+  tab: Tab;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const setTabIcon = useEditorStore((s) => s.setTabIcon);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) setTimeout(() => searchRef.current?.focus(), 50);
+  }, [open]);
+
+  const filtered = search
+    ? ICON_CHOICES.filter((name) => name.toLowerCase().includes(search.toLowerCase()))
+    : ICON_CHOICES;
+
+  return (
+    <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSearch(""); }} modal>
+      <PopoverTrigger asChild>{children}</PopoverTrigger>
+      <PopoverContent side="right" align="start" className="w-64 p-2" onPointerDownOutside={(e) => e.preventDefault()}>
+        <div className="space-y-2">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+            <input
+              ref={searchRef}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search icons…"
+              className="w-full rounded-md border border-input bg-background pl-7 pr-2 py-1 text-xs outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+          {/* Color swatches */}
+          <div className="flex flex-wrap gap-1">
+            {ICON_COLOR_PALETTE.map((c) => (
+              <button
+                key={c}
+                onClick={() => setTabIcon(tab.id, tab.customIcon, c)}
+                className={cn(
+                  "h-4 w-4 rounded-full border-2 transition-transform hover:scale-110",
+                  tab.iconColor === c ? "border-foreground" : "border-transparent"
+                )}
+                style={{ background: c }}
+              />
+            ))}
+            {tab.iconColor && (
+              <button
+                onClick={() => setTabIcon(tab.id, tab.customIcon, undefined)}
+                className="h-4 w-4 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-foreground"
+                title="Reset color"
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            )}
+          </div>
+          {/* Icon grid */}
+          <div className="grid grid-cols-8 gap-1 max-h-40 overflow-y-auto">
+            {filtered.map((name) => {
+              const Icon = getLucideIcon(name);
+              if (!Icon) return null;
+              return (
+                <button
+                  key={name}
+                  onClick={() => {
+                    setTabIcon(tab.id, name, tab.iconColor);
+                    setOpen(false);
+                    setSearch("");
+                  }}
+                  title={name}
+                  className={cn(
+                    "h-7 w-7 rounded-md flex items-center justify-center hover:bg-muted transition-colors",
+                    tab.customIcon === name && "bg-accent text-accent-foreground"
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                </button>
+              );
+            })}
+            {filtered.length === 0 && (
+              <p className="col-span-8 text-center text-[10px] text-muted-foreground py-2">No icons found</p>
+            )}
+          </div>
+          {/* Reset */}
+          {tab.customIcon && (
+            <button
+              onClick={() => {
+                setTabIcon(tab.id, undefined, undefined);
+                setOpen(false);
+              }}
+              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Reset to default
+            </button>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // ── Folder item ───────────────────────────────────────────────────────────
 function FolderItem({
   folder,
@@ -152,6 +307,7 @@ function FolderItem({
   toggleExpand,
   hideMd,
   sortAsc,
+  sortByType,
   tabFilter,
 }: {
   folder: Folder;
@@ -160,6 +316,7 @@ function FolderItem({
   toggleExpand: (id: string) => void;
   hideMd: boolean;
   sortAsc: boolean | null;
+  sortByType: boolean;
   tabFilter?: (tab: Tab) => boolean;
 }) {
   const [renaming, setRenaming] = useState(false);
@@ -167,6 +324,8 @@ function FolderItem({
   const colorFolder = useEditorStore((s) => s.colorFolder);
   const deleteFolder = useEditorStore((s) => s.deleteFolder);
   const createTab = useEditorStore((s) => s.createTab);
+  const createWhiteboard = useEditorStore((s) => s.createWhiteboard);
+  const createMindmap = useEditorStore((s) => s.createMindmap);
   const switchTab = useEditorStore((s) => s.switchTab);
   const deleteTab = useEditorStore((s) => s.deleteTab);
   const moveTabToFolder = useEditorStore((s) => s.moveTabToFolder);
@@ -176,6 +335,7 @@ function FolderItem({
   let folderTabs = tabs.filter((t) => t.folderId === folder.id && (!tabFilter || tabFilter(t)));
 
   // Sort
+  if (sortByType) folderTabs = [...folderTabs].sort((a, b) => (a.noteType ?? "note").localeCompare(b.noteType ?? "note"));
   if (sortAsc === true) folderTabs = [...folderTabs].sort((a, b) => a.title.localeCompare(b.title));
   else if (sortAsc === false) folderTabs = [...folderTabs].sort((a, b) => b.title.localeCompare(a.title));
 
@@ -255,6 +415,12 @@ function FolderItem({
           <ContextMenuItem onClick={() => createTab(folder.id)}>
             <Plus className="mr-2 h-3.5 w-3.5" /> New File
           </ContextMenuItem>
+          <ContextMenuItem onClick={() => createWhiteboard(folder.id)}>
+            <PenTool className="mr-2 h-3.5 w-3.5" /> New Whiteboard
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => createMindmap(folder.id)}>
+            <GitBranch className="mr-2 h-3.5 w-3.5" /> New Mindmap
+          </ContextMenuItem>
           <ContextMenuItem onClick={() => setRenaming(true)}>
             <Pencil className="mr-2 h-3.5 w-3.5" /> Rename
           </ContextMenuItem>
@@ -268,6 +434,7 @@ function FolderItem({
             <ColorPicker
               current={folder.color}
               onPick={(c) => colorFolder(folder.id, c)}
+              modal
             >
               <div className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50">
                 <Palette className="h-3.5 w-3.5" />
@@ -344,8 +511,8 @@ function FileItem({
   const [newTag, setNewTag] = useState("");
   const tagInputRef = useRef<HTMLInputElement>(null);
 
-  const displayName = hideMd && tab.title.endsWith(".md")
-    ? tab.title.slice(0, -3)
+  const displayName = hideMd && (tab.title.endsWith(".md") || tab.title.endsWith(".canvas") || tab.title.endsWith(".mindmap"))
+    ? tab.title.replace(/\.(md|canvas|mindmap)$/, "")
     : tab.title;
 
   const exportFile = () => {
@@ -377,34 +544,125 @@ function FileItem({
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div className="group">
-          <button
-            onClick={onSwitch}
-            draggable
-            onDragStart={onDragStart}
-            className={cn(
-              "flex w-full items-center gap-1.5 rounded-sm px-3 py-1 text-xs transition-colors cursor-grab active:cursor-grabbing",
-              isActive
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            <FileText className="h-3 w-3 shrink-0" />
-            {renaming ? (
-              <InlineRename
-                initial={tab.title}
-                onCommit={(v) => {
-                  renameTab(tab.id, v.endsWith(".md") ? v : v + ".md");
-                  setRenaming(false);
-                }}
-                onCancel={() => setRenaming(false)}
-              />
-            ) : (
-              <span className="truncate">{displayName}</span>
-            )}
-            {tab.pinned && (
-              <Pin className="ml-auto h-2.5 w-2.5 shrink-0 text-muted-foreground/60" />
-            )}
-          </button>
+          <div className="flex w-full items-center">
+            <button
+              onClick={onSwitch}
+              draggable
+              onDragStart={onDragStart}
+              className={cn(
+                "flex flex-1 min-w-0 items-center gap-1.5 rounded-sm px-3 py-1 text-xs transition-colors cursor-grab active:cursor-grabbing",
+                isActive
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              {(() => {
+                const Icon = getTabIcon(tab);
+                return <Icon className="h-3 w-3 shrink-0" style={tab.iconColor ? { color: tab.iconColor } : undefined} />;
+              })()}
+              {renaming ? (
+                <InlineRename
+                  initial={tab.title}
+                  onCommit={(v) => {
+                    renameTab(tab.id, v.endsWith(".md") ? v : v + ".md");
+                    setRenaming(false);
+                  }}
+                  onCancel={() => setRenaming(false)}
+                />
+              ) : (
+                <span className="truncate">{displayName}</span>
+              )}
+              {tab.pinned && (
+                <Pin className="ml-auto h-2.5 w-2.5 shrink-0 text-muted-foreground/60" />
+              )}
+            </button>
+            {/* Quick tag + triple‑dot buttons — visible on hover */}
+            <div className="flex items-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    title="Quick add tag"
+                  >
+                    <Tag className="h-2.5 w-2.5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent side="right" align="start" className="w-48 p-2" onPointerDownOutside={(e) => e.stopPropagation()}>
+                  <p className="text-[10px] font-medium text-muted-foreground mb-1.5">Add tag</p>
+                  <div className="flex flex-wrap gap-1 mb-1.5">
+                    {allTags.filter((t) => !tab.tags.includes(t)).map((tag) => (
+                      <button
+                        key={tag}
+                        onClick={(e) => { e.stopPropagation(); addTag(tab.id, tag); }}
+                        className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      >
+                        +{tag}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <input
+                      placeholder="New tag…"
+                      className="flex-1 rounded-sm border border-input bg-background px-1.5 py-0.5 text-[10px] outline-none focus:ring-1 focus:ring-ring"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          const val = (e.target as HTMLInputElement).value.trim().toLowerCase();
+                          if (val) { addTag(tab.id, val); (e.target as HTMLInputElement).value = ""; }
+                        }
+                        e.stopPropagation();
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    title="More actions"
+                  >
+                    <MoreHorizontal className="h-3 w-3" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={() => togglePin(tab.id)}>
+                    {tab.pinned
+                      ? <><PinOff className="mr-2 h-3.5 w-3.5" /> Unpin</>
+                      : <><Pin className="mr-2 h-3.5 w-3.5" /> Pin to Top</>
+                    }
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setRenaming(true)}>
+                    <Pencil className="mr-2 h-3.5 w-3.5" /> Rename
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportFile}>
+                    <Download className="mr-2 h-3.5 w-3.5" /> Download
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => {
+                    switchTab(tab.id);
+                    document.dispatchEvent(new CustomEvent("open-share"));
+                  }}>
+                    <Share2 className="mr-2 h-3.5 w-3.5" /> Share
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => {
+                    switchTab(tab.id);
+                    document.dispatchEvent(new CustomEvent("open-export"));
+                  }}>
+                    <FileOutput className="mr-2 h-3.5 w-3.5" /> Export As…
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={onClose}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
           {/* Tag chips */}
           {tab.tags.length > 0 && (
             <div className="flex flex-wrap gap-0.5 px-3 pb-0.5">
@@ -437,6 +695,14 @@ function FileItem({
         <ContextMenuItem onClick={exportFile}>
           <Download className="mr-2 h-3.5 w-3.5" /> Download
         </ContextMenuItem>
+        <ContextMenuItem asChild onSelect={(e) => e.preventDefault()}>
+          <IconPickerPopover tab={tab}>
+            <div className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground">
+              <Palette className="h-3.5 w-3.5" />
+              <span>Change Icon</span>
+            </div>
+          </IconPickerPopover>
+        </ContextMenuItem>
         <ContextMenuItem onClick={() => {
           switchTab(tab.id);
           document.dispatchEvent(new CustomEvent("open-share"));
@@ -451,7 +717,7 @@ function FileItem({
         </ContextMenuItem>
         <ContextMenuSeparator />
         {/* Tag management */}
-        <div className="px-2 py-1.5">
+        <div className="px-2 py-1.5" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           <p className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
             <Tag className="h-3 w-3" /> Tags
           </p>
@@ -643,13 +909,15 @@ function ProfileSelector() {
 }
 
 // ── Main FileTree component ───────────────────────────────────────────────
-export function FileTree() {
+export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobileClose?: () => void } = {}) {
   const fileTreeOpen = useEditorStore((s) => s.fileTreeOpen);
   const toggleFileTree = useEditorStore((s) => s.toggleFileTree);
   const tabs = useEditorStore((s) => s.tabs);
   const folders = useEditorStore((s) => s.folders);
   const createFolder = useEditorStore((s) => s.createFolder);
   const createTab = useEditorStore((s) => s.createTab);
+  const createWhiteboard = useEditorStore((s) => s.createWhiteboard);
+  const createMindmap = useEditorStore((s) => s.createMindmap);
   const switchTab = useEditorStore((s) => s.switchTab);
   const deleteTab = useEditorStore((s) => s.deleteTab);
   const moveTabToFolder = useEditorStore((s) => s.moveTabToFolder);
@@ -670,6 +938,7 @@ export function FileTree() {
   );
   // null = no sort, true = A-Z, false = Z-A
   const [sortAsc, setSortAsc] = useState<boolean | null>(null);
+  const [sortByType, setSortByType] = useState(false);
   // Tag filter
   const [activeTagFilters, setActiveTagFilters] = useState<Set<string>>(new Set());
   const [tagFilterOpen, setTagFilterOpen] = useState(false);
@@ -713,6 +982,7 @@ export function FileTree() {
 
   // Root-level tabs (no folder), filtered
   let rootTabs = tabs.filter((t) => !t.folderId && tabPassesFilter(t));
+  if (sortByType) rootTabs = [...rootTabs].sort((a, b) => (a.noteType ?? "note").localeCompare(b.noteType ?? "note"));
   if (sortAsc === true) rootTabs = [...rootTabs].sort((a, b) => a.title.localeCompare(b.title));
   else if (sortAsc === false) rootTabs = [...rootTabs].sort((a, b) => b.title.localeCompare(a.title));
 
@@ -731,8 +1001,8 @@ export function FileTree() {
     if (tabId) moveTabToFolder(tabId, null);
   };
 
-  // Uncollapse strip when file tree is closed
-  if (!fileTreeOpen) {
+  // Uncollapse strip when file tree is closed (desktop only)
+  if (!mobile && !fileTreeOpen) {
     return (
       <button
         onClick={toggleFileTree}
@@ -745,26 +1015,40 @@ export function FileTree() {
   }
 
   return (
-    <aside className="flex h-full w-52 flex-col border-r border-border bg-card">
+    <aside className={cn("flex h-full flex-col border-r border-border bg-card", !mobile && "w-52")}>
       {/* Header row 1: title + main controls */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <div className="flex items-center justify-between px-2 py-1.5 border-b border-border gap-1">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground shrink-0">
           Files
         </span>
-        <div className="flex items-center gap-0.5">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => createTab()}
-                className="h-6 w-6 text-muted-foreground hover:text-foreground"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">New File</TooltipContent>
-          </Tooltip>
+        <div className="flex items-center gap-0.5 flex-wrap justify-end">
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">New…</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="start" className="min-w-[140px]">
+              <DropdownMenuItem onClick={() => createTab()}>
+                <FileText className="mr-2 h-3.5 w-3.5" /> Note
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => createWhiteboard()}>
+                <PenTool className="mr-2 h-3.5 w-3.5" /> Whiteboard
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => createMindmap()}>
+                <GitBranch className="mr-2 h-3.5 w-3.5" /> Mindmap
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -803,6 +1087,25 @@ export function FileTree() {
             </TooltipTrigger>
             <TooltipContent side="bottom">
               {sortAsc === null ? "Sort A→Z" : sortAsc ? "Sort Z→A" : "Unsort"}
+            </TooltipContent>
+          </Tooltip>
+          {/* Sort by Type */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSortByType((prev) => !prev)}
+                className={cn(
+                  "h-6 w-6 text-muted-foreground hover:text-foreground",
+                  sortByType && "text-foreground"
+                )}
+              >
+                <Layers className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {sortByType ? "Unsort by type" : "Sort by type"}
             </TooltipContent>
           </Tooltip>
           {/* Collapse / Expand all */}
@@ -845,21 +1148,35 @@ export function FileTree() {
               {activeTagFilters.size > 0 && ` (${activeTagFilters.size})`}
             </TooltipContent>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleFileTree}
-                className="h-6 w-6 text-muted-foreground hover:text-foreground"
-              >
-                <PanelLeftClose className="h-3.5 w-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              Close Sidebar <kbd className="ml-1 text-[10px] opacity-60">Alt+B</kbd>
-            </TooltipContent>
-          </Tooltip>
+          {/* Close sidebar — desktop only */}
+          {!mobile && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleFileTree}
+                  className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                >
+                  <PanelLeftClose className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                Close Sidebar <kbd className="ml-1 text-[10px] opacity-60">Alt+B</kbd>
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {/* Close — mobile only */}
+          {mobile && onMobileClose && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onMobileClose}
+              className="h-6 w-6 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       </div>
 
@@ -976,6 +1293,7 @@ export function FileTree() {
                 toggleExpand={toggleExpand}
                 hideMd={hideMd}
                 sortAsc={sortAsc}
+                sortByType={sortByType}
                 tabFilter={tabPassesFilter}
               />
             ))}
@@ -1012,6 +1330,12 @@ export function FileTree() {
         <ContextMenuContent>
           <ContextMenuItem onClick={() => createTab()}>
             <Plus className="mr-2 h-3.5 w-3.5" /> New File
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => createWhiteboard()}>
+            <PenTool className="mr-2 h-3.5 w-3.5" /> New Whiteboard
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => createMindmap()}>
+            <GitBranch className="mr-2 h-3.5 w-3.5" /> New Mindmap
           </ContextMenuItem>
           <ContextMenuItem onClick={() => createFolder("New Folder")}>
             <FolderPlus className="mr-2 h-3.5 w-3.5" /> New Folder

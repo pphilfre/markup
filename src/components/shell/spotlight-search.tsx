@@ -343,7 +343,7 @@ export function SpotlightSearch() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh] sm:pt-[20vh] px-3 sm:px-0"
       onClick={() => setOpen(false)}
     >
       {/* Backdrop */}
@@ -362,16 +362,22 @@ export function SpotlightSearch() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Search files, folders, features… or ?query for text"
+            placeholder="Search files, features… or ?text"
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
           />
+          <button
+            onClick={() => setOpen(false)}
+            className="sm:hidden flex h-6 items-center rounded border border-border bg-muted px-2 text-[11px] text-muted-foreground active:bg-muted/80"
+          >
+            Cancel
+          </button>
           <kbd className="hidden sm:inline-flex items-center rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
             ESC
           </kbd>
         </div>
 
         {/* Results list */}
-        <div ref={listRef} className="max-h-64 overflow-y-auto p-1">
+        <div ref={listRef} className="max-h-[50vh] sm:max-h-64 overflow-y-auto p-1">
           {allItems.length === 0 ? (
             <p className="px-3 py-6 text-center text-xs text-muted-foreground">
               {isTextSearch && !textQuery

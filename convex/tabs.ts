@@ -30,6 +30,9 @@ export const upsert = mutation({
     folderId: v.union(v.string(), v.null()),
     tags: v.optional(v.array(v.string())),
     pinned: v.optional(v.boolean()),
+    noteType: v.optional(v.string()),
+    customIcon: v.optional(v.string()),
+    iconColor: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { userId, tabId, ...data } = args;
@@ -61,6 +64,9 @@ export const syncAll = mutation({
         folderId: v.union(v.string(), v.null()),
         tags: v.optional(v.array(v.string())),
         pinned: v.optional(v.boolean()),
+        noteType: v.optional(v.string()),
+        customIcon: v.optional(v.string()),
+        iconColor: v.optional(v.string()),
       })
     ),
   },
@@ -93,6 +99,9 @@ export const syncAll = mutation({
           folderId: tab.folderId,
           tags: tab.tags,
           pinned: tab.pinned,
+          noteType: tab.noteType,
+          customIcon: tab.customIcon,
+          iconColor: tab.iconColor,
         });
       } else {
         await ctx.db.insert("tabs", { userId, ...tab });

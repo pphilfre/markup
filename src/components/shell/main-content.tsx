@@ -10,6 +10,7 @@ import { MindmapView } from "@/components/shell/mindmap";
 export function MainContent() {
   const viewMode = useEditorStore((s) => s.viewMode);
   const activeTabId = useEditorStore((s) => s.activeTabId);
+  const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
   const settings = useEditorStore((s) => s.settings);
 
   // Synced scroll state — shared between editor and preview
@@ -64,18 +65,19 @@ export function MainContent() {
     );
   }
 
-  if (viewMode === "whiteboard") {
+  // If the active tab is a whiteboard or mindmap, render its canvas view
+  if (activeTab?.noteType === "whiteboard" || viewMode === "whiteboard") {
     return (
       <main className="flex flex-1 overflow-hidden bg-background">
-        <WhiteboardView />
+        <WhiteboardView key={activeTabId} />
       </main>
     );
   }
 
-  if (viewMode === "mindmap") {
+  if (activeTab?.noteType === "mindmap" || viewMode === "mindmap") {
     return (
       <main className="flex flex-1 overflow-hidden bg-background">
-        <MindmapView />
+        <MindmapView key={activeTabId} />
       </main>
     );
   }
