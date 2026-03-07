@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { apiBase } from "@/lib/tauri";
 
 const convex = new ConvexReactClient(
   process.env.NEXT_PUBLIC_CONVEX_URL as string
@@ -68,7 +69,7 @@ function AuthLoader() {
 
     (async () => {
       try {
-        const res = await fetch("/api/auth/token");
+        const res = await fetch(`${apiBase()}/api/auth/token`, { credentials: "include" });
         const data = await res.json();
         setAuthState({
           isLoading: false,

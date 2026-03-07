@@ -7,8 +7,13 @@
     "dev:next": "next dev",
     "dev:convex": "npx convex dev",
     "build": "npx convex deploy --cmd 'next build'",
+    "build:tauri": "bash scripts/tauri-build.sh",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "tauri": "tauri",
+    "tauri:dev": "npm-run-all --parallel dev:convex tauri:dev:only",
+    "tauri:dev:only": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.1",
@@ -20,6 +25,9 @@
     "@codemirror/search": "^6.6.0",
     "@codemirror/state": "^6.5.4",
     "@codemirror/view": "^6.39.16",
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-opener": "^2.5.3",
+    "@tauri-apps/plugin-shell": "^2.3.5",
     "@types/d3-force": "^3.0.10",
     "@workos-inc/authkit-nextjs": "^2.15.0",
     "@workos-inc/widgets": "^1.9.1",
@@ -50,6 +58,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@tauri-apps/cli": "^2.10.1",
     "@types/file-saver": "^2.0.7",
     "@types/katex": "^0.16.8",
     "@types/node": "^20",

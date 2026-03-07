@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { X, User, Shield, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { apiBase } from "@/lib/tauri";
 import { WorkOsWidgets, UserProfile, UserSessions, UserSecurity } from "@workos-inc/widgets";
 
 type WidgetTab = "profile" | "sessions" | "security";
@@ -56,7 +57,7 @@ export function UserAccountPanel() {
     fetchedRef.current = true;
     (async () => {
       try {
-        const res = await fetch("/api/auth/token");
+        const res = await fetch(`${apiBase()}/api/auth/token`, { credentials: "include" });
         const data = await res.json();
         if (data.accessToken) setAuthToken(data.accessToken);
         if (data.sessionId) setSessionId(data.sessionId);

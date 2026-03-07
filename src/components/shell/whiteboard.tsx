@@ -248,7 +248,7 @@ function hitTest(
   el: WhiteboardElement,
   cx: number,
   cy: number,
-  tolerance: number = 6
+  tolerance = 6
 ): boolean {
   switch (el.type) {
     case "rectangle":
@@ -1147,9 +1147,10 @@ export function WhiteboardView() {
         }
         if (hit) {
           if (!hit.selected) {
+            const hitId = hit.id;
             pushUndo();
             setElements((prev) =>
-              prev.map((el) => ({ ...el, selected: el.id === hit!.id }))
+              prev.map((el) => ({ ...el, selected: el.id === hitId }))
             );
           }
           dragOffsetRef.current = { x: cp.x - hit.x, y: cp.y - hit.y };
@@ -1398,7 +1399,8 @@ export function WhiteboardView() {
     const offscreen = document.createElement("canvas");
     offscreen.width = w * 2;
     offscreen.height = h * 2;
-    const ctx = offscreen.getContext("2d")!;
+    const ctx = offscreen.getContext("2d");
+    if (!ctx) return;
     ctx.scale(2, 2);
 
     // Background
@@ -1451,7 +1453,8 @@ export function WhiteboardView() {
         canvas.style.height = h + "px";
       }
 
-      const ctx = canvas.getContext("2d")!;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
 

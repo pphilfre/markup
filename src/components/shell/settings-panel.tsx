@@ -26,6 +26,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { apiBase, openExternal } from "@/lib/tauri";
 import { useEditorStore, DEFAULT_SETTINGS, type Settings as SettingsType } from "@/lib/store";
 import { useIsMobile } from "@/lib/use-mobile";
 import { WorkOsWidgets, UserProfile, UserSessions, UserSecurity } from "@workos-inc/widgets";
@@ -263,7 +264,7 @@ function UserSection() {
     fetchedRef.current = true;
     (async () => {
       try {
-        const res = await fetch("/api/auth/token");
+        const res = await fetch(`${apiBase()}/api/auth/token`, { credentials: "include" });
         const data = await res.json();
         if (data.accessToken) {
           setAuthToken(data.accessToken);
@@ -566,7 +567,7 @@ function PrivacySecuritySection() {
     const input = window.prompt("Type DELETE to confirm account deletion:");
     if (input !== "DELETE") return;
     try {
-      window.location.href = "/api/auth/signout";
+      openExternal(`${apiBase()}/api/auth/signout`);
     } catch {
       console.error("Failed to delete account");
     }

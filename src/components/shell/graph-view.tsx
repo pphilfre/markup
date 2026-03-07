@@ -425,10 +425,10 @@ export function GraphView() {
 
         let gMinX = Infinity, gMinY = Infinity, gMaxX = -Infinity, gMaxY = -Infinity;
         groupNodes.forEach((n) => {
-          gMinX = Math.min(gMinX, n.x!);
-          gMinY = Math.min(gMinY, n.y!);
-          gMaxX = Math.max(gMaxX, n.x!);
-          gMaxY = Math.max(gMaxY, n.y!);
+          gMinX = Math.min(gMinX, n.x ?? 0);
+          gMinY = Math.min(gMinY, n.y ?? 0);
+          gMaxX = Math.max(gMaxX, n.x ?? 0);
+          gMaxY = Math.max(gMaxY, n.y ?? 0);
         });
         const pad = 40;
         ctx.beginPath();

@@ -190,7 +190,7 @@ function hitTestConnection(
   nodes: MindmapNode[],
   cx: number,
   cy: number,
-  tolerance: number = 8
+  tolerance = 8
 ): boolean {
   const from = nodes.find((n) => n.id === conn.fromId);
   const to = nodes.find((n) => n.id === conn.toId);
@@ -833,7 +833,7 @@ export function MindmapView() {
     // Also duplicate connections between selected nodes
     const dupedConns = connections
       .filter((c) => idMap.has(c.fromId) && idMap.has(c.toId))
-      .map((c) => ({ ...c, id: crypto.randomUUID(), fromId: idMap.get(c.fromId)!, toId: idMap.get(c.toId)! }));
+      .map((c) => ({ ...c, id: crypto.randomUUID(), fromId: idMap.get(c.fromId) as string, toId: idMap.get(c.toId) as string }));
     setNodes((prev) => [...prev.map((n) => ({ ...n, selected: false })), ...duped]);
     setConnections((prev) => [...prev, ...dupedConns]);
   }, [nodes, connections, pushUndo]);
@@ -1323,7 +1323,8 @@ export function MindmapView() {
     const offscreen = document.createElement("canvas");
     offscreen.width = w * 2;
     offscreen.height = h * 2;
-    const ctx = offscreen.getContext("2d")!;
+    const ctx = offscreen.getContext("2d");
+    if (!ctx) return;
     ctx.scale(2, 2);
 
     if (settings.backgroundColor !== "transparent") {
@@ -1382,7 +1383,8 @@ export function MindmapView() {
         canvas.style.height = h + "px";
       }
 
-      const ctx = canvas.getContext("2d")!;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
 
