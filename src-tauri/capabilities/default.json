@@ -2,9 +2,14 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capabilities for the Markup desktop app",
-  "windows": ["main"],
+  "windows": ["main", "auth-login"],
   "permissions": [
     "core:default",
+    "core:window:allow-create",
+    "core:window:allow-close",
+    "core:window:allow-set-focus",
+    "core:webview:allow-create-webview",
+    "core:webview:allow-create-webview-window",
     "opener:default",
     "shell:default"
   ]
