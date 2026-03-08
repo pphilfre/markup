@@ -5,6 +5,13 @@ const isTauriBuild = process.env.TAURI_ENV_PLATFORM !== undefined;
 const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
+  typescript: {
+    // For Tauri static export builds we temporarily strip server-only routes,
+    // which can cause Next's generated type validators to reference modules
+    // that no longer exist. Skipping type checking in that mode keeps the
+    // desktop build stable while preserving full type safety for normal builds.
+    ignoreBuildErrors: isTauriBuild,
+  },
   // Static export for Tauri production builds (no Node.js server needed)
   ...(isTauriBuild ? { output: "export" } : {}),
   allowedDevOrigins: [

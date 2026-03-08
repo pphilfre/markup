@@ -49,6 +49,8 @@ const settingsValidator = v.object({
   headingStyle: v.optional(v.string()),
   linkStyle: v.optional(v.string()),
   checkboxStyle: v.optional(v.string()),
+  // Custom fonts
+  customFontFamily: v.optional(v.union(v.string(), v.null())),
 });
 
 const profileValidator = v.object({

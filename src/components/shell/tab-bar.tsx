@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Plus, X, Sun, Moon, PenLine, Eye, Columns2, Network, Share2, FileOutput, PenTool, GitBranch } from "lucide-react";
+import { Plus, X, Sun, Moon, PenLine, Eye, Columns2, Network, Share2, FileOutput, PenTool, GitBranch, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
@@ -93,6 +93,8 @@ export function TabBar() {
   const openTabIds = useEditorStore((s) => s.openTabIds);
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const createTab = useEditorStore((s) => s.createTab);
+  const zoomLevel = useEditorStore((s) => s.zoomLevel);
+  const setZoomLevel = useEditorStore((s) => s.setZoomLevel);
   const theme = useEditorStore((s) => s.theme);
   const toggleTheme = useEditorStore((s) => s.toggleTheme);
   const viewMode = useEditorStore((s) => s.viewMode);
@@ -242,6 +244,41 @@ export function TabBar() {
               <TooltipContent>{label}</TooltipContent>
             </Tooltip>
           ))}
+        </div>
+
+        <div className="mx-0.5 h-4 w-px bg-border" />
+
+        {/* Global zoom controls */}
+        <div className="flex items-center gap-0.5 px-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setZoomLevel(zoomLevel - 10)}
+                className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+              >
+                <ZoomOut className="h-3 w-3" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Zoom out (Ctrl+-)</TooltipContent>
+          </Tooltip>
+          <span className="text-[10px] text-muted-foreground w-10 text-center tabular-nums">
+            {zoomLevel}%
+          </span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setZoomLevel(zoomLevel + 10)}
+                className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+              >
+                <ZoomIn className="h-3 w-3" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Zoom in (Ctrl+=)</TooltipContent>
+          </Tooltip>
         </div>
 
         <div className="mx-0.5 h-4 w-px bg-border" />

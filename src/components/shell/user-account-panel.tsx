@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { X, User, Shield, Monitor, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { apiBase } from "@/lib/tauri";
+import { apiBase, isTauri, openExternal } from "@/lib/tauri";
 import { Button } from "@/components/ui/button";
 import { WorkOsWidgets, UserProfile, UserSessions, UserSecurity } from "@workos-inc/widgets";
 
@@ -19,7 +19,11 @@ function WidgetContent({
   sessionId: string;
 }) {
   return (
-    <WorkOsWidgets apiHostname={window.location.hostname} port={window.location.port ? Number(window.location.port) : null} https={window.location.protocol === "https:"}>
+    <WorkOsWidgets
+      apiHostname={apiBase() ? new URL(apiBase()).hostname : window.location.hostname}
+      port={apiBase() ? null : window.location.port ? Number(window.location.port) : null}
+      https={apiBase() ? apiBase().startsWith("https://") : window.location.protocol === "https:"}
+    >
       <div key="profile" style={{ display: tab === "profile" ? "contents" : "none" }}>
         <UserProfile authToken={authToken} />
       </div>
@@ -41,6 +45,7 @@ export function UserAccountPanel() {
   const [fetchFailed, setFetchFailed] = useState(false);
   const [widgetTimedOut, setWidgetTimedOut] = useState(false);
   const fetchedRef = useRef(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   // Listen for custom event to open
   useEffect(() => {
@@ -66,6 +71,9 @@ export function UserAccountPanel() {
     (async () => {
       try {
         const res = await fetch(`${apiBase()}/api/auth/token`, { credentials: "include" });
+        if (!res.ok) {
+          console.error("[WorkOS] Token endpoint returned", res.status, res.statusText);
+        }
         const data = await res.json();
         clearTimeout(timeout);
         if (data.accessToken) {
@@ -74,15 +82,15 @@ export function UserAccountPanel() {
         } else {
           setFetchFailed(true);
         }
-      } catch {
+      } catch (err) {
         clearTimeout(timeout);
-        console.error("Failed to fetch auth token");
+        console.error("[WorkOS] Failed to fetch auth token", err);
         setFetchFailed(true);
       }
     })();
 
     return () => clearTimeout(timeout);
-  }, [open]);
+  }, [open, retryKey]);
 
   // Timeout for widget loading
   useEffect(() => {
@@ -166,20 +174,42 @@ export function UserAccountPanel() {
               {fetchFailed || widgetTimedOut ? (
                 <>
                   <p>Unable to load account widgets</p>
-                  <p className="text-xs">Check your connection and try refreshing</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setFetchFailed(false);
-                      setWidgetTimedOut(false);
-                      fetchedRef.current = false;
-                    }}
-                    className="mt-2"
-                  >
-                    <RotateCcw className="h-3 w-3 mr-1" />
-                    Retry
-                  </Button>
+                  <p className="text-xs">
+                    {isTauri()
+                      ? "Check your internet connection. You can also manage your account in the browser."
+                      : "Check your connection and try refreshing."}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setFetchFailed(false);
+                        setWidgetTimedOut(false);
+                        setAuthToken(null);
+                        setSessionId(null);
+                        fetchedRef.current = false;
+                        setRetryKey((k) => k + 1);
+                      }}
+                    >
+                      <RotateCcw className="h-3 w-3 mr-1" />
+                      Retry
+                    </Button>
+                    {isTauri() && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const base = apiBase() || "";
+                          if (base) {
+                            openExternal(`${base}/settings/account`);
+                          }
+                        }}
+                      >
+                        Open in browser
+                      </Button>
+                    )}
+                  </div>
                 </>
               ) : (
                 "Loading authentication…"

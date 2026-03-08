@@ -76,6 +76,8 @@ export interface Settings {
   headingStyle: "default" | "underlined" | "bordered" | "highlighted";
   linkStyle: "default" | "underlined" | "colored" | "button";
   checkboxStyle: "default" | "rounded" | "filled" | "minimal";
+  // Custom fonts
+  customFontFamily: string | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -118,6 +120,7 @@ export const DEFAULT_SETTINGS: Settings = {
   headingStyle: "default",
   linkStyle: "default",
   checkboxStyle: "default",
+  customFontFamily: null,
 };
 
 interface EditorState {

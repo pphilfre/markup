@@ -60,6 +60,7 @@ const FONT_OPTIONS = [
   { label: "Source Code Pro", value: "'Source Code Pro', ui-monospace, monospace" },
   { label: "IBM Plex Mono", value: "'IBM Plex Mono', ui-monospace, monospace" },
   { label: "Sans-serif", value: "var(--font-geist-sans), ui-sans-serif, sans-serif" },
+  { label: "Custom…", value: "__custom__" },
 ];
 
 const ACCENT_PRESETS = [
@@ -259,6 +260,7 @@ function UserSection() {
   const [fetchFailed, setFetchFailed] = useState(false);
   const [widgetTimedOut, setWidgetTimedOut] = useState(false);
   const fetchedRef = useRef(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     if (fetchedRef.current) return;
@@ -272,6 +274,9 @@ function UserSection() {
     (async () => {
       try {
         const res = await fetch(`${apiBase()}/api/auth/token`, { credentials: "include" });
+        if (!res.ok) {
+          console.error("[WorkOS] Token endpoint returned", res.status, res.statusText);
+        }
         const data = await res.json();
         clearTimeout(timeout);
         if (data.accessToken) {
@@ -281,15 +286,15 @@ function UserSection() {
         } else {
           setFetchFailed(true);
         }
-      } catch {
+      } catch (err) {
         clearTimeout(timeout);
-        console.error("Failed to fetch auth token");
+        console.error("[WorkOS] Failed to fetch auth token", err);
         setFetchFailed(true);
       }
     })();
 
     return () => clearTimeout(timeout);
-  }, []);
+  }, [retryKey]);
 
   // Timeout for widget loading: if widgets don't render within 10s, show fallback
   useEffect(() => {
@@ -337,7 +342,11 @@ function UserSection() {
       {/* Widget */}
       <div className="min-h-[200px] max-h-[320px] overflow-y-auto [&_*]:!bg-transparent [&_*]:!font-inherit [&_iframe]:max-h-[280px]">
         {authToken && sessionId && !widgetTimedOut ? (
-          <WorkOsWidgets apiHostname={window.location.hostname} port={window.location.port ? Number(window.location.port) : null} https={window.location.protocol === "https:"}>
+          <WorkOsWidgets
+            apiHostname={apiBase() ? new URL(apiBase()).hostname : window.location.hostname}
+            port={apiBase() ? null : window.location.port ? Number(window.location.port) : null}
+            https={apiBase() ? apiBase().startsWith("https://") : window.location.protocol === "https:"}
+          >
             <div style={{ display: widgetTab === "profile" ? "contents" : "none" }}>
               <UserProfile authToken={authToken} />
             </div>
@@ -354,20 +363,39 @@ function UserSection() {
               ? (
                 <>
                   <p>Unable to load account widgets</p>
-                  <p className="text-xs">Check your connection and try refreshing</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setFetchFailed(false);
-                      setWidgetTimedOut(false);
-                      fetchedRef.current = false;
-                    }}
-                    className="mt-2"
-                  >
-                    <RotateCcw className="h-3 w-3 mr-1" />
-                    Retry
-                  </Button>
+                  <p className="text-xs">
+                    {isTauri()
+                      ? "Check your internet connection. You can also manage your account in the browser."
+                      : "Check your connection and try refreshing."}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setFetchFailed(false);
+                        setWidgetTimedOut(false);
+                        setAuthToken(null);
+                        setSessionId(null);
+                        fetchedRef.current = false;
+                        setRetryKey((k) => k + 1);
+                      }}
+                    >
+                      <RotateCcw className="h-3 w-3 mr-1" />
+                      Retry
+                    </Button>
+                    {isTauri() && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          window.open(`${apiBase() || ""}/settings/account`, "_blank");
+                        }}
+                      >
+                        Open in browser
+                      </Button>
+                    )}
+                  </div>
                 </>
               )
               : "Loading authentication…"
@@ -397,10 +425,42 @@ function TypographySection({
 
       <SelectRow
         label="Font Family"
-        value={settings.fontFamily}
+        value={FONT_OPTIONS.some((o) => o.value === settings.fontFamily) ? settings.fontFamily : "__custom__"}
         options={FONT_OPTIONS}
-        onChange={(v) => update({ fontFamily: v })}
+        onChange={(v) => {
+          if (v === "__custom__") {
+            update({
+              fontFamily: settings.customFontFamily || settings.fontFamily,
+            });
+          } else {
+            update({
+              fontFamily: v,
+              customFontFamily: null,
+            });
+          }
+        }}
       />
+
+      {(!FONT_OPTIONS.some((o) => o.value === settings.fontFamily) || settings.customFontFamily) && (
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground">Custom Font Family</label>
+          <input
+            type="text"
+            value={settings.customFontFamily ?? settings.fontFamily}
+            onChange={(e) =>
+              update({
+                customFontFamily: e.target.value || null,
+                fontFamily: e.target.value || DEFAULT_SETTINGS.fontFamily,
+              })
+            }
+            placeholder={`e.g. "Fira Code", ui-monospace, monospace`}
+            className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-ring"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Uses a CSS <code>font-family</code> stack. Fonts must be installed on this device to render correctly.
+          </p>
+        </div>
+      )}
 
       <Separator />
 
