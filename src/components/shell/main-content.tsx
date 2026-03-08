@@ -66,7 +66,7 @@ export function MainContent() {
   }
 
   // If the active tab is a whiteboard or mindmap, render its canvas view
-  if (activeTab?.noteType === "whiteboard" || viewMode === "whiteboard") {
+  if (activeTab?.noteType === "whiteboard" || (viewMode === "whiteboard" && activeTab?.noteType !== "note")) {
     return (
       <main className="flex flex-1 overflow-hidden bg-background">
         <WhiteboardView key={activeTabId} />
@@ -74,7 +74,7 @@ export function MainContent() {
     );
   }
 
-  if (activeTab?.noteType === "mindmap" || viewMode === "mindmap") {
+  if (activeTab?.noteType === "mindmap" || (viewMode === "mindmap" && activeTab?.noteType !== "note")) {
     return (
       <main className="flex flex-1 overflow-hidden bg-background">
         <MindmapView key={activeTabId} />

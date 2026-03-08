@@ -115,8 +115,8 @@ export function TabBar() {
   const openTabs = openTabIds.map((id) => tabs.find((t) => t.id === id)).filter(Boolean) as typeof tabs;
 
   return (
-    <div className="flex h-8 items-center border-b border-border bg-card">
-      <ScrollArea className="flex-1">
+    <div className="flex h-8 items-center border-b border-border bg-card overflow-hidden">
+      <ScrollArea className="flex-1 min-w-0">
         <div className="flex items-center">
           {openTabs.map((tab) => (
             <TabItem
@@ -130,7 +130,7 @@ export function TabBar() {
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
 
-      <div className="flex items-center gap-0.5 px-1 shrink-0 overflow-x-auto scrollbar-none">
+      <div className="flex items-center gap-0.5 px-1 shrink-0">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

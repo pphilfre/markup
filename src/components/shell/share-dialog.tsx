@@ -109,9 +109,12 @@ export function ShareDialog({ open, onOpenChange, tabId }: ShareDialogProps) {
     ? `${getShareOrigin()}/?note=${existingShare.shareId}`
     : null;
 
+  const [shareError, setShareError] = useState<string | null>(null);
+
   const handleShare = useCallback(async () => {
     if (!userId || !tab) return;
     setIsSharing(true);
+    setShareError(null);
     try {
       await shareNote({
         ownerUserId: userId,
@@ -129,6 +132,9 @@ export function ShareDialog({ open, onOpenChange, tabId }: ShareDialogProps) {
           ? { mindmapData: JSON.stringify({ nodes: mindmapData.nodes, connections: mindmapData.connections, settings: mindmapData.settings }) }
           : {}),
       });
+    } catch (err) {
+      console.error("Failed to share note:", err);
+      setShareError("Failed to share note. Please try again.");
     } finally {
       setIsSharing(false);
     }
@@ -390,6 +396,11 @@ export function ShareDialog({ open, onOpenChange, tabId }: ShareDialogProps) {
             </div>
           )}
         </div>
+
+        {/* Error */}
+        {shareError && (
+          <p className="text-xs text-destructive">{shareError}</p>
+        )}
 
         {/* Actions */}
         <div className="flex items-center gap-2 pt-2">

@@ -418,12 +418,16 @@ export const useEditorStore = create<EditorState>()(
 
     createTab: (folderId = null) => {
       const tab = newTab(folderId);
-      set((s) => ({
-        tabs: [...s.tabs, tab],
-        openTabIds: [...s.openTabIds, tab.id],
-        activeTabId: tab.id,
-        viewMode: s.viewMode === "preview" ? "editor" : s.viewMode,
-      }));
+      set((s) => {
+        // Reset viewMode to editor for note-type tabs
+        const vm = (s.viewMode === "preview" || s.viewMode === "whiteboard" || s.viewMode === "mindmap") ? "editor" : s.viewMode;
+        return {
+          tabs: [...s.tabs, tab],
+          openTabIds: [...s.openTabIds, tab.id],
+          activeTabId: tab.id,
+          viewMode: vm,
+        };
+      });
     },
 
     createWhiteboard: (folderId = null) => {

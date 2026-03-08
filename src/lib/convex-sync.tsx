@@ -263,7 +263,7 @@ export function ConvexSync() {
 
     // Check if tabs changed from what we last pushed
     const incomingTabsKey = JSON.stringify(
-      remoteTabs.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false }))
+      remoteTabs.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: ((t as Record<string, unknown>).noteType as string) ?? "note" }))
     );
 
     if (incomingTabsKey !== lastPushedTabs.current) {
@@ -290,6 +290,11 @@ export function ConvexSync() {
         ? workspace.openTabIds.filter((id) => tabIdSet.has(id))
         : useEditorStore.getState().openTabIds.filter((id) => tabIdSet.has(id));
 
+      // Only update settings if they actually changed to prevent unnecessary editor recreations
+      const currentSettings = useEditorStore.getState().settings;
+      const newSettings = { ...DEFAULT_SETTINGS, ...workspace.settings } as Settings;
+      const settingsChanged = JSON.stringify(currentSettings) !== JSON.stringify(newSettings);
+
       useEditorStore.setState({
         tabs,
         openTabIds: updatedOpenTabIds,
@@ -301,7 +306,7 @@ export function ConvexSync() {
         viewMode: workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap",
         theme: workspace.theme as "dark" | "light",
         fileTreeOpen: workspace.fileTreeOpen,
-        settings: { ...DEFAULT_SETTINGS, ...workspace.settings } as Settings,
+        ...(settingsChanged ? { settings: newSettings } : {}),
         profiles: workspace.profiles?.length
           ? workspace.profiles
           : [{ id: "default", name: "Personal" }],

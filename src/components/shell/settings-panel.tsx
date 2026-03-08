@@ -257,27 +257,48 @@ function UserSection() {
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [fetchFailed, setFetchFailed] = useState(false);
+  const [widgetTimedOut, setWidgetTimedOut] = useState(false);
   const fetchedRef = useRef(false);
 
   useEffect(() => {
     if (fetchedRef.current) return;
     fetchedRef.current = true;
+
+    // Timeout: if auth token isn't fetched within 8 seconds, show failure
+    const timeout = setTimeout(() => {
+      setFetchFailed(true);
+    }, 8000);
+
     (async () => {
       try {
         const res = await fetch(`${apiBase()}/api/auth/token`, { credentials: "include" });
         const data = await res.json();
+        clearTimeout(timeout);
         if (data.accessToken) {
           setAuthToken(data.accessToken);
+          // Use sessionId if available, fall back to a placeholder to unblock widgets
+          setSessionId(data.sessionId ?? "current");
         } else {
           setFetchFailed(true);
         }
-        if (data.sessionId) setSessionId(data.sessionId);
       } catch {
+        clearTimeout(timeout);
         console.error("Failed to fetch auth token");
         setFetchFailed(true);
       }
     })();
+
+    return () => clearTimeout(timeout);
   }, []);
+
+  // Timeout for widget loading: if widgets don't render within 10s, show fallback
+  useEffect(() => {
+    if (!authToken || !sessionId) return;
+    const timeout = setTimeout(() => {
+      setWidgetTimedOut(true);
+    }, 10000);
+    return () => clearTimeout(timeout);
+  }, [authToken, sessionId]);
 
   const tabs: { id: "profile" | "sessions" | "security"; label: string; icon: typeof User }[] = [
     { id: "profile", label: "Profile", icon: User },
@@ -315,7 +336,7 @@ function UserSection() {
 
       {/* Widget */}
       <div className="min-h-[200px] max-h-[320px] overflow-y-auto [&_*]:!bg-transparent [&_*]:!font-inherit [&_iframe]:max-h-[280px]">
-        {authToken && sessionId ? (
+        {authToken && sessionId && !widgetTimedOut ? (
           <WorkOsWidgets apiHostname={window.location.hostname} port={window.location.port ? Number(window.location.port) : null} https={window.location.protocol === "https:"}>
             <div style={{ display: widgetTab === "profile" ? "contents" : "none" }}>
               <UserProfile authToken={authToken} />
@@ -328,8 +349,29 @@ function UserSection() {
             </div>
           </WorkOsWidgets>
         ) : (
-          <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
-            {fetchFailed ? "Failed to load account settings" : "Loading authentication…"}
+          <div className="flex flex-col items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+            {fetchFailed || widgetTimedOut
+              ? (
+                <>
+                  <p>Unable to load account widgets</p>
+                  <p className="text-xs">Check your connection and try refreshing</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setFetchFailed(false);
+                      setWidgetTimedOut(false);
+                      fetchedRef.current = false;
+                    }}
+                    className="mt-2"
+                  >
+                    <RotateCcw className="h-3 w-3 mr-1" />
+                    Retry
+                  </Button>
+                </>
+              )
+              : "Loading authentication…"
+            }
           </div>
         )}
       </div>

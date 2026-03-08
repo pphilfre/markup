@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import { EditorState } from "@codemirror/state";
+import { EditorState, Compartment } from "@codemirror/state";
 import { EditorView, ViewUpdate, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, rectangularSelection, highlightWhitespace } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { Prec } from "@codemirror/state";
@@ -103,6 +103,7 @@ function smartListKeymap() {
 export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => void } = {}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const settingsCompartment = useRef(new Compartment());
 
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const tabs = useEditorStore((s) => s.tabs);
@@ -110,6 +111,8 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
   const setEditorView = useEditorStore((s) => s.setEditorView);
   const theme = useEditorStore((s) => s.theme);
   const settings = useEditorStore((s) => s.settings);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
@@ -124,15 +127,61 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
     [updateContent]
   );
 
-  // Create / recreate editor when active tab changes
+  // Build settings-dependent extensions
+  const buildSettingsExtensions = useCallback((s: typeof settings) => [
+    EditorView.theme({
+      "&": {
+        fontFamily: s.fontFamily,
+        fontSize: s.fontSize + "px",
+      },
+      ".cm-content": {
+        lineHeight: String(s.lineHeight),
+        letterSpacing: s.letterSpacing + "em",
+        ...(s.maxLineWidth > 0 ? { maxWidth: s.maxLineWidth + "ch", margin: "0 auto" } : {}),
+      },
+      ".cm-scroller": {
+        paddingLeft: s.editorMargin + "px",
+        paddingRight: s.editorMargin + "px",
+      },
+      ...(s.cursorAnimation === "none"
+        ? { ".cm-cursor": { animationName: "none" } }
+        : s.cursorAnimation === "smooth"
+        ? { ".cm-cursor": { transition: "left 80ms ease, top 80ms ease" } }
+        : {}),
+    }),
+    ...(s.wordWrap ? [EditorView.lineWrapping] : []),
+    ...(s.showInvisibleCharacters ? [highlightWhitespace()] : []),
+    syntaxHighlighting(
+      HighlightStyle.define([
+        { tag: tags.heading, color: s.accentColor },
+      ])
+    ),
+    EditorState.tabSize.of(s.tabSize),
+  ], []);
+
+  // Reconfigure settings without recreating editor
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: settingsCompartment.current.reconfigure(buildSettingsExtensions(settings)),
+    });
+  }, [settings, buildSettingsExtensions]);
+
+  // Create / recreate editor when active tab or theme changes
   useEffect(() => {
     if (!containerRef.current || !activeTab) return;
+
+    const s = settingsRef.current;
 
     // Destroy previous instance
     if (viewRef.current) {
       viewRef.current.destroy();
       viewRef.current = null;
     }
+
+    // Reset compartment for fresh editor
+    settingsCompartment.current = new Compartment();
 
     // Inline formatting keymaps (Ctrl+B, Ctrl+I)
     const formattingKeymap = keymap.of([
@@ -168,59 +217,31 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
       doc: activeTab.content,
       extensions: [
         lineNumbers(),
-        ...(settings.highlightCurrentLine ? [highlightActiveLine(), highlightActiveLineGutter()] : []),
+        ...(s.highlightCurrentLine ? [highlightActiveLine(), highlightActiveLineGutter()] : []),
         drawSelection(),
-        ...(settings.multiCursorSupport ? [rectangularSelection()] : []),
+        ...(s.multiCursorSupport ? [rectangularSelection()] : []),
         indentOnInput(),
-        ...(settings.highlightMatchingBrackets ? [bracketMatching()] : []),
-        ...(settings.autoCloseBrackets ? [closeBrackets()] : []),
+        ...(s.highlightMatchingBrackets ? [bracketMatching()] : []),
+        ...(s.autoCloseBrackets ? [closeBrackets()] : []),
         foldGutter(),
         highlightSelectionMatches(),
         history(),
-        ...(settings.continueListOnEnter ? [smartListKeymap()] : []),
+        ...(s.continueListOnEnter ? [smartListKeymap()] : []),
         formattingKeymap,
         keymap.of([
           ...defaultKeymap,
           ...historyKeymap,
           ...searchKeymap,
           ...foldKeymap,
-          ...(settings.autoCloseBrackets ? closeBracketsKeymap : []),
+          ...(s.autoCloseBrackets ? closeBracketsKeymap : []),
           indentWithTab,
         ]),
         markdown({ base: markdownLanguage, codeLanguages: languages }),
         ...(theme === "dark"
           ? [darkTheme, darkHighlightStyle]
           : [lightTheme, lightHighlightStyle]),
-        // Override heading colour with user's accent colour (no visual rendering)
-        syntaxHighlighting(
-          HighlightStyle.define([
-            { tag: tags.heading, color: settings.accentColor },
-          ])
-        ),
-        ...(settings.wordWrap ? [EditorView.lineWrapping] : []),
-        ...(settings.showInvisibleCharacters ? [highlightWhitespace()] : []),
-        EditorView.theme({
-          "&": {
-            fontFamily: settings.fontFamily,
-            fontSize: settings.fontSize + "px",
-          },
-          ".cm-content": {
-            lineHeight: String(settings.lineHeight),
-            letterSpacing: settings.letterSpacing + "em",
-            ...(settings.maxLineWidth > 0 ? { maxWidth: settings.maxLineWidth + "ch", margin: "0 auto" } : {}),
-          },
-          ".cm-scroller": {
-            paddingLeft: settings.editorMargin + "px",
-            paddingRight: settings.editorMargin + "px",
-          },
-          ...(settings.cursorAnimation === "none"
-            ? { ".cm-cursor": { animationName: "none" } }
-            : settings.cursorAnimation === "smooth"
-            ? { ".cm-cursor": { transition: "left 80ms ease, top 80ms ease" } }
-            : {}),
-        }),
-        EditorState.tabSize.of(settings.tabSize),
-        ...(settings.convertTabsToSpaces ? [EditorState.languageData.of(() => [{ indentOnInput: /^\s*([-*+] |(\d+)[.)]\s|\[[ x]\]\s)/ }])] : []),
+        settingsCompartment.current.of(buildSettingsExtensions(s)),
+        ...(s.convertTabsToSpaces ? [EditorState.languageData.of(() => [{ indentOnInput: /^\s*([-*+] |(\d+)[.)]\s|\[[ x]\]\s)/ }])] : []),
         onContentChange(activeTab.id),
       ],
     });
@@ -260,7 +281,7 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
       setEditorView(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab?.id, theme, settings]);
+  }, [activeTab?.id, theme]);
 
   if (!activeTab) {
     return (

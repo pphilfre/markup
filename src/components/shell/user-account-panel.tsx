@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { X, User, Shield, Monitor } from "lucide-react";
+import { X, User, Shield, Monitor, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiBase } from "@/lib/tauri";
+import { Button } from "@/components/ui/button";
 import { WorkOsWidgets, UserProfile, UserSessions, UserSecurity } from "@workos-inc/widgets";
 
 type WidgetTab = "profile" | "sessions" | "security";
@@ -37,6 +38,8 @@ export function UserAccountPanel() {
   const [activeTab, setActiveTab] = useState<WidgetTab>("profile");
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [fetchFailed, setFetchFailed] = useState(false);
+  const [widgetTimedOut, setWidgetTimedOut] = useState(false);
   const fetchedRef = useRef(false);
 
   // Listen for custom event to open
@@ -55,17 +58,40 @@ export function UserAccountPanel() {
     if (!open) return;
     if (fetchedRef.current) return;
     fetchedRef.current = true;
+
+    const timeout = setTimeout(() => {
+      setFetchFailed(true);
+    }, 8000);
+
     (async () => {
       try {
         const res = await fetch(`${apiBase()}/api/auth/token`, { credentials: "include" });
         const data = await res.json();
-        if (data.accessToken) setAuthToken(data.accessToken);
-        if (data.sessionId) setSessionId(data.sessionId);
+        clearTimeout(timeout);
+        if (data.accessToken) {
+          setAuthToken(data.accessToken);
+          setSessionId(data.sessionId ?? "current");
+        } else {
+          setFetchFailed(true);
+        }
       } catch {
+        clearTimeout(timeout);
         console.error("Failed to fetch auth token");
+        setFetchFailed(true);
       }
     })();
+
+    return () => clearTimeout(timeout);
   }, [open]);
+
+  // Timeout for widget loading
+  useEffect(() => {
+    if (!authToken || !sessionId) return;
+    const timeout = setTimeout(() => {
+      setWidgetTimedOut(true);
+    }, 10000);
+    return () => clearTimeout(timeout);
+  }, [authToken, sessionId]);
 
   // Close on escape
   useEffect(() => {
@@ -133,11 +159,31 @@ export function UserAccountPanel() {
 
         {/* Widget content */}
         <div className="flex-1 overflow-y-auto p-4">
-          {authToken && sessionId ? (
+          {authToken && sessionId && !widgetTimedOut && !fetchFailed ? (
             <WidgetContent tab={activeTab} authToken={authToken} sessionId={sessionId} />
           ) : (
-            <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
-              Loading authentication…
+            <div className="flex flex-col items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+              {fetchFailed || widgetTimedOut ? (
+                <>
+                  <p>Unable to load account widgets</p>
+                  <p className="text-xs">Check your connection and try refreshing</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setFetchFailed(false);
+                      setWidgetTimedOut(false);
+                      fetchedRef.current = false;
+                    }}
+                    className="mt-2"
+                  >
+                    <RotateCcw className="h-3 w-3 mr-1" />
+                    Retry
+                  </Button>
+                </>
+              ) : (
+                "Loading authentication…"
+              )}
             </div>
           )}
         </div>

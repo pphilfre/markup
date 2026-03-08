@@ -6,8 +6,9 @@ import { SettingsPanel } from "@/components/shell/settings-panel";
 import { ThemeSync } from "@/components/theme-provider";
 import { MobileLayout } from "@/components/shell/mobile-layout";
 import { ConvexSync } from "@/lib/convex-sync";
-import { TauriFileSync } from "@/lib/tauri-file-sync";
+import { TauriFileSync } from "../lib/tauri-file-sync";
 import { SharedNoteViewer } from "@/components/shell/shared-note-viewer";
+import { FirstRunDialog } from "@/components/shell/first-run-dialog";
 import { useEditorStore } from "@/lib/store";
 import { useGlobalKeybinds } from "@/lib/keybinds";
 import { useIsMobile } from "@/lib/use-mobile";
@@ -109,6 +110,7 @@ export default function Home() {
       <ThemeSync />
       <ConvexSync />
       <TauriFileSync />
+      <FirstRunDialog />
       <SpotlightSearch />
       <SettingsPanel />
       {sidebarPosition === "left" && sidebarElements}
