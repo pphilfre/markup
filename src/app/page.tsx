@@ -9,6 +9,7 @@ import { ConvexSync } from "@/lib/convex-sync";
 import { TauriFileSync } from "../lib/tauri-file-sync";
 import { SharedNoteViewer } from "@/components/shell/shared-note-viewer";
 import { FirstRunDialog } from "@/components/shell/first-run-dialog";
+import { DesktopDebugNotice } from "@/components/shell/desktop-debug-notice";
 import { useEditorStore } from "@/lib/store";
 import { useGlobalKeybinds } from "@/lib/keybinds";
 import { useIsMobile } from "@/lib/use-mobile";
@@ -110,6 +111,7 @@ export default function Home() {
       <ThemeSync />
       <ConvexSync />
       <TauriFileSync />
+      <DesktopDebugNotice />
       <FirstRunDialog />
       <SpotlightSearch />
       <SettingsPanel />

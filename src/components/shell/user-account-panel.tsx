@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { X, User, Shield, Monitor, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { apiBase, isTauri, openExternal } from "@/lib/tauri";
+import { apiBase, getClientAuthToken, isTauri, openExternal } from "@/lib/tauri";
 import { Button } from "@/components/ui/button";
 import { WorkOsWidgets, UserProfile, UserSessions, UserSecurity } from "@workos-inc/widgets";
 
@@ -70,11 +70,7 @@ export function UserAccountPanel() {
 
     (async () => {
       try {
-        const res = await fetch(`${apiBase()}/api/auth/token`, { credentials: "include" });
-        if (!res.ok) {
-          console.error("[WorkOS] Token endpoint returned", res.status, res.statusText);
-        }
-        const data = await res.json();
+        const data = await getClientAuthToken();
         clearTimeout(timeout);
         if (data.accessToken) {
           setAuthToken(data.accessToken);

@@ -16,6 +16,7 @@ const geistMono = Geist_Mono({
 
 const SITE_URL = "https://markup-editor.vercel.app";
 const SITE_NAME = "Markup";
+const IS_DEV = process.env.NODE_ENV === "development";
 const SITE_DESCRIPTION =
   "A fast, keyboard-first markdown editor built for speed. Write, preview, and export markdown with split view, syntax highlighting, spotlight search, and a distraction-free interface.";
 
@@ -114,7 +115,7 @@ export const metadata: Metadata = {
   },
 
   // ── App-specific ──────────────────────────────────────────────────────
-  manifest: "/site.webmanifest",
+  manifest: IS_DEV ? undefined : "/site.webmanifest",
 
   // ── Misc ──────────────────────────────────────────────────────────────
   other: {

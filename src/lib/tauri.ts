@@ -13,6 +13,134 @@ export function isTauri(): boolean {
 }
 
 const DEPLOYED_URL = "https://markup.freddiephilpot.dev";
+const DESKTOP_TOKEN_KEY = "desktop_token";
+const DESKTOP_USER_KEY = "desktop_user";
+
+export interface DesktopUser {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  profilePictureUrl: string | null;
+}
+
+interface AuthTokenResponse {
+  accessToken: string | null;
+  sessionId: string | null;
+  user: DesktopUser | null;
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const json = atob(padded);
+    return JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function userFromToken(token: string): DesktopUser | null {
+  const payload = decodeJwtPayload(token);
+  const userId = payload?.sub;
+  if (typeof userId !== "string" || !userId.length) {
+    return null;
+  }
+
+  return {
+    id: userId,
+    email: typeof payload?.email === "string" ? payload.email : "",
+    firstName: typeof payload?.given_name === "string" ? payload.given_name : null,
+    lastName: typeof payload?.family_name === "string" ? payload.family_name : null,
+    profilePictureUrl: typeof payload?.picture === "string" ? payload.picture : null,
+  };
+}
+
+export function getDesktopToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return sessionStorage.getItem(DESKTOP_TOKEN_KEY) || localStorage.getItem(DESKTOP_TOKEN_KEY);
+}
+
+export function getDesktopUser(): DesktopUser | null {
+  if (typeof window === "undefined") return null;
+  const raw = sessionStorage.getItem(DESKTOP_USER_KEY) || localStorage.getItem(DESKTOP_USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as DesktopUser;
+  } catch {
+    return null;
+  }
+}
+
+export function storeDesktopSession(token: string, user?: DesktopUser | null): void {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem(DESKTOP_TOKEN_KEY, token);
+  localStorage.setItem(DESKTOP_TOKEN_KEY, token);
+  if (user) {
+    const encoded = JSON.stringify(user);
+    sessionStorage.setItem(DESKTOP_USER_KEY, encoded);
+    localStorage.setItem(DESKTOP_USER_KEY, encoded);
+  }
+}
+
+export function clearDesktopSession(): void {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(DESKTOP_TOKEN_KEY);
+  sessionStorage.removeItem(DESKTOP_USER_KEY);
+  localStorage.removeItem(DESKTOP_TOKEN_KEY);
+  localStorage.removeItem(DESKTOP_USER_KEY);
+}
+
+/**
+ * Read auth state from API or desktop fallback, avoiding cookie-only failures
+ * in Tauri where the embedded webview does not share browser cookies.
+ */
+export async function getClientAuthToken(): Promise<AuthTokenResponse> {
+  const desktopToken = isTauri() ? getDesktopToken() : null;
+  const headers: Record<string, string> = {};
+  if (desktopToken) {
+    headers.Authorization = `Bearer ${desktopToken}`;
+  }
+
+  try {
+    const res = await fetch(`${apiBase()}/api/auth/token`, {
+      credentials: "include",
+      headers,
+    });
+
+    if (res.ok) {
+      const data = (await res.json()) as Partial<AuthTokenResponse>;
+      const token = data.accessToken ?? desktopToken ?? null;
+      const user = data.user ?? (token ? userFromToken(token) : null);
+      const sessionId = data.sessionId ?? null;
+
+      if (isTauri() && token) {
+        storeDesktopSession(token, user);
+      }
+
+      return {
+        accessToken: token,
+        sessionId,
+        user,
+      };
+    }
+  } catch {
+    // Desktop fallback below.
+  }
+
+  if (desktopToken) {
+    return {
+      accessToken: desktopToken,
+      sessionId: null,
+      user: getDesktopUser() ?? userFromToken(desktopToken),
+    };
+  }
+
+  return { accessToken: null, sessionId: null, user: null };
+}
 
 /**
  * Base URL for server API calls.
@@ -78,10 +206,15 @@ export async function signIn(onAuthenticated?: () => void): Promise<void> {
     const userJson = parsed.searchParams.get("user");
 
     if (token) {
-      sessionStorage.setItem("desktop_token", token);
+      let user: DesktopUser | null = null;
       if (userJson) {
-        sessionStorage.setItem("desktop_user", userJson);
+        try {
+          user = JSON.parse(userJson) as DesktopUser;
+        } catch {
+          user = null;
+        }
       }
+      storeDesktopSession(token, user);
       onAuthenticated?.();
     }
   });
@@ -108,9 +241,7 @@ export async function signOut(onSignedOut?: () => void): Promise<void> {
     return;
   }
 
-  // Clear desktop session tokens
-  sessionStorage.removeItem("desktop_token");
-  sessionStorage.removeItem("desktop_user");
+  clearDesktopSession();
 
   await openExternal(`${base}/api/auth/signout`);
   onSignedOut?.();

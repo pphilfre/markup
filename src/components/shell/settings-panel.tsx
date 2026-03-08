@@ -26,7 +26,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { apiBase, signOut, isTauri } from "@/lib/tauri";
+import { apiBase, getClientAuthToken, openExternal, signOut, isTauri } from "@/lib/tauri";
 import { useEditorStore, DEFAULT_SETTINGS, type Settings as SettingsType } from "@/lib/store";
 import { useIsMobile } from "@/lib/use-mobile";
 import { WorkOsWidgets, UserProfile, UserSessions, UserSecurity } from "@workos-inc/widgets";
@@ -273,11 +273,7 @@ function UserSection() {
 
     (async () => {
       try {
-        const res = await fetch(`${apiBase()}/api/auth/token`, { credentials: "include" });
-        if (!res.ok) {
-          console.error("[WorkOS] Token endpoint returned", res.status, res.statusText);
-        }
-        const data = await res.json();
+        const data = await getClientAuthToken();
         clearTimeout(timeout);
         if (data.accessToken) {
           setAuthToken(data.accessToken);
@@ -389,7 +385,10 @@ function UserSection() {
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          window.open(`${apiBase() || ""}/settings/account`, "_blank");
+                          const base = apiBase();
+                          if (base) {
+                            openExternal(`${base}/settings/account`);
+                          }
                         }}
                       >
                         Open in browser
