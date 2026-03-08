@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Bug, X } from "lucide-react";
-import { apiBase, getClientAuthToken, isTauri } from "@/lib/tauri";
+import {
+  apiBase,
+  getClientAuthToken,
+  getDesktopToken,
+  isTauri,
+} from "@/lib/tauri";
 
 type Level = "error" | "warn";
 
@@ -44,14 +49,12 @@ export function DesktopDebugNotice() {
         addNotice("error", "Convex", "NEXT_PUBLIC_CONVEX_URL is missing in this build.");
       } else {
         try {
-          const versionUrl = new URL("/api/version", convexUrl).toString();
-          const res = await fetch(versionUrl, {
+          // We only care about network reachability here. Some Convex endpoints
+          // may respond with non-200 statuses depending on deployment config.
+          await fetch(convexUrl, {
             method: "GET",
             signal: timeoutSignal(6000),
           });
-          if (!res.ok) {
-            addNotice("warn", "Convex", `Reachability check returned HTTP ${res.status}.`);
-          }
         } catch {
           addNotice("error", "Convex", "Unable to reach Convex from desktop app.");
         }
@@ -59,8 +62,11 @@ export function DesktopDebugNotice() {
 
       try {
         const auth = await getClientAuthToken();
-        if (!auth.accessToken) {
-          addNotice("warn", "WorkOS", "No authenticated WorkOS session found in desktop app.");
+        const hadDesktopToken = !!getDesktopToken();
+        // Don't show a warning for normal logged-out state on launch.
+        // Warn only if a previously stored desktop token fails validation.
+        if (!auth.accessToken && hadDesktopToken) {
+          addNotice("warn", "WorkOS", "Stored desktop session is no longer valid. Please sign in again.");
         }
       } catch {
         addNotice("error", "WorkOS", `Auth check failed for ${apiBase() || "local"} backend.`);

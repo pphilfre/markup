@@ -6,6 +6,48 @@ import { api } from "../../convex/_generated/api";
 import { useEditorStore, DEFAULT_SETTINGS, type Settings, type NoteType } from "@/lib/store";
 import { useAuthState } from "@/components/convex-client-provider";
 
+// ---------------------------------------------------------------------------
+// Sync state – shared across the app (same pattern as auth state)
+// ---------------------------------------------------------------------------
+
+export type SyncStatus = "idle" | "syncing" | "synced" | "error" | "offline" | "disabled";
+
+interface SyncState {
+  status: SyncStatus;
+  lastSyncedAt: number | null; // epoch ms
+  error: string | null;
+}
+
+let _syncState: SyncState = {
+  status: "idle",
+  lastSyncedAt: null,
+  error: null,
+};
+const _syncListeners = new Set<() => void>();
+
+function setSyncState(next: Partial<SyncState>) {
+  _syncState = { ..._syncState, ...next };
+  _syncListeners.forEach((fn) => fn());
+}
+
+/** Hook to read the current sync state from anywhere. */
+export function useSyncState(): SyncState {
+  const [, rerender] = useState(0);
+  useEffect(() => {
+    const cb = () => rerender((n) => n + 1);
+    _syncListeners.add(cb);
+    return () => { _syncListeners.delete(cb); };
+  }, []);
+  return _syncState;
+}
+
+// Manual sync trigger – set by ConvexSync, callable from anywhere
+let _triggerManualSync: (() => void) | null = null;
+
+export function triggerManualSync() {
+  _triggerManualSync?.();
+}
+
 /**
  * Bidirectional sync between the Zustand store and Convex.
  *
@@ -62,7 +104,7 @@ export function ConvexSync() {
   const lastSharedContent = useRef<Map<string, string>>(new Map());
 
   // ── Helper: push current local state to Convex ─────────────────────
-  const pushCurrentState = useCallback(() => {
+  const pushCurrentState = useCallback(async () => {
     if (!userId) return;
     const slice = useEditorStore.getState();
 
@@ -88,42 +130,127 @@ export function ConvexSync() {
       fileTreeOpen: slice.fileTreeOpen,
     });
 
-    syncAllTabs({ userId, tabs: tabsPayload }).catch(console.error);
+    setSyncState({ status: "syncing", error: null });
 
-    // Sync shared note content in real-time
-    if (sharedTabs) {
-      const sharedTabIds = new Set(sharedTabs.map((s) => s.tabId));
-      for (const t of slice.tabs) {
-        if (sharedTabIds.has(t.id)) {
-          updateSharedContent({
-            ownerUserId: userId,
-            tabId: t.id,
-            title: t.title,
-            content: t.content,
-          }).catch(console.error);
+    try {
+      await syncAllTabs({ userId, tabs: tabsPayload });
+
+      // Sync shared note content in real-time
+      if (sharedTabs) {
+        const sharedTabIds = new Set(sharedTabs.map((s) => s.tabId));
+        for (const t of slice.tabs) {
+          if (sharedTabIds.has(t.id)) {
+            updateSharedContent({
+              ownerUserId: userId,
+              tabId: t.id,
+              title: t.title,
+              content: t.content,
+            }).catch(console.error);
+          }
         }
       }
-    }
 
-    saveWorkspace({
-      userId,
-      activeTabId: slice.activeTabId,
-      openTabIds: slice.openTabIds,
-      folders: slice.folders.map((f) => ({
-        id: f.id,
-        name: f.name,
-        color: f.color,
-        parentId: f.parentId,
-        sortOrder: f.sortOrder,
-      })),
-      viewMode: slice.viewMode,
-      theme: slice.theme,
-      fileTreeOpen: slice.fileTreeOpen,
-      settings: slice.settings,
-      profiles: slice.profiles.map((p) => ({ id: p.id, name: p.name })),
-      activeProfileId: slice.activeProfileId,
-    }).catch(console.error);
+      await saveWorkspace({
+        userId,
+        activeTabId: slice.activeTabId,
+        openTabIds: slice.openTabIds,
+        folders: slice.folders.map((f) => ({
+          id: f.id,
+          name: f.name,
+          color: f.color,
+          parentId: f.parentId,
+          sortOrder: f.sortOrder,
+        })),
+        viewMode: slice.viewMode,
+        theme: slice.theme,
+        fileTreeOpen: slice.fileTreeOpen,
+        settings: slice.settings,
+        profiles: slice.profiles.map((p) => ({ id: p.id, name: p.name })),
+        activeProfileId: slice.activeProfileId,
+      });
+
+      setSyncState({ status: "synced", lastSyncedAt: Date.now(), error: null });
+    } catch (err) {
+      console.error("[ConvexSync] push failed:", err);
+      setSyncState({ status: "error", error: String(err) });
+    }
   }, [userId, syncAllTabs, saveWorkspace, sharedTabs, updateSharedContent]);
+
+  // ── Manual sync: pull from Convex then push local state ────────────
+  const manualSync = useCallback(() => {
+    if (!userId || !isAuthenticated) return;
+
+    // If we already have remote data, apply it to the store first (pull)
+    if (remoteTabs && remoteTabs.length > 0 && workspace) {
+      isHydrating.current = true;
+
+      const tabs = remoteTabs.map((t) => ({
+        id: t.tabId,
+        title: t.title,
+        content: t.content,
+        folderId: t.folderId ?? null,
+        tags: t.tags ?? [],
+        pinned: t.pinned ?? false,
+        noteType: (((t as Record<string, unknown>).noteType as string) ?? "note") as NoteType,
+        customIcon: (t as Record<string, unknown>).customIcon as string | undefined,
+        iconColor: (t as Record<string, unknown>).iconColor as string | undefined,
+      }));
+
+      useEditorStore.setState({
+        tabs,
+        openTabIds: workspace.openTabIds?.length
+          ? workspace.openTabIds.filter((id) => tabs.some((t) => t.id === id))
+          : tabs.map((t) => t.id),
+        activeTabId: workspace.activeTabId,
+        folders: workspace.folders.map((f) => ({
+          ...f,
+          parentId: f.parentId ?? null,
+        })),
+        viewMode: workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap",
+        theme: workspace.theme as "dark" | "light",
+        fileTreeOpen: workspace.fileTreeOpen,
+        settings: { ...DEFAULT_SETTINGS, ...workspace.settings } as Settings,
+        profiles: workspace.profiles?.length
+          ? workspace.profiles
+          : [{ id: "default", name: "Personal" }],
+        activeProfileId: workspace.activeProfileId ?? "default",
+      });
+
+      lastPushedTabs.current = JSON.stringify(
+        remoteTabs.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: ((t as Record<string, unknown>).noteType as string) ?? "note" }))
+      );
+      lastPushedWorkspace.current = JSON.stringify({
+        activeTabId: workspace.activeTabId,
+        viewMode: workspace.viewMode,
+        theme: workspace.theme,
+        fileTreeOpen: workspace.fileTreeOpen,
+      });
+
+      setSyncState({ status: "synced", lastSyncedAt: Date.now(), error: null });
+
+      requestAnimationFrame(() => {
+        isHydrating.current = false;
+      });
+    } else {
+      // No remote data — push local state up
+      pushCurrentState();
+    }
+  }, [userId, isAuthenticated, remoteTabs, workspace, pushCurrentState]);
+
+  // Register the manual sync trigger so it can be called from UI
+  useEffect(() => {
+    _triggerManualSync = manualSync;
+    return () => { _triggerManualSync = null; };
+  }, [manualSync]);
+
+  // ── Update sync state based on auth/connection ─────────────────────
+  useEffect(() => {
+    if (!isAuthenticated || !userId) {
+      setSyncState({ status: "disabled", error: null });
+    } else if (!isOnline) {
+      setSyncState({ status: "offline", error: null });
+    }
+  }, [isAuthenticated, userId, isOnline]);
 
   // ── Online / Offline detection ─────────────────────────────────────
   useEffect(() => {
@@ -211,6 +338,8 @@ export function ConvexSync() {
         fileTreeOpen: workspace.fileTreeOpen,
       });
 
+      setSyncState({ status: "synced", lastSyncedAt: Date.now(), error: null });
+
       requestAnimationFrame(() => {
         isHydrating.current = false;
       });
@@ -234,6 +363,8 @@ export function ConvexSync() {
         })),
       }).catch(console.error);
 
+      setSyncState({ status: "syncing", error: null });
+
       saveWorkspace({
         userId,
         activeTabId: s.activeTabId,
@@ -251,7 +382,12 @@ export function ConvexSync() {
         settings: s.settings,
         profiles: s.profiles.map((p) => ({ id: p.id, name: p.name })),
         activeProfileId: s.activeProfileId,
-      }).catch(console.error);
+      }).then(() => {
+        setSyncState({ status: "synced", lastSyncedAt: Date.now(), error: null });
+      }).catch((err) => {
+        console.error("[ConvexSync] initial push failed:", err);
+        setSyncState({ status: "error", error: String(err) });
+      });
     }
   }, [isLoading, isAuthenticated, userId, workspace, remoteTabs, saveWorkspace, syncAllTabs]);
 
@@ -314,6 +450,8 @@ export function ConvexSync() {
       });
 
       lastPushedTabs.current = incomingTabsKey;
+
+      setSyncState({ status: "synced", lastSyncedAt: Date.now(), error: null });
 
       requestAnimationFrame(() => {
         isHydrating.current = false;

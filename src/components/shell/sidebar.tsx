@@ -21,6 +21,10 @@ import {
   User,
   Shield,
   Monitor,
+  RefreshCw,
+  Cloud,
+  CloudOff,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +42,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useEditorStore } from "@/lib/store";
 import { useAuthState } from "@/components/convex-client-provider";
+import { useSyncState, triggerManualSync } from "@/lib/convex-sync";
 import { UserAccountPanel } from "@/components/shell/user-account-panel";
 import { signIn, signOut } from "@/lib/tauri";
 
@@ -315,6 +320,9 @@ export function Sidebar() {
       {/* Bottom: Auth + Settings */}
       <Separator className="my-1 w-6" />
 
+      {/* Sync button */}
+      <SyncButton btnSize={btnSize} iconSize={iconSize} tooltipSide={tooltipSide} />
+
       {/* Auth button */}
       {!authLoading && (
         <Tooltip>
@@ -399,5 +407,101 @@ export function Sidebar() {
 
       <UserAccountPanel />
     </aside>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sync button component
+// ---------------------------------------------------------------------------
+
+function SyncButton({
+  btnSize,
+  iconSize,
+  tooltipSide,
+}: {
+  btnSize: string;
+  iconSize: string;
+  tooltipSide: "left" | "right";
+}) {
+  const { isAuthenticated } = useAuthState();
+  const syncState = useSyncState();
+
+  const isSyncing = syncState.status === "syncing";
+
+  const handleClick = () => {
+    if (!isAuthenticated) return;
+    triggerManualSync();
+  };
+
+  const getSyncIcon = () => {
+    switch (syncState.status) {
+      case "offline":
+        return <CloudOff className={iconSize} />;
+      case "error":
+        return <AlertCircle className={iconSize} />;
+      case "disabled":
+        return <CloudOff className={iconSize} />;
+      default:
+        return isSyncing
+          ? <RefreshCw className={`${iconSize} animate-spin`} />
+          : <Cloud className={iconSize} />;
+    }
+  };
+
+  const getTooltipText = () => {
+    if (!isAuthenticated) return "Sign in to sync";
+    switch (syncState.status) {
+      case "syncing":
+        return "Syncing…";
+      case "synced": {
+        const ago = syncState.lastSyncedAt
+          ? `${Math.round((Date.now() - syncState.lastSyncedAt) / 1000)}s ago`
+          : "";
+        return `Synced${ago ? ` ${ago}` : ""} — click to sync now`;
+      }
+      case "error":
+        return `Sync error — click to retry`;
+      case "offline":
+        return "Offline — changes saved locally";
+      case "disabled":
+        return "Sign in to enable sync";
+      default:
+        return "Sync with cloud";
+    }
+  };
+
+  const statusColor = () => {
+    switch (syncState.status) {
+      case "synced":
+        return "text-green-400 hover:text-green-300";
+      case "syncing":
+        return "text-blue-400 hover:text-blue-300";
+      case "error":
+        return "text-red-400 hover:text-red-300";
+      case "offline":
+      case "disabled":
+        return "text-muted-foreground/50";
+      default:
+        return "text-muted-foreground hover:text-foreground";
+    }
+  };
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleClick}
+          disabled={!isAuthenticated || isSyncing}
+          className={`${btnSize} ${statusColor()}`}
+        >
+          {getSyncIcon()}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side={tooltipSide}>
+        {getTooltipText()}
+      </TooltipContent>
+    </Tooltip>
   );
 }
