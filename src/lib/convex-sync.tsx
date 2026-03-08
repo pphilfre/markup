@@ -108,6 +108,7 @@ export function ConvexSync() {
     saveWorkspace({
       userId,
       activeTabId: slice.activeTabId,
+      openTabIds: slice.openTabIds,
       folders: slice.folders.map((f) => ({
         id: f.id,
         name: f.name,
@@ -182,7 +183,7 @@ export function ConvexSync() {
 
       useEditorStore.setState({
         tabs,
-        openTabIds: tabs.map((t) => t.id),
+        openTabIds: workspace.openTabIds?.length ? workspace.openTabIds.filter((id) => tabs.some((t) => t.id === id)) : tabs.map((t) => t.id),
         activeTabId: workspace.activeTabId,
         folders: workspace.folders.map((f) => ({
           ...f,
@@ -236,6 +237,7 @@ export function ConvexSync() {
       saveWorkspace({
         userId,
         activeTabId: s.activeTabId,
+        openTabIds: s.openTabIds,
         folders: s.folders.map((f) => ({
           id: f.id,
           name: f.name,
@@ -281,15 +283,12 @@ export function ConvexSync() {
       }));
 
       const currentActiveId = useEditorStore.getState().activeTabId;
-      const currentOpenTabIds = useEditorStore.getState().openTabIds;
       const activeStillExists = tabs.some((t) => t.id === currentActiveId);
-      // Keep existing open tabs that still exist, add any new ones
+      // Use remote openTabIds if available, otherwise keep current open tabs that still exist
       const tabIdSet = new Set(tabs.map((t) => t.id));
-      const updatedOpenTabIds = currentOpenTabIds.filter((id) => tabIdSet.has(id));
-      // Add any new tabs that weren't in the old set
-      for (const t of tabs) {
-        if (!updatedOpenTabIds.includes(t.id)) updatedOpenTabIds.push(t.id);
-      }
+      const updatedOpenTabIds = workspace.openTabIds?.length
+        ? workspace.openTabIds.filter((id) => tabIdSet.has(id))
+        : useEditorStore.getState().openTabIds.filter((id) => tabIdSet.has(id));
 
       useEditorStore.setState({
         tabs,
@@ -373,6 +372,7 @@ export function ConvexSync() {
     const unsub = useEditorStore.subscribe(
       (s) => ({
         tabs: s.tabs,
+        openTabIds: s.openTabIds,
         activeTabId: s.activeTabId,
         folders: s.folders,
         viewMode: s.viewMode,

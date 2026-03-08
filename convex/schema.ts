@@ -86,6 +86,7 @@ export default defineSchema({
   workspaces: defineTable({
     userId: v.string(),
     activeTabId: v.union(v.string(), v.null()),
+    openTabIds: v.optional(v.array(v.string())),
     folders: v.array(folderValidator),
     viewMode: v.string(),
     theme: v.string(),

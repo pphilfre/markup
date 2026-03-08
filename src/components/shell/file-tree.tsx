@@ -59,6 +59,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { isTauri } from "@/lib/tauri";
 import { useEditorStore, Folder, Tab, NoteType } from "@/lib/store";
 
 const TAG_PALETTE = [
@@ -339,7 +340,22 @@ function FolderItem({
   if (sortAsc === true) folderTabs = [...folderTabs].sort((a, b) => a.title.localeCompare(b.title));
   else if (sortAsc === false) folderTabs = [...folderTabs].sort((a, b) => b.title.localeCompare(a.title));
 
-  const exportFolder = () => {
+  const exportFolder = async () => {
+    if (isTauri()) {
+      try {
+        const { open } = await import("@tauri-apps/plugin-dialog");
+        const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+        const dirPath = await open({ directory: true, title: "Choose folder to save files" });
+        if (dirPath) {
+          for (const tab of folderTabs) {
+            await writeTextFile(`${dirPath}/${tab.title}`, tab.content);
+          }
+        }
+        return;
+      } catch {
+        // Fall through to web download
+      }
+    }
     folderTabs.forEach((tab) => {
       const blob = new Blob([tab.content], { type: "text/markdown" });
       const url = URL.createObjectURL(blob);
@@ -515,7 +531,23 @@ function FileItem({
     ? tab.title.replace(/\.(md|canvas|mindmap)$/, "")
     : tab.title;
 
-  const exportFile = () => {
+  const exportFile = async () => {
+    if (isTauri()) {
+      try {
+        const { save } = await import("@tauri-apps/plugin-dialog");
+        const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+        const filePath = await save({
+          defaultPath: tab.title,
+          filters: [{ name: "Files", extensions: [tab.title.split(".").pop() || "md"] }],
+        });
+        if (filePath) {
+          await writeTextFile(filePath, tab.content);
+        }
+        return;
+      } catch {
+        // Fall through to web download
+      }
+    }
     const blob = new Blob([tab.content], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1017,11 +1049,8 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
   return (
     <aside className={cn("flex h-full flex-col border-r border-border bg-card", !mobile && "w-52")}>
       {/* Header row 1: title + main controls */}
-      <div className="flex items-center justify-between px-2 py-1.5 border-b border-border gap-1">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground shrink-0">
-          Files
-        </span>
-        <div className="flex items-center gap-0.5 flex-wrap justify-end">
+      <div className="flex items-center px-2 py-1.5 border-b border-border gap-1">
+        <div className="flex items-center gap-0.5 flex-wrap">
           <DropdownMenu>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1178,11 +1207,6 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
             </Button>
           )}
         </div>
-      </div>
-
-      {/* Header row 2: profile selector */}
-      <div className="flex items-center px-2 py-1 border-b border-border/50">
-        <ProfileSelector />
       </div>
 
       {/* Tag filter panel */}
@@ -1342,6 +1366,10 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+      {/* Profile selector — bottom */}
+      <div className="flex items-center px-2 py-1.5 border-t border-border">
+        <ProfileSelector />
+      </div>
     </aside>
   );
 }

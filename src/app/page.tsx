@@ -6,6 +6,7 @@ import { SettingsPanel } from "@/components/shell/settings-panel";
 import { ThemeSync } from "@/components/theme-provider";
 import { MobileLayout } from "@/components/shell/mobile-layout";
 import { ConvexSync } from "@/lib/convex-sync";
+import { TauriFileSync } from "@/lib/tauri-file-sync";
 import { SharedNoteViewer } from "@/components/shell/shared-note-viewer";
 import { useEditorStore } from "@/lib/store";
 import { useGlobalKeybinds } from "@/lib/keybinds";
@@ -18,6 +19,13 @@ export default function Home() {
   const isMobile = useIsMobile();
   const sidebarPosition = useEditorStore((s) => s.settings.sidebarPosition);
   const compactMode = useEditorStore((s) => s.settings.compactMode);
+  const zoomLevel = useEditorStore((s) => s.zoomLevel);
+
+  // Apply zoom level to the root element
+  useEffect(() => {
+    document.documentElement.style.zoom = `${zoomLevel}%`;
+    return () => { document.documentElement.style.zoom = ""; };
+  }, [zoomLevel]);
 
   // Check for shared note URL parameter
   const [shareId, setShareId] = useState<string | null>(null);
@@ -100,6 +108,7 @@ export default function Home() {
     <div className={`flex h-screen${compactMode ? " compact-mode" : ""}`}>
       <ThemeSync />
       <ConvexSync />
+      <TauriFileSync />
       <SpotlightSearch />
       <SettingsPanel />
       {sidebarPosition === "left" && sidebarElements}

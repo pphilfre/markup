@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { useEditorStore } from "@/lib/store";
+import { isTauri } from "@/lib/tauri";
 import {
   Dialog,
   DialogContent,
@@ -244,29 +245,78 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
   const handleExport = useCallback(async () => {
     if (targetTabs.length === 0) return;
 
+    /** Save content to a file, using Tauri save dialog if available */
+    const saveFile = async (content: string, filename: string, mimeType: string) => {
+      if (isTauri()) {
+        try {
+          const { save } = await import("@tauri-apps/plugin-dialog");
+          const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+          const filePath = await save({
+            defaultPath: filename,
+            filters: [{ name: "Files", extensions: [filename.split(".").pop() || "*"] }],
+          });
+          if (filePath) {
+            await writeTextFile(filePath, content);
+          }
+          return;
+        } catch {
+          // Fall through to web download
+        }
+      }
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    /** Save binary blob to a file, using Tauri save dialog if available */
+    const saveBlobFile = async (blob: Blob, filename: string) => {
+      if (isTauri()) {
+        try {
+          const { save } = await import("@tauri-apps/plugin-dialog");
+          const { writeFile } = await import("@tauri-apps/plugin-fs");
+          const filePath = await save({
+            defaultPath: filename,
+            filters: [{ name: "Files", extensions: [filename.split(".").pop() || "*"] }],
+          });
+          if (filePath) {
+            const buffer = await blob.arrayBuffer();
+            await writeFile(filePath, new Uint8Array(buffer));
+          }
+          return;
+        } catch {
+          // Fall through to web download
+        }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
     if (targetTabs.length === 1) {
       const tab = targetTabs[0];
-      let blob: Blob;
       let filename: string;
+      let content: string;
 
       switch (options.format) {
         case "md":
-          blob = new Blob([tab.content], { type: "text/markdown" });
+          content = tab.content;
           filename = tab.title;
           break;
         case "json":
-          blob = new Blob(
-            [generateJson(tab.title, tab.content, options.includeMetadata, tab.tags, tab.folderId)],
-            { type: "application/json" }
-          );
+          content = generateJson(tab.title, tab.content, options.includeMetadata, tab.tags, tab.folderId);
           filename = tab.title.replace(/\.md$/, ".json");
           break;
-        case "html": {
-          const html = generateHtml(tab.title, tab.content, options.fontSize);
-          blob = new Blob([html], { type: "text/html" });
+        case "html":
+          content = generateHtml(tab.title, tab.content, options.fontSize);
           filename = tab.title.replace(/\.md$/, ".html");
           break;
-        }
         case "pdf": {
           const html = generateHtml(tab.title, tab.content, options.fontSize);
           // Use a hidden iframe to avoid about:blank URL in print headers
@@ -297,14 +347,12 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
           onOpenChange(false);
           return;
         }
+        default:
+          content = tab.content;
+          filename = tab.title;
       }
 
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      await saveFile(content, filename, options.format === "json" ? "application/json" : options.format === "html" ? "text/html" : "text/markdown");
     } else {
       // Multiple files — zip them
       const JSZip = (await import("jszip")).default;
@@ -338,12 +386,8 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
       }
 
       const blob = await zip.generateAsync({ type: "blob" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `markup-export-${options.format}.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const zipFilename = `markup-export-${options.format}.zip`;
+      await saveBlobFile(blob, zipFilename);
     }
 
     onOpenChange(false);

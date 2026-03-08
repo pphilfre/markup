@@ -6,6 +6,7 @@ import { api } from "../../../convex/_generated/api";
 import { useAuthState } from "@/components/convex-client-provider";
 import { signIn } from "@/lib/tauri";
 import { useEditorStore, type ViewMode } from "@/lib/store";
+import { isTauri } from "@/lib/tauri";
 import {
   Dialog,
   DialogContent,
@@ -98,8 +99,14 @@ export function ShareDialog({ open, onOpenChange, tabId }: ShareDialogProps) {
     }
   }, [existingShare]);
 
+  const getShareOrigin = () => {
+    if (typeof window === "undefined") return "";
+    if (isTauri()) return "https://markup.freddiephilpot.dev";
+    return window.location.origin;
+  };
+
   const shareUrl = existingShare
-    ? `${typeof window !== "undefined" ? window.location.origin : ""}/?note=${existingShare.shareId}`
+    ? `${getShareOrigin()}/?note=${existingShare.shareId}`
     : null;
 
   const handleShare = useCallback(async () => {

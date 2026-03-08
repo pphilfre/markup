@@ -186,6 +186,14 @@ interface EditorState {
   // Theme
   toggleTheme: () => void;
 
+  // Zoom
+  zoomLevel: number;
+  setZoomLevel: (level: number) => void;
+
+  // Local file sync (Tauri)
+  localSyncFolder: string | null;
+  setLocalSyncFolder: (folder: string | null) => void;
+
   // Editor helpers — smart, multi-line aware
   insertSnippet: (snippet: string) => void;
   insertLinePrefix: (prefix: string) => void;
@@ -257,6 +265,8 @@ interface PersistedState {
   profiles: Profile[];
   activeProfileId: string;
   tagColors: Record<string, string>;
+  zoomLevel: number;
+  localSyncFolder: string | null;
 }
 
 async function saveToStorage(state: PersistedState) {
@@ -289,6 +299,8 @@ export const useEditorStore = create<EditorState>()(
     profiles: [...DEFAULT_PROFILES],
     activeProfileId: DEFAULT_PROFILE_ID,
     tagColors: {},
+    zoomLevel: 100,
+    localSyncFolder: null,
 
     setEditorView: (view) => set({ editorView: view }),
 
@@ -389,6 +401,8 @@ export const useEditorStore = create<EditorState>()(
           profiles: saved.profiles?.length ? saved.profiles : [...DEFAULT_PROFILES],
           activeProfileId: saved.activeProfileId ?? DEFAULT_PROFILE_ID,
           tagColors: saved.tagColors ?? {},
+          zoomLevel: saved.zoomLevel ?? 100,
+          localSyncFolder: saved.localSyncFolder ?? null,
           _hydrated: true,
         });
       } else {
@@ -584,6 +598,10 @@ export const useEditorStore = create<EditorState>()(
         theme: s.theme === "dark" ? "light" : "dark",
       })),
 
+    setZoomLevel: (level) => set({ zoomLevel: Math.max(50, Math.min(200, level)) }),
+
+    setLocalSyncFolder: (folder) => set({ localSyncFolder: folder }),
+
     // Raw snippet insert
     insertSnippet: (snippet) => {
       const { editorView } = get();
@@ -686,6 +704,8 @@ useEditorStore.subscribe(
     profiles: s.profiles,
     activeProfileId: s.activeProfileId,
     tagColors: s.tagColors,
+    zoomLevel: s.zoomLevel,
+    localSyncFolder: s.localSyncFolder,
   }),
   (slice) => {
     if (persistTimeout) clearTimeout(persistTimeout);

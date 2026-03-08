@@ -125,6 +125,26 @@ export function useGlobalKeybinds() {
         useEditorStore.getState().insertSnippet("![alt]($SEL)");
       },
 
+      // Zoom in — Ctrl+=
+      "Control+Equal": (e: KeyboardEvent) => {
+        e.preventDefault();
+        const { zoomLevel, setZoomLevel } = useEditorStore.getState();
+        setZoomLevel(zoomLevel + 10);
+      },
+
+      // Zoom out — Ctrl+-
+      "Control+Minus": (e: KeyboardEvent) => {
+        e.preventDefault();
+        const { zoomLevel, setZoomLevel } = useEditorStore.getState();
+        setZoomLevel(zoomLevel - 10);
+      },
+
+      // Reset zoom — Ctrl+0
+      "Control+Digit0": (e: KeyboardEvent) => {
+        e.preventDefault();
+        useEditorStore.getState().setZoomLevel(100);
+      },
+
       // Tab switching: Alt+1 through Alt+9
       "Alt+Digit1": (e: KeyboardEvent) => { e.preventDefault(); switchToTabIndex(0); },
       "Alt+Digit2": (e: KeyboardEvent) => { e.preventDefault(); switchToTabIndex(1); },

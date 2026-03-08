@@ -26,7 +26,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { apiBase, signOut } from "@/lib/tauri";
+import { apiBase, signOut, isTauri } from "@/lib/tauri";
 import { useEditorStore, DEFAULT_SETTINGS, type Settings as SettingsType } from "@/lib/store";
 import { useIsMobile } from "@/lib/use-mobile";
 import { WorkOsWidgets, UserProfile, UserSessions, UserSecurity } from "@workos-inc/widgets";
@@ -670,13 +670,22 @@ function DataSection({
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleExportNotes = useCallback(() => {
+  const handleExportNotes = useCallback(async () => {
     if (tabs.length === 0) return;
     const dataStr = JSON.stringify(
       tabs.map((t) => ({ title: t.title, content: t.content, tags: t.tags })),
       null,
       2
     );
+    if (isTauri()) {
+      try {
+        const { save } = await import("@tauri-apps/plugin-dialog");
+        const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+        const filePath = await save({ defaultPath: "markup-notes.json", filters: [{ name: "JSON", extensions: ["json"] }] });
+        if (filePath) { await writeTextFile(filePath, dataStr); }
+        return;
+      } catch { /* fall through */ }
+    }
     const blob = new Blob([dataStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -690,7 +699,17 @@ function DataSection({
     const { get } = await import("idb-keyval");
     const state = await get("markup-state");
     if (!state) return;
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const dataStr = JSON.stringify(state, null, 2);
+    if (isTauri()) {
+      try {
+        const { save } = await import("@tauri-apps/plugin-dialog");
+        const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+        const filePath = await save({ defaultPath: "markup-workspace-backup.json", filters: [{ name: "JSON", extensions: ["json"] }] });
+        if (filePath) { await writeTextFile(filePath, dataStr); }
+        return;
+      } catch { /* fall through */ }
+    }
+    const blob = new Blob([dataStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -753,14 +772,44 @@ function DataSection({
     const state = await get("markup-state");
     if (!state) return;
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const filename = `markup-backup-${timestamp}.json`;
+    const dataStr = JSON.stringify(state, null, 2);
+    if (isTauri()) {
+      try {
+        const { save } = await import("@tauri-apps/plugin-dialog");
+        const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+        const filePath = await save({ defaultPath: filename, filters: [{ name: "JSON", extensions: ["json"] }] });
+        if (filePath) { await writeTextFile(filePath, dataStr); }
+        return;
+      } catch { /* fall through */ }
+    }
+    const blob = new Blob([dataStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `markup-backup-${timestamp}.json`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
   }, []);
+
+  const localSyncFolder = useEditorStore((s) => s.localSyncFolder);
+  const setLocalSyncFolder = useEditorStore((s) => s.setLocalSyncFolder);
+
+  const handleChooseSyncFolder = useCallback(async () => {
+    if (!isTauri()) return;
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const folder = await open({
+        directory: true,
+        title: "Choose local sync folder",
+      });
+      if (folder) {
+        setLocalSyncFolder(folder as string);
+      }
+    } catch {
+      // Dialog cancelled or not available
+    }
+  }, [setLocalSyncFolder]);
 
   return (
     <div className="space-y-5">
@@ -770,6 +819,44 @@ function DataSection({
           Export, import, and manage your workspace data
         </p>
       </div>
+
+      {/* Local File Sync (Tauri only) */}
+      {isTauri() && (
+        <>
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-xs text-foreground">Local File Sync</span>
+              <p className="text-[11px] text-muted-foreground">
+                {localSyncFolder
+                  ? `Syncing to: ${localSyncFolder}`
+                  : "Sync files to a local folder"}
+              </p>
+            </div>
+            <div className="flex gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleChooseSyncFolder}
+                className="gap-1.5 text-xs"
+              >
+                <HardDrive className="h-3.5 w-3.5" />
+                {localSyncFolder ? "Change" : "Choose Folder"}
+              </Button>
+              {localSyncFolder && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setLocalSyncFolder(null)}
+                  className="text-xs text-destructive hover:text-destructive"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+          </div>
+          <Separator />
+        </>
+      )}
 
       {/* Export notes */}
       <div className="flex items-center justify-between">
