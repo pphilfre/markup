@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConvexClientProvider } from "@/components/convex-client-provider";
+import { SpeedInsights } from "@vercel/speed-insights/next"
+import { Analytics } from "@vercel/analytics/next"
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,7 +16,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const SITE_URL = "https://markup-editor.vercel.app";
+const SITE_URL = "https://markup.freddiephilpot.dev";
 const SITE_NAME = "Markup";
 const IS_DEV = process.env.NODE_ENV === "development";
 const SITE_DESCRIPTION =
@@ -190,6 +192,8 @@ export default function RootLayout({
             {children}
           </TooltipProvider>
         </ConvexClientProvider>
+        <SpeedInsights/>
+        <Analytics/>
       </body>
     </html>
   );

@@ -32,6 +32,8 @@
     "@tauri-apps/plugin-opener": "^2.5.3",
     "@tauri-apps/plugin-shell": "^2.3.5",
     "@types/d3-force": "^3.0.10",
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "@workos-inc/authkit-nextjs": "^2.15.0",
     "@workos-inc/widgets": "^1.9.1",
     "class-variance-authority": "^0.7.1",
