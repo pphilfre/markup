@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Settings,
   X,
@@ -30,12 +30,13 @@ import { apiBase, getClientAuthToken, openExternal, signOut, isTauri } from "@/l
 import { useEditorStore, DEFAULT_SETTINGS, type Settings as SettingsType } from "@/lib/store";
 import { useIsMobile } from "@/lib/use-mobile";
 import { WorkOsWidgets, UserProfile, UserSessions, UserSecurity } from "@workos-inc/widgets";
+import { getUpdateState, subscribeToUpdateState, downloadUpdate, installUpdate } from "@/lib/tauri-updater";
 
 // ---------------------------------------------------------------------------
 // Sidebar sections
 // ---------------------------------------------------------------------------
 
-type SectionId = "general" | "user" | "appearance" | "typography" | "markdown" | "editing" | "privacy" | "data" | "about";
+type SectionId = "general" | "user" | "appearance" | "typography" | "markdown" | "editing" | "privacy" | "data" | "about" | "updates";
 
 const SECTIONS: { id: SectionId; label: string; icon: typeof Settings; group?: string }[] = [
   { id: "general", label: "General", icon: Palette },
@@ -46,6 +47,7 @@ const SECTIONS: { id: SectionId; label: string; icon: typeof Settings; group?: s
   { id: "editing", label: "Editing", icon: PenTool, group: "Editor" },
   { id: "privacy", label: "Privacy & Security", icon: Lock, group: "Account" },
   { id: "data", label: "Data", icon: Database, group: "Account" },
+  { id: "updates", label: "Updates", icon: Timer, group: "Account" },
   { id: "about", label: "About & Contact", icon: Info },
 ];
 
@@ -62,6 +64,20 @@ const FONT_OPTIONS = [
   { label: "Sans-serif", value: "var(--font-geist-sans), ui-sans-serif, sans-serif" },
   { label: "Custom…", value: "__custom__" },
 ];
+
+/** Load available fonts from the browser's Local Font Access API (if available) */
+async function loadSystemFonts(): Promise<string[]> {
+  try {
+    // @ts-expect-error - queryLocalFonts is not in TS types yet
+    if (typeof window.queryLocalFonts !== "function") return [];
+    // @ts-expect-error - queryLocalFonts is not in TS types yet
+    const fonts: { family: string }[] = await window.queryLocalFonts();
+    const families = Array.from(new Set(fonts.map((f) => f.family))).sort();
+    return families;
+  } catch {
+    return [];
+  }
+}
 
 const ACCENT_PRESETS = [
   "#7c3aed", "#6366f1", "#3b82f6", "#06b6d4", "#14b8a6",
@@ -336,7 +352,7 @@ function UserSection() {
       </div>
 
       {/* Widget */}
-      <div className="min-h-[200px] max-h-[320px] overflow-y-auto [&_*]:!bg-transparent [&_*]:!font-inherit [&_iframe]:max-h-[280px]">
+      <div className="[&_*]:!bg-transparent [&_*]:!font-inherit [&_iframe]:max-h-[400px]">
         {authToken && sessionId && !widgetTimedOut ? (
           <WorkOsWidgets
             apiHostname={apiBase() ? new URL(apiBase()).hostname : window.location.hostname}
@@ -413,6 +429,23 @@ function TypographySection({
   settings: SettingsType;
   update: (p: Partial<SettingsType>) => void;
 }) {
+  const [systemFonts, setSystemFonts] = useState<string[]>([]);
+  const [fontSearchQuery, setFontSearchQuery] = useState("");
+  const isCustom = !FONT_OPTIONS.some((o) => o.value === settings.fontFamily);
+  const selectedPreset = isCustom ? "__custom__" : settings.fontFamily;
+
+  // Load system fonts when "Custom…" is selected
+  useEffect(() => {
+    if (selectedPreset !== "__custom__" && !isCustom) return;
+    loadSystemFonts().then(setSystemFonts);
+  }, [selectedPreset, isCustom]);
+
+  const filteredFonts = useMemo(() => {
+    if (!fontSearchQuery) return systemFonts;
+    const q = fontSearchQuery.toLowerCase();
+    return systemFonts.filter((f) => f.toLowerCase().includes(q));
+  }, [systemFonts, fontSearchQuery]);
+
   return (
     <div className="space-y-5">
       <div>
@@ -424,28 +457,69 @@ function TypographySection({
 
       <SelectRow
         label="Font Family"
-        value={FONT_OPTIONS.some((o) => o.value === settings.fontFamily) ? settings.fontFamily : "__custom__"}
+        value={selectedPreset}
         options={FONT_OPTIONS}
         onChange={(v) => {
           if (v === "__custom__") {
-            update({
-              fontFamily: settings.customFontFamily || settings.fontFamily,
-            });
+            update({ fontFamily: settings.customFontFamily || settings.fontFamily });
+            loadSystemFonts().then(setSystemFonts);
           } else {
-            update({
-              fontFamily: v,
-              customFontFamily: null,
-            });
+            update({ fontFamily: v, customFontFamily: null });
           }
         }}
       />
 
-      {(!FONT_OPTIONS.some((o) => o.value === settings.fontFamily) || settings.customFontFamily) && (
-        <div className="space-y-1.5">
-          <label className="text-xs text-muted-foreground">Custom Font Family</label>
+      {(isCustom || selectedPreset === "__custom__") && (
+        <div className="space-y-2">
+          <label className="text-xs text-muted-foreground">Custom Font</label>
+
+          {/* System font picker */}
+          {systemFonts.length > 0 ? (
+            <div className="space-y-1.5">
+              <input
+                type="text"
+                value={fontSearchQuery}
+                onChange={(e) => setFontSearchQuery(e.target.value)}
+                placeholder="Search fonts…"
+                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring"
+              />
+              <div className="max-h-40 overflow-y-auto rounded-md border border-input bg-background">
+                {filteredFonts.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-muted-foreground">No fonts found</p>
+                ) : (
+                  filteredFonts.map((font) => {
+                    const val = `'${font}', ui-monospace, monospace`;
+                    const active = settings.fontFamily === val || settings.customFontFamily === val;
+                    return (
+                      <button
+                        key={font}
+                        onClick={() => update({ fontFamily: val, customFontFamily: val })}
+                        className={cn(
+                          "w-full text-left px-3 py-1.5 text-xs transition-colors hover:bg-muted",
+                          active && "bg-accent text-accent-foreground"
+                        )}
+                        style={{ fontFamily: font }}
+                      >
+                        {font}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {systemFonts.length} system fonts available
+              </p>
+            </div>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">
+              System font access not available in this browser. Enter a font name manually below.
+            </p>
+          )}
+
+          {/* Manual entry fallback */}
           <input
             type="text"
-            value={settings.customFontFamily ?? settings.fontFamily}
+            value={settings.customFontFamily ?? (isCustom ? settings.fontFamily : "")}
             onChange={(e) =>
               update({
                 customFontFamily: e.target.value || null,
@@ -455,9 +529,11 @@ function TypographySection({
             placeholder={`e.g. "Fira Code", ui-monospace, monospace`}
             className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
-          <p className="text-[11px] text-muted-foreground">
-            Uses a CSS <code>font-family</code> stack. Fonts must be installed on this device to render correctly.
-          </p>
+          {settings.fontFamily && (
+            <p className="text-[11px] text-muted-foreground" style={{ fontFamily: settings.fontFamily }}>
+              Preview: The quick brown fox jumps over the lazy dog
+            </p>
+          )}
         </div>
       )}
 
@@ -774,7 +850,7 @@ function DataSection({
   const handleExportNotes = useCallback(async () => {
     if (tabs.length === 0) return;
     const dataStr = JSON.stringify(
-      tabs.map((t) => ({ title: t.title, content: t.content, tags: t.tags })),
+      tabs.map((t) => ({ title: t.title, content: t.content, tags: t.tags, noteType: t.noteType })),
       null,
       2
     );
@@ -819,12 +895,20 @@ function DataSection({
     URL.revokeObjectURL(url);
   }, []);
 
-  const handleImportMarkdown = useCallback(
+  /** Import .md, .canvas, .mindmap files — multiple at once */
+  const handleImportFiles = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files || files.length === 0) return;
       setImporting(true);
-      const createTab = useEditorStore.getState().createTab;
+
+      const EXT_TYPE: Record<string, import("@/lib/store").NoteType> = {
+        ".md": "note",
+        ".markdown": "note",
+        ".txt": "note",
+        ".canvas": "whiteboard",
+        ".mindmap": "mindmap",
+      };
 
       const readPromises = Array.from(files).map(
         (file) =>
@@ -832,17 +916,35 @@ function DataSection({
             const reader = new FileReader();
             reader.onload = () => {
               const content = reader.result as string;
-              const title = file.name.endsWith(".md") ? file.name : file.name + ".md";
-              createTab();
+              const dotIdx = file.name.lastIndexOf(".");
+              const ext = dotIdx !== -1 ? file.name.slice(dotIdx).toLowerCase() : ".md";
+              const noteType: import("@/lib/store").NoteType = EXT_TYPE[ext] ?? "note";
+
+              // Normalise title: ensure correct extension on disk
+              const EXT_NORM: Record<import("@/lib/store").NoteType, string> = {
+                note: ".md",
+                whiteboard: ".canvas",
+                mindmap: ".mindmap",
+              };
+              const baseName = file.name.replace(/\.(md|markdown|txt|canvas|mindmap)$/i, "");
+              const title = baseName + EXT_NORM[noteType];
+
+              const newTab: import("@/lib/store").Tab = {
+                id: crypto.randomUUID(),
+                title,
+                content,
+                folderId: null,
+                tags: [],
+                pinned: false,
+                noteType,
+              };
+
               const state = useEditorStore.getState();
-              const newTab = state.tabs[state.tabs.length - 1];
-              if (newTab) {
-                useEditorStore.setState({
-                  tabs: state.tabs.map((t) =>
-                    t.id === newTab.id ? { ...t, title, content } : t
-                  ),
-                });
-              }
+              useEditorStore.setState({
+                tabs: [...state.tabs, newTab],
+                openTabIds: [...state.openTabIds, newTab.id],
+                activeTabId: newTab.id,
+              });
               resolve();
             };
             reader.readAsText(file);
@@ -858,7 +960,6 @@ function DataSection({
   );
 
   const handleRebuildSearchIndex = useCallback(() => {
-    // Dispatch event for any search index rebuild logic
     document.dispatchEvent(new CustomEvent("rebuild-search-index"));
     alert("Search index has been rebuilt.");
   }, []);
@@ -973,19 +1074,19 @@ function DataSection({
 
       <Separator />
 
-      {/* Import markdown */}
+      {/* Import files */}
       <div className="flex items-center justify-between">
         <div>
-          <span className="text-xs text-foreground">Import Markdown</span>
-          <p className="text-[11px] text-muted-foreground">Import .md files into your workspace</p>
+          <span className="text-xs text-foreground">Import Files</span>
+          <p className="text-[11px] text-muted-foreground">Import .md, .canvas, .mindmap files</p>
         </div>
         <div>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".md,.markdown,.txt"
+            accept=".md,.markdown,.txt,.canvas,.mindmap"
             multiple
-            onChange={handleImportMarkdown}
+            onChange={handleImportFiles}
             className="hidden"
           />
           <Button
@@ -1100,6 +1201,88 @@ const ICON_THEMES = [
   { label: "Colorful", value: "colorful" },
 ];
 
+const BUILTIN_THEMES: { id: SettingsType["themeMode"]; label: string; description: string; preview: { bg: string; sidebar: string; text: string; accent: string } }[] = [
+  {
+    id: "light",
+    label: "Light",
+    description: "Clean white background",
+    preview: { bg: "#ffffff", sidebar: "#f5f5f5", text: "#1a1a1a", accent: "#7c3aed" },
+  },
+  {
+    id: "dark",
+    label: "Dark",
+    description: "Classic dark theme",
+    preview: { bg: "#1a1a1a", sidebar: "#242424", text: "#e5e5e5", accent: "#7c3aed" },
+  },
+  {
+    id: "system",
+    label: "System",
+    description: "Follows OS preference",
+    preview: { bg: "#e8e8e8", sidebar: "#d0d0d0", text: "#333", accent: "#7c3aed" },
+  },
+  {
+    id: "solarized-light",
+    label: "Solarized Light",
+    description: "Warm, low-contrast palette",
+    preview: { bg: "#fdf6e3", sidebar: "#eee8d5", text: "#657b83", accent: "#268bd2" },
+  },
+  {
+    id: "nord-dark",
+    label: "Nord Dark",
+    description: "Arctic, north-bluish palette",
+    preview: { bg: "#2e3440", sidebar: "#3b4252", text: "#eceff4", accent: "#88c0d0" },
+  },
+  {
+    id: "catppuccin-mocha",
+    label: "Catppuccin Mocha",
+    description: "Soothing pastel dark theme",
+    preview: { bg: "#1e1e2e", sidebar: "#181825", text: "#cdd6f4", accent: "#cba6f7" },
+  },
+  {
+    id: "catppuccin-latte",
+    label: "Catppuccin Latte",
+    description: "Soothing pastel light theme",
+    preview: { bg: "#eff1f5", sidebar: "#e6e9ef", text: "#4c4f69", accent: "#8839ef" },
+  },
+  {
+    id: "gruvbox-dark",
+    label: "Gruvbox Dark",
+    description: "Retro groove dark palette",
+    preview: { bg: "#282828", sidebar: "#3c3836", text: "#ebdbb2", accent: "#d79921" },
+  },
+  {
+    id: "gruvbox-light",
+    label: "Gruvbox Light",
+    description: "Retro groove light palette",
+    preview: { bg: "#fbf1c7", sidebar: "#f2e5bc", text: "#3c3836", accent: "#b57614" },
+  },
+  {
+    id: "tokyo-night",
+    label: "Tokyo Night",
+    description: "Vibrant city-lights dark theme",
+    preview: { bg: "#1a1b26", sidebar: "#16161e", text: "#c0caf5", accent: "#7aa2f7" },
+  },
+  {
+    id: "everforest-light",
+    label: "Everforest Light",
+    description: "Natural, earthy light palette",
+    preview: { bg: "#fdf6e3", sidebar: "#f4f0d9", text: "#5c6a72", accent: "#8da101" },
+  },
+];
+
+const CUSTOM_COLOR_FIELDS: { key: keyof import("@/lib/store").CustomThemeColors; label: string }[] = [
+  { key: "background", label: "Editor Background" },
+  { key: "foreground", label: "Text Color" },
+  { key: "sidebar", label: "Sidebar Background" },
+  { key: "sidebarForeground", label: "Sidebar Text" },
+  { key: "popover", label: "Menu Background" },
+  { key: "border", label: "Border Color" },
+  { key: "muted", label: "Muted Background" },
+  { key: "mutedForeground", label: "Muted Text" },
+  { key: "accent", label: "Highlight Background" },
+  { key: "primary", label: "Primary Color" },
+];
+
 function AppearanceSection({
   settings,
   update,
@@ -1111,12 +1294,15 @@ function AppearanceSection({
   theme: string;
   toggleTheme: () => void;
 }) {
-  const handleThemeModeChange = (mode: string) => {
-    update({ themeMode: mode as SettingsType["themeMode"] });
-    // Also apply the actual theme immediately
-    if (mode === "light") {
+  const [showCustomColors, setShowCustomColors] = useState(false);
+
+  const handleThemeModeChange = (mode: SettingsType["themeMode"]) => {
+    update({ themeMode: mode });
+    const lightModes: SettingsType["themeMode"][] = ["light", "solarized-light", "catppuccin-latte", "gruvbox-light", "everforest-light"];
+    const darkModes: SettingsType["themeMode"][] = ["dark", "nord-dark", "catppuccin-mocha", "gruvbox-dark", "tokyo-night"];
+    if (lightModes.includes(mode)) {
       if (theme === "dark") toggleTheme();
-    } else if (mode === "dark") {
+    } else if (darkModes.includes(mode)) {
       if (theme === "light") toggleTheme();
     } else {
       // system
@@ -1125,6 +1311,9 @@ function AppearanceSection({
       if (!prefersDark && theme === "dark") toggleTheme();
     }
   };
+
+  const customColors = settings.customThemeColors ?? {};
+  const hasCustomColors = Object.values(customColors).some(Boolean);
 
   return (
     <div className="space-y-6">
@@ -1136,25 +1325,38 @@ function AppearanceSection({
         </p>
       </div>
 
-      {/* Theme mode buttons */}
-      <div className="space-y-1.5">
-        <label className="text-xs text-muted-foreground">Mode</label>
-        <div className="flex gap-2">
-          {(["light", "dark", "system"] as const).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => handleThemeModeChange(mode)}
-              className={cn(
-                "flex-1 rounded-md border px-3 py-2 text-xs font-medium capitalize transition-colors",
-                settings.themeMode === mode
-                  ? "border-foreground bg-accent text-accent-foreground"
-                  : "border-input bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
-              )}
+      {/* Theme cards */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {BUILTIN_THEMES.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => handleThemeModeChange(t.id)}
+            className={cn(
+              "relative rounded-lg border-2 p-2 text-left transition-all hover:scale-[1.02]",
+              settings.themeMode === t.id
+                ? "border-primary shadow-sm"
+                : "border-input hover:border-muted-foreground/40"
+            )}
+          >
+            {/* Mini preview */}
+            <div
+              className="mb-2 h-10 rounded overflow-hidden flex"
+              style={{ background: t.preview.bg }}
             >
-              {mode}
-            </button>
-          ))}
-        </div>
+              <div className="w-1/4 h-full" style={{ background: t.preview.sidebar }} />
+              <div className="flex-1 p-1 space-y-1">
+                <div className="h-1.5 rounded-full w-3/4" style={{ background: t.preview.text, opacity: 0.7 }} />
+                <div className="h-1.5 rounded-full w-1/2" style={{ background: t.preview.accent }} />
+                <div className="h-1.5 rounded-full w-2/3" style={{ background: t.preview.text, opacity: 0.4 }} />
+              </div>
+            </div>
+            <p className="text-xs font-medium leading-none">{t.label}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{t.description}</p>
+            {settings.themeMode === t.id && (
+              <div className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary" />
+            )}
+          </button>
+        ))}
       </div>
 
       {/* Accent colour */}
@@ -1192,6 +1394,76 @@ function AppearanceSection({
             />
           </label>
         </div>
+      </div>
+
+      <Separator />
+
+      {/* ── Custom Theme Colors ───────────────────────────── */}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-sm font-semibold">Custom Colors</h3>
+          <div className="flex items-center gap-2">
+            {hasCustomColors && (
+              <button
+                onClick={() => update({ customThemeColors: {} })}
+                className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+              >
+                Reset
+              </button>
+            )}
+            <button
+              onClick={() => setShowCustomColors((v) => !v)}
+              className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showCustomColors ? "Hide" : "Customize"}
+            </button>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground mb-3">
+          Override individual colors for the current theme
+        </p>
+
+        {showCustomColors && (
+          <div className="space-y-2">
+            {CUSTOM_COLOR_FIELDS.map(({ key, label }) => (
+              <div key={key} className="flex items-center justify-between gap-3">
+                <span className="text-xs text-muted-foreground flex-1">{label}</span>
+                <div className="flex items-center gap-2">
+                  {customColors[key] && (
+                    <button
+                      onClick={() => update({ customThemeColors: { ...customColors, [key]: undefined } })}
+                      className="text-[10px] text-muted-foreground hover:text-destructive"
+                    >
+                      ×
+                    </button>
+                  )}
+                  <label
+                    className="relative h-6 w-10 rounded border border-input cursor-pointer overflow-hidden"
+                    style={{ background: customColors[key] || "transparent" }}
+                    title={customColors[key] || "Click to set"}
+                  >
+                    <input
+                      type="color"
+                      value={customColors[key] || "#000000"}
+                      onChange={(e) =>
+                        update({ customThemeColors: { ...customColors, [key]: e.target.value } })
+                      }
+                      className="absolute inset-0 cursor-pointer opacity-0"
+                    />
+                    {!customColors[key] && (
+                      <span className="absolute inset-0 flex items-center justify-center text-[9px] text-muted-foreground">
+                        +
+                      </span>
+                    )}
+                  </label>
+                  {customColors[key] && (
+                    <span className="text-[10px] text-muted-foreground font-mono w-14">{customColors[key]}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <Separator />
@@ -1298,6 +1570,121 @@ function AppearanceSection({
           onChange={(v) => update({ checkboxStyle: v as SettingsType["checkboxStyle"] })}
         />
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Updates section (Tauri only)
+// ---------------------------------------------------------------------------
+
+function UpdatesSection() {
+  const [updateState, setUpdateState] = useState(getUpdateState());
+
+  useEffect(() => {
+    const unsub = subscribeToUpdateState(() => setUpdateState(getUpdateState()));
+    return unsub;
+  }, []);
+
+  const { status, info, error, downloadProgress } = updateState;
+
+  const statusLabel: Record<string, string> = {
+    idle: "Not checked",
+    checking: "Checking for updates…",
+    "up-to-date": "You're up to date",
+    available: `Update available: v${info?.version}`,
+    downloading: `Downloading… ${downloadProgress !== null ? `${downloadProgress}%` : ""}`,
+    ready: `Ready to install v${info?.version}`,
+    error: `Error: ${error}`,
+  };
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-sm font-semibold mb-1">Updates</h3>
+        <p className="text-xs text-muted-foreground mb-3">
+          {isTauri()
+            ? "Manage application updates"
+            : "Updates are managed automatically on the web."}
+        </p>
+      </div>
+
+      {isTauri() ? (
+        <>
+          <div className="rounded-md border border-border p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Status</span>
+              <span className={cn(
+                "text-xs font-medium",
+                status === "up-to-date" && "text-green-400",
+                status === "available" && "text-yellow-400",
+                status === "ready" && "text-primary",
+                status === "error" && "text-destructive",
+              )}>
+                {statusLabel[status] ?? status}
+              </span>
+            </div>
+            {info?.body && (
+              <p className="text-[11px] text-muted-foreground border-t border-border pt-2">
+                {info.body}
+              </p>
+            )}
+            {status === "downloading" && downloadProgress !== null && (
+              <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all duration-300"
+                  style={{ width: `${downloadProgress}%` }}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs gap-1.5"
+              disabled={status === "checking" || status === "downloading"}
+              onClick={() => {
+                document.dispatchEvent(new CustomEvent("check-for-updates"));
+              }}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Check for Updates
+            </Button>
+
+            {status === "available" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs gap-1.5"
+                onClick={downloadUpdate}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download
+              </Button>
+            )}
+
+            {status === "ready" && (
+              <Button
+                size="sm"
+                className="text-xs gap-1.5"
+                onClick={installUpdate}
+              >
+                Restart & Install
+              </Button>
+            )}
+          </div>
+
+          <p className="text-[11px] text-muted-foreground">
+            Updates are checked automatically on startup and downloaded in the background.
+          </p>
+        </>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          You are using the web version of Markup. Updates are applied automatically.
+        </p>
+      )}
     </div>
   );
 }
@@ -1457,6 +1844,7 @@ export function SettingsPanel() {
         <DataSection settings={settings} update={updateSettings} reset={reset} />
       )}
       {activeSection === "about" && <AboutSection />}
+      {activeSection === "updates" && <UpdatesSection />}
     </>
   );
 
@@ -1524,7 +1912,7 @@ export function SettingsPanel() {
       {/* Panel */}
       <div
         ref={panelRef}
-        className="relative w-full max-w-3xl h-[70vh] rounded-lg border border-border bg-popover shadow-2xl animate-in slide-in-from-top-2 fade-in duration-150 flex flex-col overflow-hidden"
+        className="relative w-full max-w-4xl h-[80vh] rounded-lg border border-border bg-popover shadow-2xl animate-in slide-in-from-top-2 fade-in duration-150 flex flex-col overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
@@ -1620,7 +2008,7 @@ export function SettingsPanel() {
         {/* Footer */}
         <div className="flex items-center justify-between border-t border-border px-5 py-2 shrink-0">
           <span className="text-[10px] text-muted-foreground">
-            Settings auto-save to cache
+            Settings saved automatically
           </span>
           <kbd className="text-[10px] text-muted-foreground font-mono">Alt+S</kbd>
         </div>

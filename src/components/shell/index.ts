@@ -6,3 +6,5 @@ export { FileTree } from "./file-tree";
 export { GraphView } from "./graph-view";
 export { WhiteboardView } from "./whiteboard";
 export { MindmapView } from "./mindmap";
+export { OrgPanel } from "./org-panel";
+export { UpdateBanner } from "./update-banner";

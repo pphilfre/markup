@@ -948,7 +948,7 @@ export function GraphView() {
       </div>
 
       {/* Right panel: collapsible settings */}
-      <div className="absolute top-3 right-3 z-10 max-w-[220px]">
+      <div className="absolute top-3 right-3 z-10 w-[220px] max-w-[calc(100vw-24px)]">
         <div className="rounded-md border border-border bg-card/90 backdrop-blur-sm overflow-hidden">
           <button
             onClick={() => setPanelOpen(!panelOpen)}
@@ -960,7 +960,7 @@ export function GraphView() {
           </button>
 
           {panelOpen && (
-            <div className="border-t border-border/50 max-h-[calc(100vh-120px)] overflow-y-auto">
+            <div className="border-t border-border/50 max-h-[calc(100dvh-120px)] overflow-y-auto">
               {/* Filters */}
               <PanelSection title="Filters" icon={Filter} defaultOpen>
                 <ToggleRow

@@ -1052,3 +1052,99 @@ body > .rt-BaseDialogOverlay .rt-BaseDialogContent,
 [data-code-theme="solarized"] .hljs-template-variable { color: #cb4b16; }
 [data-code-theme="solarized"] .hljs-type,
 [data-code-theme="solarized"] .hljs-params { color: #b58900; }
+
+
+/* ── ==Highlight== syntax ────────────────────────────────────────────────── */
+.markdown-body mark {
+  background: oklch(0.9 0.15 90 / 0.5);
+  color: inherit;
+  padding: 0.1em 0.2em;
+  border-radius: 2px;
+}
+.dark .markdown-body mark {
+  background: oklch(0.7 0.18 80 / 0.35);
+  color: inherit;
+}
+
+/* ── Superscript / Subscript ─────────────────────────────────────────────── */
+.markdown-body sup {
+  font-size: 0.75em;
+  vertical-align: super;
+  line-height: 0;
+}
+.markdown-body sub {
+  font-size: 0.75em;
+  vertical-align: sub;
+  line-height: 0;
+}
+
+/* ── Definition lists ────────────────────────────────────────────────────── */
+.markdown-body dl {
+  margin: 1em 0;
+}
+.markdown-body dt {
+  font-weight: 600;
+  border-bottom: 2px dashed currentColor;
+  display: inline-block;
+  cursor: help;
+  margin-top: 0.75em;
+  opacity: 0.85;
+}
+.markdown-body dd {
+  margin-left: 1.5em;
+  margin-top: 0.25em;
+  color: var(--muted-foreground);
+  font-size: 0.9em;
+}
+
+/* ── Footnotes ───────────────────────────────────────────────────────────── */
+.markdown-body .footnotes {
+  margin-top: 2em;
+  padding-top: 1em;
+  border-top: 1px solid var(--border);
+  font-size: 0.875em;
+  color: var(--muted-foreground);
+}
+.markdown-body .footnotes ol {
+  padding-left: 1.5em;
+}
+.markdown-body .footnotes li {
+  margin-bottom: 0.5em;
+}
+/* Footnote back-link */
+.markdown-body .data-footnote-backref {
+  text-decoration: none;
+  margin-left: 0.25em;
+}
+/* Footnote reference superscript */
+.markdown-body sup a[data-footnote-ref] {
+  color: var(--accent-color, #7c3aed);
+  text-decoration: none;
+  font-size: 0.8em;
+}
+.markdown-body sup a[data-footnote-ref]:hover {
+  text-decoration: underline;
+}
+
+/* ── Code block highlight containment fix ───────────────────────────────── */
+/* Ensure syntax highlighting tokens don't bleed outside pre>code blocks */
+.markdown-body :not(pre) > code {
+  /* Inline code: reset any hljs color that might leak */
+  color: inherit;
+}
+.markdown-body pre {
+  /* Isolate stacking context so highlight colors stay inside */
+  isolation: isolate;
+}
+/* Prevent hljs token colors from applying to non-code content */
+.markdown-body p .hljs-keyword,
+.markdown-body p .hljs-string,
+.markdown-body p .hljs-comment,
+.markdown-body p .hljs-number,
+.markdown-body p .hljs-title,
+.markdown-body p .hljs-variable,
+.markdown-body p .hljs-type {
+  color: inherit !important;
+  font-style: normal !important;
+  font-weight: inherit !important;
+}

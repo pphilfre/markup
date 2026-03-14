@@ -107,7 +107,7 @@ export default function Home() {
   );
 
   return (
-    <div className={`flex h-screen${compactMode ? " compact-mode" : ""}`}>
+    <div className={`flex h-screen overflow-hidden${compactMode ? " compact-mode" : ""}`}>
       <ThemeSync />
       <ConvexSync />
       <TauriFileSync />

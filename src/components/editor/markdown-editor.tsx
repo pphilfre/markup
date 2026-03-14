@@ -16,7 +16,6 @@ import { darkTheme, darkHighlightStyle, lightTheme, lightHighlightStyle } from "
 import { EditorContextMenu } from "./context-menu";
 
 // ── Smart list indentation ────────────────────────────────────────────────
-// Handles Enter in lists, Tab/Shift-Tab for indent/dedent
 
 const listContinueRegex = /^(\s*)([-*+]|(\d+)\.) (\[[ x]\] )?/;
 
@@ -33,7 +32,7 @@ function smartListKeymap() {
           if (!match) return false;
 
           const [fullMatch, indent, marker, num, checkbox] = match;
-          // If the line is ONLY the list prefix (empty item), remove it
+          // If the line is ONLY the list prefix (empty item), remove it and exit list
           if (line.text.trim() === fullMatch.trim()) {
             view.dispatch({
               changes: { from: line.from, to: line.to, insert: "" },
@@ -42,7 +41,7 @@ function smartListKeymap() {
             return true;
           }
 
-          // Build continuation
+          // Build continuation marker
           let nextMarker = marker;
           if (num !== undefined) {
             nextMarker = (parseInt(num, 10) + 1) + ".";
@@ -62,7 +61,6 @@ function smartListKeymap() {
           const { from, to } = state.selection.main;
           const line = state.doc.lineAt(from);
           if (!listContinueRegex.test(line.text)) return false;
-          // Indent: first line or selected lines
           const startLine = state.doc.lineAt(from);
           const endLine = state.doc.lineAt(to);
           const changes: { from: number; to: number; insert: string }[] = [];
@@ -100,6 +98,24 @@ function smartListKeymap() {
   );
 }
 
+// ── Plain Enter — always insert a newline (runs at low priority, after list handler) ──
+
+function plainEnterKeymap() {
+  return keymap.of([
+    {
+      key: "Enter",
+      run: (view: EditorView) => {
+        const { from, to } = view.state.selection.main;
+        view.dispatch({
+          changes: { from, to, insert: "\n" },
+          selection: { anchor: from + 1 },
+        });
+        return true;
+      },
+    },
+  ]);
+}
+
 export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => void } = {}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -116,7 +132,6 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
-  // Stable callback for content changes
   const onContentChange = useCallback(
     (tabId: string) =>
       EditorView.updateListener.of((update: ViewUpdate) => {
@@ -127,7 +142,6 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
     [updateContent]
   );
 
-  // Build settings-dependent extensions
   const buildSettingsExtensions = useCallback((s: typeof settings) => [
     EditorView.theme({
       "&": {
@@ -143,6 +157,8 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
         paddingLeft: s.editorMargin + "px",
         paddingRight: s.editorMargin + "px",
       },
+      // Fix: scope code block highlighting so it doesn't bleed past the closing fence
+      ".cm-line .tok-string": { color: "inherit" },
       ...(s.cursorAnimation === "none"
         ? { ".cm-cursor": { animationName: "none" } }
         : s.cursorAnimation === "smooth"
@@ -159,7 +175,6 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
     EditorState.tabSize.of(s.tabSize),
   ], []);
 
-  // Reconfigure settings without recreating editor
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
@@ -168,22 +183,18 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
     });
   }, [settings, buildSettingsExtensions]);
 
-  // Create / recreate editor when active tab or theme changes
   useEffect(() => {
     if (!containerRef.current || !activeTab) return;
 
     const s = settingsRef.current;
 
-    // Destroy previous instance
     if (viewRef.current) {
       viewRef.current.destroy();
       viewRef.current = null;
     }
 
-    // Reset compartment for fresh editor
     settingsCompartment.current = new Compartment();
 
-    // Inline formatting keymaps (Ctrl+B, Ctrl+I)
     const formattingKeymap = keymap.of([
       {
         key: "Mod-b",
@@ -226,8 +237,11 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
         foldGutter(),
         highlightSelectionMatches(),
         history(),
+        // List continuation runs at high priority (before defaultKeymap)
         ...(s.continueListOnEnter ? [smartListKeymap()] : []),
         formattingKeymap,
+        // Plain Enter at normal priority — ensures newline always works
+        plainEnterKeymap(),
         keymap.of([
           ...defaultKeymap,
           ...historyKeymap,
@@ -253,11 +267,8 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
 
     viewRef.current = view;
     setEditorView(view);
-
-    // Auto-focus editor
     view.focus();
 
-    // Sync scroll for split mode
     let scrollHandler: (() => void) | null = null;
     if (onScroll) {
       const scroller = containerRef.current.querySelector(".cm-scroller") as HTMLElement | null;
@@ -271,9 +282,12 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
       }
     }
 
+    // Capture ref for cleanup
+    const container = containerRef.current;
+
     return () => {
       if (scrollHandler) {
-        const scroller = containerRef.current?.querySelector(".cm-scroller") as HTMLElement | null;
+        const scroller = container?.querySelector(".cm-scroller") as HTMLElement | null;
         scroller?.removeEventListener("scroll", scrollHandler);
       }
       view.destroy();

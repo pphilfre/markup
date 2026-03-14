@@ -6,10 +6,26 @@ import { EditorView } from "@codemirror/view";
 // Types
 // ---------------------------------------------------------------------------
 
-export type ViewMode = "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap";
+export type ViewMode = "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap" | "inline";
 export type Theme = "dark" | "light";
-export type ThemeMode = "light" | "dark" | "system";
+export type ThemeMode = "light" | "dark" | "system" | "solarized-light" | "nord-dark" | "catppuccin-mocha" | "catppuccin-latte" | "gruvbox-dark" | "gruvbox-light" | "tokyo-night" | "everforest-light";
 export type NoteType = "note" | "whiteboard" | "mindmap";
+
+export interface CustomThemeColors {
+  background?: string;
+  foreground?: string;
+  sidebar?: string;
+  sidebarForeground?: string;
+  popover?: string;
+  popoverForeground?: string;
+  border?: string;
+  muted?: string;
+  mutedForeground?: string;
+  accent?: string;
+  accentForeground?: string;
+  primary?: string;
+  primaryForeground?: string;
+}
 
 export interface Tab {
   id: string;
@@ -64,6 +80,7 @@ export interface Settings {
   multiCursorSupport: boolean;
   // Appearance - Theme
   themeMode: ThemeMode;
+  customThemeColors: CustomThemeColors;
   // Appearance - UI
   sidebarPosition: "left" | "right";
   sidebarWidth: number; // px
@@ -78,6 +95,9 @@ export interface Settings {
   checkboxStyle: "default" | "rounded" | "filled" | "minimal";
   // Custom fonts
   customFontFamily: string | null;
+  // Panel sizes (px) — persisted, desktop only
+  fileTreeWidth: number;
+  splitRatio: number; // 0–1, fraction for editor in split view
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -108,6 +128,7 @@ export const DEFAULT_SETTINGS: Settings = {
   multiCursorSupport: true,
   // Appearance - Theme
   themeMode: "dark",
+  customThemeColors: {},
   // Appearance - UI
   sidebarPosition: "left",
   sidebarWidth: 44,
@@ -121,6 +142,9 @@ export const DEFAULT_SETTINGS: Settings = {
   linkStyle: "default",
   checkboxStyle: "default",
   customFontFamily: null,
+  // Panel sizes
+  fileTreeWidth: 208,
+  splitRatio: 0.5,
 };
 
 interface EditorState {
@@ -593,12 +617,47 @@ export const useEditorStore = create<EditorState>()(
 
     toggleView: () =>
       set((s) => {
-        const cycle: ViewMode[] = ["editor", "split", "preview", "graph", "whiteboard", "mindmap"];
+        const cycle: ViewMode[] = ["editor", "split", "preview", "inline", "graph", "whiteboard", "mindmap"];
         const idx = cycle.indexOf(s.viewMode);
         return { viewMode: cycle[(idx + 1) % cycle.length] };
       }),
 
-    setViewMode: (mode) => set({ viewMode: mode }),
+    setViewMode: (mode) => {
+      const activeTab = (() => {
+        const s = useEditorStore.getState();
+        return s.tabs.find((t) => t.id === s.activeTabId);
+      })();
+
+      // When switching to whiteboard/mindmap, create a new file if the active tab
+      // is not already that type — never overwrite an existing file.
+      if (mode === "whiteboard") {
+        if (!activeTab || activeTab.noteType !== "whiteboard") {
+          const tab = newTab(activeTab?.folderId ?? null, "whiteboard");
+          set((s) => ({
+            tabs: [...s.tabs, tab],
+            openTabIds: [...s.openTabIds, tab.id],
+            activeTabId: tab.id,
+            viewMode: "whiteboard" as ViewMode,
+          }));
+          return;
+        }
+      }
+      if (mode === "mindmap") {
+        if (!activeTab || activeTab.noteType !== "mindmap") {
+          const tab = newTab(activeTab?.folderId ?? null, "mindmap");
+          set((s) => ({
+            tabs: [...s.tabs, tab],
+            openTabIds: [...s.openTabIds, tab.id],
+            activeTabId: tab.id,
+            viewMode: "mindmap" as ViewMode,
+          }));
+          return;
+        }
+      }
+      // For note-type views, if the active tab is a canvas/mindmap, don't change it —
+      // just update the viewMode so the next note tab will use it.
+      set({ viewMode: mode });
+    },
 
     toggleTheme: () =>
       set((s) => ({
