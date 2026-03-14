@@ -548,7 +548,7 @@ export function ConvexSync() {
         activeTabId: s.activeTabId,
         folders: s.folders,
         viewMode: s.viewMode,
-        theme: (s.theme === "dark" || s.theme === "light") ? s.theme : (s.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light"),
+        theme: (s.theme === "dark" || s.theme === "light") ? s.theme : (String(s.theme).toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: s.fileTreeOpen,
         // Only send allowed fields to Convex (must match settingsValidator)
         settings: Object.fromEntries(
