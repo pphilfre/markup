@@ -123,10 +123,12 @@ export function ConvexSync() {
     lastPushedTabs.current = JSON.stringify(
       tabsPayload.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: t.noteType ?? "note" }))
     );
+    // Only allow 'dark' or 'light' for theme
+    const safeTheme = slice.theme === "dark" || slice.theme === "light" ? slice.theme : (slice.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light");
     lastPushedWorkspace.current = JSON.stringify({
       activeTabId: slice.activeTabId,
       viewMode: slice.viewMode,
-      theme: slice.theme,
+      theme: safeTheme,
       fileTreeOpen: slice.fileTreeOpen,
     });
 
@@ -176,7 +178,7 @@ export function ConvexSync() {
           sortOrder: f.sortOrder,
         })),
         viewMode: slice.viewMode,
-        theme: slice.theme,
+        theme: safeTheme,
         fileTreeOpen: slice.fileTreeOpen,
         settings: { ...DEFAULT_SETTINGS, ...sanitizedSettings } as Settings,
         profiles: slice.profiles.map((p) => ({ id: p.id, name: p.name })),
@@ -221,7 +223,7 @@ export function ConvexSync() {
           parentId: f.parentId ?? null,
         })),
         viewMode: workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap",
-        theme: workspace.theme as "dark" | "light",
+        theme: (workspace.theme === "dark" || workspace.theme === "light") ? workspace.theme : (workspace.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: workspace.fileTreeOpen,
         settings: { ...DEFAULT_SETTINGS, ...workspace.settings } as Settings,
         profiles: workspace.profiles?.length
@@ -236,7 +238,7 @@ export function ConvexSync() {
       lastPushedWorkspace.current = JSON.stringify({
         activeTabId: workspace.activeTabId,
         viewMode: workspace.viewMode,
-        theme: workspace.theme,
+        theme: (workspace.theme === "dark" || workspace.theme === "light") ? workspace.theme : (workspace.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: workspace.fileTreeOpen,
       });
 
@@ -331,7 +333,7 @@ export function ConvexSync() {
           parentId: f.parentId ?? null,
         })),
         viewMode: workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap",
-        theme: workspace.theme as "dark" | "light",
+        theme: (workspace.theme === "dark" || workspace.theme === "light") ? workspace.theme : (workspace.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: workspace.fileTreeOpen,
         settings: { ...DEFAULT_SETTINGS, ...workspace.settings } as Settings,
         profiles: workspace.profiles?.length
@@ -348,7 +350,7 @@ export function ConvexSync() {
       lastPushedWorkspace.current = JSON.stringify({
         activeTabId: workspace.activeTabId,
         viewMode: workspace.viewMode,
-        theme: workspace.theme,
+        theme: (workspace.theme === "dark" || workspace.theme === "light") ? workspace.theme : (workspace.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: workspace.fileTreeOpen,
       });
 
@@ -403,7 +405,7 @@ export function ConvexSync() {
           sortOrder: f.sortOrder,
         })),
         viewMode: s.viewMode,
-        theme: s.theme,
+        theme: (s.theme === "dark" || s.theme === "light") ? s.theme : (s.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: s.fileTreeOpen,
         settings: { ...DEFAULT_SETTINGS, ...sanitizedSettings } as Settings,
         profiles: s.profiles.map((p) => ({ id: p.id, name: p.name })),
@@ -466,7 +468,7 @@ export function ConvexSync() {
           parentId: f.parentId ?? null,
         })),
         viewMode: workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap",
-        theme: workspace.theme as "dark" | "light",
+        theme: (workspace.theme === "dark" || workspace.theme === "light") ? workspace.theme : (workspace.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: workspace.fileTreeOpen,
         ...(settingsChanged ? { settings: newSettings } : {}),
         profiles: workspace.profiles?.length
@@ -545,7 +547,7 @@ export function ConvexSync() {
         activeTabId: s.activeTabId,
         folders: s.folders,
         viewMode: s.viewMode,
-        theme: s.theme,
+        theme: (s.theme === "dark" || s.theme === "light") ? s.theme : (s.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: s.fileTreeOpen,
         // Only send allowed fields to Convex (must match settingsValidator)
         settings: Object.fromEntries(
