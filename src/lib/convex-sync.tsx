@@ -150,6 +150,20 @@ export function ConvexSync() {
         }
       }
 
+
+      // Only send allowed fields to Convex (must match settingsValidator)
+      const allowedSettingsKeys = [
+        "fontFamily", "fontSize", "lineHeight", "tabSize", "editorMargin", "accentColor", "hideMdExtensions",
+        "letterSpacing", "maxLineWidth", "showInvisibleCharacters", "autoCloseBrackets", "autoCloseMarkdownFormatting",
+        "autoFormatLists", "continueListOnEnter", "smartQuotes", "smartDashes", "convertTabsToSpaces", "wordWrap",
+        "highlightCurrentLine", "highlightMatchingBrackets", "cursorAnimation", "multiCursorSupport", "themeMode",
+        "sidebarPosition", "sidebarWidth", "compactMode", "showIconsInSidebar", "showFileExtensions", "iconTheme",
+        "codeBlockTheme", "headingStyle", "linkStyle", "checkboxStyle", "customFontFamily"
+      ];
+      const sanitizedSettings = Object.fromEntries(
+        Object.entries(slice.settings).filter(([k]) => allowedSettingsKeys.includes(k))
+      );
+
       await saveWorkspace({
         userId,
         activeTabId: slice.activeTabId,
@@ -164,7 +178,7 @@ export function ConvexSync() {
         viewMode: slice.viewMode,
         theme: slice.theme,
         fileTreeOpen: slice.fileTreeOpen,
-        settings: slice.settings,
+        settings: sanitizedSettings,
         profiles: slice.profiles.map((p) => ({ id: p.id, name: p.name })),
         activeProfileId: slice.activeProfileId,
       });
