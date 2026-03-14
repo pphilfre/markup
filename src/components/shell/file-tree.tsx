@@ -944,6 +944,8 @@ function ProfileSelector() {
 export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobileClose?: () => void } = {}) {
   const fileTreeOpen = useEditorStore((s) => s.fileTreeOpen);
   const toggleFileTree = useEditorStore((s) => s.toggleFileTree);
+  const fileTreeWidth = useEditorStore((s) => s.settings.fileTreeWidth);
+  const updateSettings = useEditorStore((s) => s.updateSettings);
   const tabs = useEditorStore((s) => s.tabs);
   const folders = useEditorStore((s) => s.folders);
   const createFolder = useEditorStore((s) => s.createFolder);
@@ -1046,8 +1048,41 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
     );
   }
 
+  // Resize handle logic (desktop only)
+  const draggingRef = { current: false };
+  const pendingWidthRef = { current: fileTreeWidth };
+
+  const onResizeMouseDown = !mobile ? (e: React.MouseEvent) => {
+    e.preventDefault();
+    draggingRef.current = true;
+    const startX = e.clientX;
+    const startWidth = fileTreeWidth;
+
+    const onMove = (ev: MouseEvent) => {
+      if (!draggingRef.current) return;
+      const next = Math.max(160, Math.min(480, startWidth + ev.clientX - startX));
+      pendingWidthRef.current = next;
+      document.documentElement.style.setProperty("--filetree-drag-width", `${next}px`);
+    };
+
+    const onUp = () => {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      document.documentElement.style.removeProperty("--filetree-drag-width");
+      updateSettings({ fileTreeWidth: Math.round(pendingWidthRef.current) });
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  } : undefined;
+
   return (
-    <aside className={cn("flex h-full flex-col border-r border-border bg-card", !mobile && "w-52")}>
+    <aside
+      className={cn("relative flex h-full flex-col border-r border-border bg-card overflow-hidden")}
+      style={!mobile ? { width: `var(--filetree-drag-width, ${fileTreeWidth}px)`, maxWidth: "100vw" } : undefined}
+    >
       {/* Header row 1: title + main controls */}
       <div className="flex items-center px-2 py-1.5 border-b border-border gap-1">
         <div className="flex items-center gap-0.5 flex-wrap">
@@ -1370,6 +1405,14 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
       <div className="flex items-center px-2 py-1.5 border-t border-border">
         <ProfileSelector />
       </div>
+
+      {/* Resize handle — desktop only */}
+      {!mobile && (
+        <div
+          onMouseDown={onResizeMouseDown}
+          className="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors z-10"
+        />
+      )}
     </aside>
   );
 }

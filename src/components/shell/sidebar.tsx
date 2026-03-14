@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import {
   FileText,
   List,
@@ -25,6 +25,8 @@ import {
   Cloud,
   CloudOff,
   AlertCircle,
+  Building2,
+  ArrowLeftRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +46,7 @@ import { useEditorStore } from "@/lib/store";
 import { useAuthState } from "@/components/convex-client-provider";
 import { useSyncState, triggerManualSync } from "@/lib/convex-sync";
 import { UserAccountPanel } from "@/components/shell/user-account-panel";
+import { OrgPanel } from "@/components/shell/org-panel";
 import { signIn, signOut } from "@/lib/tauri";
 
 
@@ -63,6 +66,7 @@ export function Sidebar() {
   const [headingOpen, setHeadingOpen] = useState(false);
   const { isAuthenticated, user, isLoading: authLoading } = useAuthState();
   const sidebarWidth = useEditorStore((s) => s.settings.sidebarWidth);
+  const updateSettings = useEditorStore((s) => s.updateSettings);
   const compactMode = useEditorStore((s) => s.settings.compactMode);
   const showIcons = useEditorStore((s) => s.settings.showIconsInSidebar);
   const sidebarPosition = useEditorStore((s) => s.settings.sidebarPosition);
@@ -71,10 +75,42 @@ export function Sidebar() {
   const iconSize = compactMode ? "h-3.5 w-3.5" : "h-4 w-4";
   const tooltipSide = sidebarPosition === "right" ? "left" : "right";
 
+  // Resize handle
+  const draggingRef = useRef(false);
+  const pendingWidthRef = useRef(sidebarWidth);
+
+  const onResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    draggingRef.current = true;
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+
+    const onMove = (ev: MouseEvent) => {
+      if (!draggingRef.current) return;
+      const delta = sidebarPosition === "right" ? startX - ev.clientX : ev.clientX - startX;
+      const next = Math.max(36, Math.min(80, startWidth + delta));
+      pendingWidthRef.current = next;
+      // Apply visually immediately via CSS variable without store update
+      document.documentElement.style.setProperty("--sidebar-drag-width", `${next}px`);
+    };
+
+    const onUp = () => {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      document.documentElement.style.removeProperty("--sidebar-drag-width");
+      updateSettings({ sidebarWidth: Math.round(pendingWidthRef.current) });
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, [sidebarWidth, sidebarPosition, updateSettings]);
+
   return (
     <aside
-      className="flex h-full flex-col items-center border-r border-border bg-card py-2"
-      style={{ width: `${sidebarWidth}px` }}
+      className="relative flex h-full flex-col items-center border-r border-border bg-card py-2"
+      style={{ width: `var(--sidebar-drag-width, ${sidebarWidth}px)` }}
     >
       {/* App icon */}
       <Tooltip>
@@ -90,7 +126,7 @@ export function Sidebar() {
 
       {/* Quick-insert tools */}
       {showIcons && (
-      <div className="flex flex-1 flex-col items-center gap-0.5 overflow-y-auto py-1">
+      <div className="flex min-h-0 flex-1 flex-col items-center gap-0.5 overflow-y-auto py-1">
         {/* Bold */}
         <Tooltip>
           <TooltipTrigger asChild>
@@ -317,7 +353,8 @@ export function Sidebar() {
       )}
       {!showIcons && <div className="flex-1" />}
 
-      {/* Bottom: Auth + Settings */}
+      {/* Bottom: Auth + Settings — always visible */}
+      <div className="flex shrink-0 flex-col items-center gap-0.5">
       <Separator className="my-1 w-6" />
 
       {/* Sync button */}
@@ -389,6 +426,48 @@ export function Sidebar() {
         </Tooltip>
       )}
 
+      {/* Org button — shown for authenticated users */}
+      {isAuthenticated && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`${btnSize} text-muted-foreground hover:text-foreground`}
+                >
+                  <Building2 className={iconSize} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side={tooltipSide} align="end">
+                <DropdownMenuItem
+                  onClick={() =>
+                    document.dispatchEvent(
+                      new CustomEvent("open-org-panel", { detail: "switcher" })
+                    )
+                  }
+                >
+                  <ArrowLeftRight className="mr-2 h-3.5 w-3.5" />
+                  Switch Organisation
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    document.dispatchEvent(
+                      new CustomEvent("open-org-panel", { detail: "admin" })
+                    )
+                  }
+                >
+                  <Shield className="mr-2 h-3.5 w-3.5" />
+                  Admin Panel
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </TooltipTrigger>
+          <TooltipContent side={tooltipSide}>Organisation</TooltipContent>
+        </Tooltip>
+      )}
+
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -405,7 +484,17 @@ export function Sidebar() {
         </TooltipContent>
       </Tooltip>
 
+      </div>{/* end bottom section */}
+
+      {/* Resize handle */}
+      <div
+        onMouseDown={onResizeMouseDown}
+        className="absolute inset-y-0 w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors z-10"
+        style={{ [sidebarPosition === "right" ? "left" : "right"]: 0 }}
+      />
+
       <UserAccountPanel />
+      <OrgPanel />
     </aside>
   );
 }

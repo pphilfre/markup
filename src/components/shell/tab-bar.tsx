@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Plus, X, Sun, Moon, PenLine, Eye, Columns2, Network, Share2, FileOutput, PenTool, GitBranch, ZoomIn, ZoomOut } from "lucide-react";
+import { Plus, X, Sun, Moon, PenLine, Eye, Columns2, Network, Share2, FileOutput, PenTool, GitBranch, ZoomIn, ZoomOut, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
@@ -19,11 +19,17 @@ function TabItem({ id, title, isActive }: { id: string; title: string; isActive:
   const closeTab = useEditorStore((s) => s.closeTab);
   const renameTab = useEditorStore((s) => s.renameTab);
   const hideMd = useEditorStore((s) => s.settings.hideMdExtensions);
+  const noteType = useEditorStore((s) => s.tabs.find((t) => t.id === id)?.noteType ?? "note");
 
-  const displayName = hideMd && title.endsWith(".md") ? title.slice(0, -3) : title;
+  const EXT_MAP = { note: ".md", whiteboard: ".canvas", mindmap: ".mindmap" } as const;
+  const ext = EXT_MAP[noteType];
+
+  // Strip all known extensions for display
+  const stripExt = (t: string) => t.replace(/\.(md|canvas|mindmap)$/, "");
+  const displayName = hideMd && noteType === "note" ? stripExt(title) : title.replace(/\.(canvas|mindmap)$/, "");
 
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(title);
+  const [draft, setDraft] = useState(stripExt(title));
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -36,7 +42,9 @@ function TabItem({ id, title, isActive }: { id: string; title: string; isActive:
   const commit = () => {
     const trimmed = draft.trim();
     if (trimmed) {
-      renameTab(id, trimmed.endsWith(".md") ? trimmed : trimmed + ".md");
+      // Always preserve the correct extension for the file type
+      const base = trimmed.replace(/\.(md|canvas|mindmap)$/, "");
+      renameTab(id, base + ext);
     }
     setEditing(false);
   };
@@ -45,7 +53,7 @@ function TabItem({ id, title, isActive }: { id: string; title: string; isActive:
     <div
       onClick={() => switchTab(id)}
       onDoubleClick={() => {
-        setDraft(title);
+        setDraft(stripExt(title));
         setEditing(true);
       }}
       className={cn(
@@ -179,13 +187,13 @@ export function TabBar() {
 
         {/* View mode groups */}
         <div className="relative flex items-center rounded-md border border-border bg-muted/50 p-px">
-          {(viewMode === "editor" || viewMode === "split" || viewMode === "preview") && (
+          {(viewMode === "editor" || viewMode === "split" || viewMode === "preview" || viewMode === "inline") && (
             <div
               className="absolute top-px bottom-px rounded-sm bg-background shadow-sm transition-transform duration-200 ease-out"
               style={{
-                width: "calc(33.333% - 1px)",
+                width: "calc(25% - 1px)",
                 transform: `translateX(${
-                  viewMode === "editor" ? "0%" : viewMode === "split" ? "100%" : "200%"
+                  viewMode === "editor" ? "0%" : viewMode === "split" ? "100%" : viewMode === "preview" ? "200%" : "300%"
                 })`,
               }}
             />
@@ -194,6 +202,7 @@ export function TabBar() {
             { mode: "editor" as ViewMode, icon: PenLine, label: "Editor" },
             { mode: "split" as ViewMode, icon: Columns2, label: "Split" },
             { mode: "preview" as ViewMode, icon: Eye, label: "Preview" },
+            { mode: "inline" as ViewMode, icon: Layers, label: "Inline" },
           ] as const).map(({ mode, icon: Icon, label }) => (
             <Tooltip key={mode}>
               <TooltipTrigger asChild>
