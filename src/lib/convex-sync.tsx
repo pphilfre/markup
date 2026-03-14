@@ -178,7 +178,7 @@ export function ConvexSync() {
         viewMode: slice.viewMode,
         theme: slice.theme,
         fileTreeOpen: slice.fileTreeOpen,
-        settings: sanitizedSettings,
+        settings: { ...DEFAULT_SETTINGS, ...sanitizedSettings } as Settings,
         profiles: slice.profiles.map((p) => ({ id: p.id, name: p.name })),
         activeProfileId: slice.activeProfileId,
       });
@@ -379,6 +379,18 @@ export function ConvexSync() {
 
       setSyncState({ status: "syncing", error: null });
 
+      // Only send allowed fields to Convex (must match settingsValidator)
+      const allowedSettingsKeys = [
+        "fontFamily", "fontSize", "lineHeight", "tabSize", "editorMargin", "accentColor", "hideMdExtensions",
+        "letterSpacing", "maxLineWidth", "showInvisibleCharacters", "autoCloseBrackets", "autoCloseMarkdownFormatting",
+        "autoFormatLists", "continueListOnEnter", "smartQuotes", "smartDashes", "convertTabsToSpaces", "wordWrap",
+        "highlightCurrentLine", "highlightMatchingBrackets", "cursorAnimation", "multiCursorSupport", "themeMode",
+        "sidebarPosition", "sidebarWidth", "compactMode", "showIconsInSidebar", "showFileExtensions", "iconTheme",
+        "codeBlockTheme", "headingStyle", "linkStyle", "checkboxStyle", "customFontFamily"
+      ];
+      const sanitizedSettings = Object.fromEntries(
+        Object.entries(s.settings).filter(([k]) => allowedSettingsKeys.includes(k))
+      );
       saveWorkspace({
         userId,
         activeTabId: s.activeTabId,
@@ -393,7 +405,7 @@ export function ConvexSync() {
         viewMode: s.viewMode,
         theme: s.theme,
         fileTreeOpen: s.fileTreeOpen,
-        settings: s.settings,
+        settings: { ...DEFAULT_SETTINGS, ...sanitizedSettings } as Settings,
         profiles: s.profiles.map((p) => ({ id: p.id, name: p.name })),
         activeProfileId: s.activeProfileId,
       }).then(() => {
@@ -535,7 +547,17 @@ export function ConvexSync() {
         viewMode: s.viewMode,
         theme: s.theme,
         fileTreeOpen: s.fileTreeOpen,
-        settings: s.settings,
+        // Only send allowed fields to Convex (must match settingsValidator)
+        settings: Object.fromEntries(
+          Object.entries(s.settings).filter(([k]) => [
+            "fontFamily", "fontSize", "lineHeight", "tabSize", "editorMargin", "accentColor", "hideMdExtensions",
+            "letterSpacing", "maxLineWidth", "showInvisibleCharacters", "autoCloseBrackets", "autoCloseMarkdownFormatting",
+            "autoFormatLists", "continueListOnEnter", "smartQuotes", "smartDashes", "convertTabsToSpaces", "wordWrap",
+            "highlightCurrentLine", "highlightMatchingBrackets", "cursorAnimation", "multiCursorSupport", "themeMode",
+            "sidebarPosition", "sidebarWidth", "compactMode", "showIconsInSidebar", "showFileExtensions", "iconTheme",
+            "codeBlockTheme", "headingStyle", "linkStyle", "checkboxStyle", "customFontFamily"
+          ].includes(k))
+        ),
         profiles: s.profiles,
         activeProfileId: s.activeProfileId,
       }),
