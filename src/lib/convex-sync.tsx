@@ -406,7 +406,7 @@ export function ConvexSync() {
           sortOrder: f.sortOrder,
         })),
         viewMode: s.viewMode,
-        theme: (s.theme === "dark" || s.theme === "light") ? s.theme : (s.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light"),
+        theme: (s.theme === "dark" || s.theme === "light") ? s.theme : (String(s.theme).toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: s.fileTreeOpen,
         settings: { ...DEFAULT_SETTINGS, ...sanitizedSettings } as Settings,
         profiles: s.profiles.map((p) => ({ id: p.id, name: p.name })),
@@ -469,7 +469,7 @@ export function ConvexSync() {
           parentId: f.parentId ?? null,
         })),
         viewMode: workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap",
-        theme: (workspace.theme === "dark" || workspace.theme === "light") ? workspace.theme : (workspace.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light"),
+        theme: (workspace.theme === "dark" || workspace.theme === "light") ? workspace.theme : (String(workspace.theme).toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: workspace.fileTreeOpen,
         ...(settingsChanged ? { settings: newSettings } : {}),
         profiles: workspace.profiles?.length
