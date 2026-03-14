@@ -178,7 +178,7 @@ export function ConvexSync() {
         viewMode: slice.viewMode,
         theme: slice.theme,
         fileTreeOpen: slice.fileTreeOpen,
-        settings: sanitizedSettings,
+        settings: { ...DEFAULT_SETTINGS, ...sanitizedSettings },
         profiles: slice.profiles.map((p) => ({ id: p.id, name: p.name })),
         activeProfileId: slice.activeProfileId,
       });
