@@ -124,7 +124,8 @@ export function ConvexSync() {
       tabsPayload.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: t.noteType ?? "note" }))
     );
     // Only allow 'dark' or 'light' for theme
-    const safeTheme = slice.theme === "dark" || slice.theme === "light" ? slice.theme : (slice.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light");
+    const themeStr = String(slice.theme);
+    const safeTheme = themeStr === "dark" || themeStr === "light" ? themeStr : (themeStr.toLowerCase().includes("dark") ? "dark" : "light");
     lastPushedWorkspace.current = JSON.stringify({
       activeTabId: slice.activeTabId,
       viewMode: slice.viewMode,
