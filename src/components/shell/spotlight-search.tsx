@@ -21,6 +21,7 @@ import {
   PanelLeft,
   Share2,
   FileOutput,
+  Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/lib/store";
@@ -112,9 +113,15 @@ function useFeatures(): Feature[] {
       },
       {
         label: "Share Note",
-        keywords: ["share", "collaborate", "link", "publish"],
+        keywords: ["share", "collaborate", "link"],
         icon: <Share2 className="h-4 w-4" />,
         action: () => document.dispatchEvent(new CustomEvent("open-share")),
+      },
+      {
+        label: "Publish Site",
+        keywords: ["publish", "site", "website", "public page"],
+        icon: <Globe className="h-4 w-4" />,
+        action: () => document.dispatchEvent(new CustomEvent("open-publish")),
       },
       {
         label: "Export",
@@ -264,7 +271,7 @@ export function SpotlightSearch() {
 
   // Reset selection on filter change
   useEffect(() => {
-    setSelectedIndex(0);
+    queueMicrotask(() => setSelectedIndex(0));
   }, [query]);
 
   // Scroll active item into view

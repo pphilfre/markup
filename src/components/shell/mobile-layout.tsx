@@ -7,8 +7,6 @@ import {
   X,
   Download,
   FolderArchive,
-  Sun,
-  Moon,
   PenLine,
   Eye,
   Columns2,
@@ -35,14 +33,17 @@ import {
   PenTool,
   GitBranch,
   MoreHorizontal,
+  Layers,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useEditorStore, ViewMode } from "@/lib/store";
-import { MarkdownEditor, MarkdownPreview } from "@/components/editor";
+import { InlineMarkdownEditor, MarkdownEditor, MarkdownPreview } from "@/components/editor";
 import { FileTree } from "@/components/shell/file-tree";
 import { SpotlightSearch } from "@/components/shell/spotlight-search";
 import { SettingsPanel } from "@/components/shell/settings-panel";
+import { PublishDialog } from "@/components/shell/publish-dialog";
 import { ThemeSync } from "@/components/theme-provider";
 import { ConvexSync } from "@/lib/convex-sync";
 import { GraphView } from "@/components/shell/graph-view";
@@ -168,8 +169,6 @@ function MobileNavBar({
 
 // ── More menu (replaces profile dropdown on mobile) ───────────────────────
 function MobileMoreMenu() {
-  const theme = useEditorStore((s) => s.theme);
-  const toggleTheme = useEditorStore((s) => s.toggleTheme);
   const tabs = useEditorStore((s) => s.tabs);
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const { user } = useAuthState();
@@ -219,16 +218,19 @@ function MobileMoreMenu() {
             <DropdownMenuSeparator />
           </>
         )}
-        <DropdownMenuItem onClick={toggleTheme} className="gap-3 py-2.5">
-          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          {theme === "dark" ? "Light mode" : "Dark mode"}
-        </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => document.dispatchEvent(new CustomEvent("open-settings"))}
           className="gap-3 py-2.5"
         >
           <Settings className="h-4 w-4" />
           Settings
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => document.dispatchEvent(new CustomEvent("open-publish"))}
+          className="gap-3 py-2.5"
+        >
+          <Globe className="h-4 w-4" />
+          Publish
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={exportSingle} className="gap-3 py-2.5">
@@ -334,6 +336,7 @@ function MobileViewSegment() {
 
   const editorModes: { mode: ViewMode; icon: typeof PenLine; label: string }[] = [
     { mode: "editor", icon: PenLine, label: "Edit" },
+    { mode: "inline", icon: Layers, label: "Inline" },
     { mode: "split", icon: Columns2, label: "Split" },
     { mode: "preview", icon: Eye, label: "View" },
   ];
@@ -405,7 +408,7 @@ function MobileFormattingBar() {
   const [headingOpen, setHeadingOpen] = useState(false);
 
   // Only show for editor modes
-  if (viewMode !== "editor" && viewMode !== "split") return null;
+  if (viewMode !== "editor" && viewMode !== "split" && viewMode !== "inline") return null;
 
   const tools = [
     { icon: Bold, action: () => wrapSelection("**", "**"), label: "Bold" },
@@ -640,7 +643,7 @@ function MobileContent() {
 
   return (
     <main className="flex flex-1 flex-col overflow-hidden bg-background" style={editorStyle}>
-      {viewMode === "editor" ? <MarkdownEditor /> : <MarkdownPreview />}
+      {viewMode === "editor" ? <MarkdownEditor /> : viewMode === "inline" ? <InlineMarkdownEditor /> : <MarkdownPreview />}
     </main>
   );
 }
@@ -648,6 +651,7 @@ function MobileContent() {
 // ── Main Mobile Layout ────────────────────────────────────────────────────
 export function MobileLayout() {
   const [fileTreeOpen, setFileTreeOpen] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
   const viewMode = useEditorStore((s) => s.viewMode);
   const isCanvasView = viewMode === "graph" || viewMode === "whiteboard" || viewMode === "mindmap";
 
@@ -659,12 +663,19 @@ export function MobileLayout() {
     setFileTreeOpen(false);
   }, []);
 
+  useEffect(() => {
+    const onPublish = () => setPublishOpen(true);
+    document.addEventListener("open-publish", onPublish);
+    return () => document.removeEventListener("open-publish", onPublish);
+  }, []);
+
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden mobile-safe-top mobile-root">
       <ThemeSync />
       <ConvexSync />
       <SpotlightSearch />
       <SettingsPanel />
+      <PublishDialog open={publishOpen} onOpenChange={setPublishOpen} />
       <UserAccountPanel />
 
       {/* Top navigation bar */}

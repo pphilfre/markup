@@ -1,4 +1,5 @@
 import { query, mutation } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 
 // ---------------------------------------------------------------------------
@@ -36,7 +37,7 @@ export const upsert = mutation({
       .first();
 
     let userId: string;
-    let userDocId: any;
+    let userDocId: Id<"users">;
 
     if (existing) {
       await ctx.db.patch(existing._id, {

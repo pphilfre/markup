@@ -700,6 +700,32 @@ function WhiteboardSettingsPanel({
 
 // ── Context Menu ──────────────────────────────────────────────────────────
 
+function WhiteboardContextMenuItem({
+  onClick,
+  onClose,
+  children,
+  disabled,
+}: {
+  onClick: () => void;
+  onClose: () => void;
+  children: React.ReactNode;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+        onClose();
+      }}
+      disabled={disabled}
+      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors"
+    >
+      {children}
+    </button>
+  );
+}
+
 function WhiteboardContextMenu({
   position,
   onClose,
@@ -731,45 +757,35 @@ function WhiteboardContextMenu({
     return () => window.removeEventListener("pointerdown", close);
   }, [onClose]);
 
-  const MenuItem = ({ onClick, children, disabled }: { onClick: () => void; children: React.ReactNode; disabled?: boolean }) => (
-    <button
-      onClick={(e) => { e.stopPropagation(); onClick(); onClose(); }}
-      disabled={disabled}
-      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors"
-    >
-      {children}
-    </button>
-  );
-
   return (
     <div
       className="absolute z-50 w-48 rounded-lg border border-border bg-popover p-1 shadow-xl animate-in fade-in zoom-in-95 duration-100"
       style={{ left: position.x, top: position.y }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <MenuItem onClick={onCopy} disabled={!hasSelection}>
+      <WhiteboardContextMenuItem onClick={onCopy} onClose={onClose} disabled={!hasSelection}>
         <Copy className="h-3.5 w-3.5" /> Copy
-      </MenuItem>
-      <MenuItem onClick={onPaste} disabled={!clipboardHasItems}>
+      </WhiteboardContextMenuItem>
+      <WhiteboardContextMenuItem onClick={onPaste} onClose={onClose} disabled={!clipboardHasItems}>
         <Clipboard className="h-3.5 w-3.5" /> Paste
-      </MenuItem>
-      <MenuItem onClick={onDuplicate} disabled={!hasSelection}>
+      </WhiteboardContextMenuItem>
+      <WhiteboardContextMenuItem onClick={onDuplicate} onClose={onClose} disabled={!hasSelection}>
         <Layers className="h-3.5 w-3.5" /> Duplicate
-      </MenuItem>
+      </WhiteboardContextMenuItem>
       <div className="my-1 h-px bg-border" />
-      <MenuItem onClick={onBringToFront} disabled={!hasSelection}>
+      <WhiteboardContextMenuItem onClick={onBringToFront} onClose={onClose} disabled={!hasSelection}>
         <ArrowUp className="h-3.5 w-3.5" /> Bring to Front
-      </MenuItem>
-      <MenuItem onClick={onSendToBack} disabled={!hasSelection}>
+      </WhiteboardContextMenuItem>
+      <WhiteboardContextMenuItem onClick={onSendToBack} onClose={onClose} disabled={!hasSelection}>
         <ArrowDown className="h-3.5 w-3.5" /> Send to Back
-      </MenuItem>
+      </WhiteboardContextMenuItem>
       <div className="my-1 h-px bg-border" />
-      <MenuItem onClick={onSelectAll}>
+      <WhiteboardContextMenuItem onClick={onSelectAll} onClose={onClose}>
         <MousePointer2 className="h-3.5 w-3.5" /> Select All
-      </MenuItem>
-      <MenuItem onClick={onDelete} disabled={!hasSelection}>
+      </WhiteboardContextMenuItem>
+      <WhiteboardContextMenuItem onClick={onDelete} onClose={onClose} disabled={!hasSelection}>
         <Trash2 className="h-3.5 w-3.5 text-destructive" /> <span className="text-destructive">Delete</span>
-      </MenuItem>
+      </WhiteboardContextMenuItem>
     </div>
   );
 }
@@ -795,6 +811,9 @@ export function WhiteboardView() {
   const [elements, setElements] = useState<WhiteboardElement[]>([]);
   const [undoStack, setUndoStack] = useState<WhiteboardElement[][]>([]);
   const [redoStack, setRedoStack] = useState<WhiteboardElement[][]>([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [canvasSettings, setCanvasSettings] =
+    useState<CanvasSettings>(DEFAULT_SETTINGS);
 
   // ── Tab-based persistence ──────────────────────────────────────────────
   const hydratedRef = useRef(false);
@@ -807,12 +826,18 @@ export function WhiteboardView() {
     hydratedRef.current = true;
     try {
       const data = JSON.parse(activeTab.content);
-      if (data.elements && Array.isArray(data.elements) && data.elements.length > 0) {
-        setElements(data.elements);
-      }
-      if (data.canvasSettings && typeof data.canvasSettings === "object") {
-        setCanvasSettings((prev) => ({ ...prev, ...data.canvasSettings }));
-      }
+      const nextElements =
+        data.elements && Array.isArray(data.elements) && data.elements.length > 0
+          ? (data.elements as WhiteboardElement[])
+          : null;
+      const nextCanvasSettings =
+        data.canvasSettings && typeof data.canvasSettings === "object"
+          ? (data.canvasSettings as Partial<CanvasSettings>)
+          : null;
+      queueMicrotask(() => {
+        if (nextElements) setElements(nextElements);
+        if (nextCanvasSettings) setCanvasSettings((prev) => ({ ...prev, ...nextCanvasSettings }));
+      });
     } catch { /* ignore parse errors - might be empty/new */ }
   }, [activeTab]);
 
@@ -839,7 +864,8 @@ export function WhiteboardView() {
   // Adapt default stroke color to theme unless user manually changed it
   useEffect(() => {
     if (!userChangedStroke.current) {
-      setStrokeColor(isDark ? "#e2e8f0" : "#1e293b");
+      const next = isDark ? "#e2e8f0" : "#1e293b";
+      queueMicrotask(() => setStrokeColor(next));
     }
   }, [isDark]);
 
@@ -865,15 +891,26 @@ export function WhiteboardView() {
     screenY: number;
   } | null>(null);
   const [textValue, setTextValue] = useState("");
-
-  // Settings panel
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [canvasSettings, setCanvasSettings] =
-    useState<CanvasSettings>(DEFAULT_SETTINGS);
+  const [containerOffset, setContainerOffset] = useState<Point>({ x: 0, y: 0 });
 
   // Context menu
   const [contextMenu, setContextMenu] = useState<Point | null>(null);
   const [clipboard, setClipboard] = useState<WhiteboardElement[]>([]);
+
+  useEffect(() => {
+    if (!textInput?.visible) return;
+    const update = () => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (rect) setContainerOffset({ x: rect.left, y: rect.top });
+    };
+    queueMicrotask(update);
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [textInput?.visible]);
 
   // ── Debounced save to tab content ──────────────────────────────────────
   useEffect(() => {
@@ -1549,8 +1586,8 @@ export function WhiteboardView() {
           onBlur={commitText}
           className="absolute z-10 bg-transparent border-b border-blue-500 outline-none text-foreground px-1 text-base"
           style={{
-            left: textInput.screenX - (containerRef.current?.getBoundingClientRect().left ?? 0),
-            top: textInput.screenY - (containerRef.current?.getBoundingClientRect().top ?? 0) - 20,
+            left: textInput.screenX - containerOffset.x,
+            top: textInput.screenY - containerOffset.y - 20,
             minWidth: 100,
           }}
           placeholder="Type text…"

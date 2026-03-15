@@ -183,6 +183,12 @@ interface EditorState {
   editorView: EditorView | null;
   setEditorView: (view: EditorView | null) => void;
 
+  // Inline editor target (not serialised)
+  inlineTextarea: HTMLTextAreaElement | null;
+  setInlineTextarea: (el: HTMLTextAreaElement | null) => void;
+  inlineSelection: { lineIndex: number; from: number; to: number } | null;
+  setInlineSelection: (sel: { lineIndex: number; from: number; to: number } | null) => void;
+
   // Tab actions
   createTab: (folderId?: string | null) => void;
   createWhiteboard: (folderId?: string | null) => void;
@@ -319,6 +325,8 @@ export const useEditorStore = create<EditorState>()(
     viewMode: "editor",
     theme: "dark",
     editorView: null,
+    inlineTextarea: null,
+    inlineSelection: null,
     _hydrated: false,
     folders: [],
     settings: { ...DEFAULT_SETTINGS },
@@ -330,6 +338,8 @@ export const useEditorStore = create<EditorState>()(
     localSyncFolder: null,
 
     setEditorView: (view) => set({ editorView: view }),
+    setInlineTextarea: (el) => set({ inlineTextarea: el }),
+    setInlineSelection: (sel) => set({ inlineSelection: sel }),
 
     // ── Folders ────────────────────────────────────────────────────────
     createFolder: (name, parentId = null) => {
@@ -671,82 +681,182 @@ export const useEditorStore = create<EditorState>()(
     // Raw snippet insert
     insertSnippet: (snippet) => {
       const { editorView } = get();
-      if (!editorView) return;
+      if (editorView) {
+        const { from, to } = editorView.state.selection.main;
+        const selected = editorView.state.sliceDoc(from, to);
 
-      const { from, to } = editorView.state.selection.main;
-      const selected = editorView.state.sliceDoc(from, to);
+        const text = snippet.includes("$SEL")
+          ? snippet.replace("$SEL", selected)
+          : snippet + selected;
+
+        editorView.dispatch({
+          changes: { from, to, insert: text },
+          selection: { anchor: from + text.length },
+        });
+        editorView.focus();
+        return;
+      }
+
+      const s = get();
+      if (!s.inlineSelection || !s.activeTabId) return;
+      const tab = s.tabs.find((t) => t.id === s.activeTabId);
+      if (!tab) return;
+
+      const { lineIndex, from, to } = s.inlineSelection;
+      const lines = tab.content.split("\n");
+      if (lineIndex < 0 || lineIndex >= lines.length) return;
+      const line = lines[lineIndex] ?? "";
+      const selected = line.slice(from, to);
 
       const text = snippet.includes("$SEL")
         ? snippet.replace("$SEL", selected)
         : snippet + selected;
 
-      editorView.dispatch({
-        changes: { from, to, insert: text },
-        selection: { anchor: from + text.length },
+      lines[lineIndex] = line.slice(0, from) + text + line.slice(to);
+      s.updateContent(tab.id, lines.join("\n"));
+
+      queueMicrotask(() => {
+        const el = get().inlineTextarea;
+        if (!el) return;
+        el.focus();
+        const anchor = from + text.length;
+        el.setSelectionRange(anchor, anchor);
+        get().setInlineSelection({ lineIndex, from: anchor, to: anchor });
       });
-      editorView.focus();
     },
 
     // Smart line-prefix insert
     insertLinePrefix: (prefix) => {
       const { editorView } = get();
-      if (!editorView) return;
+      if (editorView) {
+        const state = editorView.state;
+        const { from, to } = state.selection.main;
 
-      const state = editorView.state;
-      const { from, to } = state.selection.main;
+        const startLine = state.doc.lineAt(from);
+        const endLine = state.doc.lineAt(to);
 
-      const startLine = state.doc.lineAt(from);
-      const endLine = state.doc.lineAt(to);
-
-      const lines: string[] = [];
-      for (let i = startLine.number; i <= endLine.number; i++) {
-        const line = state.doc.line(i);
-        if (prefix === "1. ") {
-          lines.push(`${i - startLine.number + 1}. ${line.text}`);
-        } else if (prefix === "- [ ] ") {
-          lines.push(`- [ ] ${line.text}`);
-        } else {
-          lines.push(`${prefix}${line.text}`);
+        const lines: string[] = [];
+        for (let i = startLine.number; i <= endLine.number; i++) {
+          const line = state.doc.line(i);
+          if (prefix === "1. ") {
+            lines.push(`${i - startLine.number + 1}. ${line.text}`);
+          } else if (prefix === "- [ ] ") {
+            lines.push(`- [ ] ${line.text}`);
+          } else {
+            lines.push(`${prefix}${line.text}`);
+          }
         }
+
+        const replacement = lines.join("\n");
+        editorView.dispatch({
+          changes: { from: startLine.from, to: endLine.to, insert: replacement },
+          selection: { anchor: startLine.from + replacement.length },
+        });
+        editorView.focus();
+        return;
       }
 
-      const replacement = lines.join("\n");
-      editorView.dispatch({
-        changes: { from: startLine.from, to: endLine.to, insert: replacement },
-        selection: { anchor: startLine.from + replacement.length },
+      const s = get();
+      if (!s.inlineSelection || !s.activeTabId) return;
+      const tab = s.tabs.find((t) => t.id === s.activeTabId);
+      if (!tab) return;
+
+      const { lineIndex } = s.inlineSelection;
+      const lines = tab.content.split("\n");
+      if (lineIndex < 0 || lineIndex >= lines.length) return;
+
+      const line = lines[lineIndex] ?? "";
+      const nextLine =
+        prefix === "1. "
+          ? `1. ${line}`
+          : prefix === "- [ ] "
+          ? `- [ ] ${line}`
+          : `${prefix}${line}`;
+
+      lines[lineIndex] = nextLine;
+      s.updateContent(tab.id, lines.join("\n"));
+
+      queueMicrotask(() => {
+        const el = get().inlineTextarea;
+        if (!el) return;
+        el.focus();
+        const anchor = Math.min(prefix.length, nextLine.length);
+        el.setSelectionRange(anchor, anchor);
+        get().setInlineSelection({ lineIndex, from: anchor, to: anchor });
       });
-      editorView.focus();
     },
 
     // Wrap selection
     wrapSelection: (before, after) => {
       const { editorView } = get();
-      if (!editorView) return;
+      if (editorView) {
+        const { from, to } = editorView.state.selection.main;
+        const beforeLen = before.length;
+        const afterLen = after.length;
 
-      const { from, to } = editorView.state.selection.main;
+        const textBefore = from >= beforeLen ? editorView.state.sliceDoc(from - beforeLen, from) : "";
+        const textAfter = editorView.state.sliceDoc(to, to + afterLen);
+
+        if (textBefore === before && textAfter === after) {
+          editorView.dispatch({
+            changes: [
+              { from: from - beforeLen, to: from, insert: "" },
+              { from: to, to: to + afterLen, insert: "" },
+            ],
+            selection: { anchor: from - beforeLen, head: to - beforeLen },
+          });
+        } else {
+          const selected = editorView.state.sliceDoc(from, to);
+          const text = `${before}${selected}${after}`;
+          editorView.dispatch({
+            changes: { from, to, insert: text },
+            selection: { anchor: from + beforeLen, head: from + beforeLen + selected.length },
+          });
+        }
+        editorView.focus();
+        return;
+      }
+
+      const s = get();
+      if (!s.inlineSelection || !s.activeTabId) return;
+      const tab = s.tabs.find((t) => t.id === s.activeTabId);
+      if (!tab) return;
+
+      const { lineIndex, from, to } = s.inlineSelection;
+      const lines = tab.content.split("\n");
+      if (lineIndex < 0 || lineIndex >= lines.length) return;
+      const line = lines[lineIndex] ?? "";
+
       const beforeLen = before.length;
       const afterLen = after.length;
+      const textBefore = from >= beforeLen ? line.slice(from - beforeLen, from) : "";
+      const textAfter = line.slice(to, to + afterLen);
 
-      const textBefore = from >= beforeLen ? editorView.state.sliceDoc(from - beforeLen, from) : "";
-      const textAfter = editorView.state.sliceDoc(to, to + afterLen);
+      let nextLine = line;
+      let nextFrom = from;
+      let nextTo = to;
 
       if (textBefore === before && textAfter === after) {
-        editorView.dispatch({
-          changes: [
-            { from: from - beforeLen, to: from, insert: "" },
-            { from: to, to: to + afterLen, insert: "" },
-          ],
-          selection: { anchor: from - beforeLen, head: to - beforeLen },
-        });
+        nextLine = line.slice(0, from - beforeLen) + line.slice(from, to) + line.slice(to + afterLen);
+        nextFrom = from - beforeLen;
+        nextTo = to - beforeLen;
       } else {
-        const selected = editorView.state.sliceDoc(from, to);
-        const text = `${before}${selected}${after}`;
-        editorView.dispatch({
-          changes: { from, to, insert: text },
-          selection: { anchor: from + beforeLen, head: from + beforeLen + selected.length },
-        });
+        const selected = line.slice(from, to);
+        nextLine = line.slice(0, from) + before + selected + after + line.slice(to);
+        nextFrom = from + beforeLen;
+        nextTo = from + beforeLen + selected.length;
       }
-      editorView.focus();
+
+      lines[lineIndex] = nextLine;
+      s.updateContent(tab.id, lines.join("\n"));
+
+      queueMicrotask(() => {
+        const el = get().inlineTextarea;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(nextFrom, nextTo);
+        get().setInlineSelection({ lineIndex, from: nextFrom, to: nextTo });
+      });
     },
   }))
 );

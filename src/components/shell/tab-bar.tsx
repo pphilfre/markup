@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Plus, X, Sun, Moon, PenLine, Eye, Columns2, Network, Share2, FileOutput, PenTool, GitBranch, ZoomIn, ZoomOut, Layers } from "lucide-react";
+import { Plus, X, PenLine, Eye, Columns2, Network, Share2, FileOutput, PenTool, GitBranch, ZoomIn, ZoomOut, Layers, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { useEditorStore, ViewMode } from "@/lib/store";
 import { ShareDialog } from "./share-dialog";
 import { ExportDialog } from "./export-dialog";
+import { PublishDialog } from "./publish-dialog";
 
 function TabItem({ id, title, isActive }: { id: string; title: string; isActive: boolean }) {
   const switchTab = useEditorStore((s) => s.switchTab);
@@ -103,22 +104,24 @@ export function TabBar() {
   const createTab = useEditorStore((s) => s.createTab);
   const zoomLevel = useEditorStore((s) => s.zoomLevel);
   const setZoomLevel = useEditorStore((s) => s.setZoomLevel);
-  const theme = useEditorStore((s) => s.theme);
-  const toggleTheme = useEditorStore((s) => s.toggleTheme);
   const viewMode = useEditorStore((s) => s.viewMode);
   const setViewMode = useEditorStore((s) => s.setViewMode);
   const [shareOpen, setShareOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
 
   // Listen for custom events to open share / export dialogs
   useEffect(() => {
     const onShare = () => setShareOpen(true);
     const onExport = () => setExportOpen(true);
+    const onPublish = () => setPublishOpen(true);
     document.addEventListener("open-share", onShare);
     document.addEventListener("open-export", onExport);
+    document.addEventListener("open-publish", onPublish);
     return () => {
       document.removeEventListener("open-share", onShare);
       document.removeEventListener("open-export", onExport);
+      document.removeEventListener("open-publish", onPublish);
     };
   }, []);
 
@@ -181,6 +184,20 @@ export function TabBar() {
             </Button>
           </TooltipTrigger>
           <TooltipContent>Share</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setPublishOpen(true)}
+              className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+            >
+              <Globe className="h-3 w-3" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Publish</TooltipContent>
         </Tooltip>
 
         <div className="mx-0.5 h-4 w-px bg-border" />
@@ -289,31 +306,10 @@ export function TabBar() {
             <TooltipContent>Zoom in (Ctrl+=)</TooltipContent>
           </Tooltip>
         </div>
-
-        <div className="mx-0.5 h-4 w-px bg-border" />
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleTheme}
-              className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
-            >
-              {theme === "dark" ? (
-                <Sun className="h-3 w-3" />
-              ) : (
-                <Moon className="h-3 w-3" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            {theme === "dark" ? "Light Mode" : "Dark Mode"}
-          </TooltipContent>
-        </Tooltip>
       </div>
 
       <ShareDialog open={shareOpen} onOpenChange={setShareOpen} />
+      <PublishDialog open={publishOpen} onOpenChange={setPublishOpen} />
       <ExportDialog open={exportOpen} onOpenChange={setExportOpen} />
     </div>
   );

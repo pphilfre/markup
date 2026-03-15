@@ -150,4 +150,18 @@ export default defineSchema({
     .index("by_share_id", ["shareId"])
     .index("by_owner", ["ownerUserId"])
     .index("by_owner_tab", ["ownerUserId", "tabId"]),
+
+  // ── Published Sites ───────────────────────────────────────────────────
+  sites: defineTable({
+    slug: v.string(),          // used in URL: /sites/:slug
+    ownerUserId: v.string(),   // workosId of the owner
+    tabId: v.string(),         // client-generated tab UUID (source tab)
+    title: v.string(),
+    content: v.string(),
+    publishedAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_owner", ["ownerUserId"])
+    .index("by_owner_tab", ["ownerUserId", "tabId"]),
 });

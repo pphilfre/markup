@@ -281,7 +281,7 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
   // Set edit content when note loads
   useEffect(() => {
     if (sharedNote && editContent === null) {
-      setEditContent(sharedNote.content);
+      queueMicrotask(() => setEditContent(sharedNote.content));
       lastPushedContent.current = sharedNote.content;
     }
   }, [sharedNote, editContent]);
@@ -290,11 +290,11 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
   useEffect(() => {
     if (!sharedNote) return;
     if (sharedNote.permission === "read") {
-      setEditContent(sharedNote.content);
+      queueMicrotask(() => setEditContent(sharedNote.content));
     } else if (sharedNote.permission === "edit") {
       // Only apply remote changes we didn't originate
       if (lastPushedContent.current !== null && sharedNote.content !== lastPushedContent.current) {
-        setEditContent(sharedNote.content);
+        queueMicrotask(() => setEditContent(sharedNote.content));
       }
       lastPushedContent.current = sharedNote.content;
     }

@@ -13,11 +13,13 @@ import { DesktopDebugNotice } from "@/components/shell/desktop-debug-notice";
 import { useEditorStore } from "@/lib/store";
 import { useGlobalKeybinds } from "@/lib/keybinds";
 import { useIsMobile } from "@/lib/use-mobile";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 
 export default function Home() {
   const hydrated = useEditorStore((s) => s._hydrated);
   const hydrate = useEditorStore((s) => s.hydrate);
+  const openTab = useEditorStore((s) => s.openTab);
+  const tabs = useEditorStore((s) => s.tabs);
   const isMobile = useIsMobile();
   const sidebarPosition = useEditorStore((s) => s.settings.sidebarPosition);
   const compactMode = useEditorStore((s) => s.settings.compactMode);
@@ -31,12 +33,18 @@ export default function Home() {
 
   // Check for shared note URL parameter
   const [shareId, setShareId] = useState<string | null>(null);
+  const pendingTabIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const note = params.get("note");
     if (note) {
-      setShareId(note);
+      queueMicrotask(() => setShareId(note));
+    }
+
+    const tab = params.get("tab");
+    if (tab && /^[0-9a-fA-F-]{16,64}$/.test(tab)) {
+      pendingTabIdRef.current = tab;
     }
 
     // Desktop OAuth relay: after browser sign-in, redirect to the Tauri
@@ -65,6 +73,19 @@ export default function Home() {
       })();
     }
   }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const tabId = pendingTabIdRef.current;
+    if (!tabId) return;
+    const exists = tabs.some((t) => t.id === tabId);
+    if (!exists) return;
+    pendingTabIdRef.current = null;
+    openTab(tabId);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("tab");
+    window.history.replaceState({}, "", url.toString());
+  }, [hydrated, openTab, tabs]);
 
   const handleBackFromShared = useCallback(() => {
     setShareId(null);

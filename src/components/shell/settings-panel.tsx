@@ -433,13 +433,13 @@ function TypographySection({
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
   const [fontSearchQuery, setFontSearchQuery] = useState("");
   const isCustom = !FONT_OPTIONS.some((o) => o.value === settings.fontFamily);
-  const selectedPreset = isCustom ? "__custom__" : settings.fontFamily;
+  const [fontPreset, setFontPreset] = useState<string>(() => (isCustom ? "__custom__" : settings.fontFamily));
 
   // Load system fonts when "Custom…" is selected
   useEffect(() => {
-    if (selectedPreset !== "__custom__" && !isCustom) return;
+    if (fontPreset !== "__custom__") return;
     loadSystemFonts().then(setSystemFonts);
-  }, [selectedPreset, isCustom]);
+  }, [fontPreset]);
 
   const filteredFonts = useMemo(() => {
     if (!fontSearchQuery) return systemFonts;
@@ -458,19 +458,21 @@ function TypographySection({
 
       <SelectRow
         label="Font Family"
-        value={selectedPreset}
+        value={fontPreset}
         options={FONT_OPTIONS}
         onChange={(v) => {
           if (v === "__custom__") {
-            update({ fontFamily: settings.customFontFamily || settings.fontFamily });
+            setFontPreset("__custom__");
+            setFontSearchQuery("");
             loadSystemFonts().then(setSystemFonts);
           } else {
+            setFontPreset(v);
             update({ fontFamily: v, customFontFamily: null });
           }
         }}
       />
 
-      {(isCustom || selectedPreset === "__custom__") && (
+      {fontPreset === "__custom__" && (
         <div className="space-y-2">
           <label className="text-xs text-muted-foreground">Custom Font</label>
 

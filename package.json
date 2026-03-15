@@ -1,12 +1,12 @@
 {
   "name": "markup",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "scripts": {
     "dev": "npm-run-all --parallel dev:convex dev:next",
     "dev:next": "next dev",
     "dev:convex": "npx convex dev",
-    "build": "npx convex deploy --cmd 'next build'",
+    "build": "npx convex deploy --cmd \"next build\"",
     "build:tauri": "node scripts/tauri-build.js",
     "start": "next start",
     "lint": "eslint",

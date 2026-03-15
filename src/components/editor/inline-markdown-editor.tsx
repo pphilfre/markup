@@ -7,7 +7,7 @@
  * Clicking/focusing a line returns it to raw Markdown syntax for editing.
  */
 
-import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useRef, useCallback, useEffect, useMemo, isValidElement, cloneElement } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkSupersub from "remark-supersub";
@@ -22,6 +22,40 @@ function preprocessLine(line: string): string {
   return out;
 }
 
+const ADMONITION_TYPES: Record<string, { color: string; icon: string; label: string }> = {
+  NOTE: { color: "#3b82f6", icon: "ℹ️", label: "Note" },
+  TIP: { color: "#22c55e", icon: "💡", label: "Tip" },
+  IMPORTANT: { color: "#8b5cf6", icon: "📌", label: "Important" },
+  WARNING: { color: "#f97316", icon: "⚠️", label: "Warning" },
+  CAUTION: { color: "#ef4444", icon: "🔴", label: "Caution" },
+};
+
+function parseAdmonition(children: React.ReactNode): { type: string; content: React.ReactNode } | null {
+  const childArr = Array.isArray(children) ? children : [children];
+  if (childArr.length === 0) return null;
+  const firstIdx = childArr.findIndex((c) => isValidElement(c));
+  if (firstIdx === -1) return null;
+  const first = childArr[firstIdx] as React.ReactElement<{ children?: React.ReactNode }>;
+  const pChildren = first.props?.children;
+  if (pChildren == null) return null;
+  const textParts = Array.isArray(pChildren) ? pChildren : [pChildren];
+  const firstText = textParts.find((p: unknown) => typeof p === "string") as string | undefined;
+  if (!firstText) return null;
+  const match = firstText.match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/i);
+  if (!match) return null;
+  const type = match[1].toUpperCase();
+  const remainingText = firstText.slice(match[0].length);
+  const newFirstParts = [remainingText, ...textParts.filter((p: unknown) => p !== firstText)].filter(Boolean);
+  const newFirst = newFirstParts.length > 0
+    ? cloneElement(first, {}, ...(newFirstParts.length === 1 ? [newFirstParts[0]] : newFirstParts))
+    : null;
+  const rest = childArr.slice(firstIdx + 1).filter(
+    (c) => typeof c !== "string" || c.trim().length > 0
+  );
+  const content = newFirst ? [newFirst, ...rest] : rest;
+  return { type, content };
+}
+
 interface LineProps {
   lineIndex: number;
   text: string;
@@ -30,10 +64,12 @@ interface LineProps {
   onBlur: () => void;
   onChange: (idx: number, value: string) => void;
   onKeyDown: (idx: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  onActiveTextarea: (lineIndex: number, el: HTMLTextAreaElement | null) => void;
+  onSelectionChange: (lineIndex: number, from: number, to: number) => void;
   settings: { fontFamily: string; fontSize: number; lineHeight: number };
 }
 
-function InlineLine({ lineIndex, text, isActive, onFocus, onBlur, onChange, onKeyDown, settings }: LineProps) {
+function InlineLine({ lineIndex, text, isActive, onFocus, onBlur, onChange, onKeyDown, onActiveTextarea, onSelectionChange, settings }: LineProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-focus textarea when this line becomes active
@@ -43,6 +79,11 @@ function InlineLine({ lineIndex, text, isActive, onFocus, onBlur, onChange, onKe
       // Place cursor at end
       const len = textareaRef.current.value.length;
       textareaRef.current.setSelectionRange(len, len);
+      onActiveTextarea(lineIndex, textareaRef.current);
+      onSelectionChange(lineIndex, len, len);
+    }
+    if (!isActive) {
+      onActiveTextarea(lineIndex, null);
     }
   }, [isActive]);
 
@@ -68,6 +109,19 @@ function InlineLine({ lineIndex, text, isActive, onFocus, onBlur, onChange, onKe
         onChange={(e) => onChange(lineIndex, e.target.value)}
         onBlur={onBlur}
         onKeyDown={(e) => onKeyDown(lineIndex, e)}
+        onSelect={(e) => {
+          onSelectionChange(lineIndex, e.currentTarget.selectionStart ?? 0, e.currentTarget.selectionEnd ?? 0);
+        }}
+        onFocus={() => {
+          if (textareaRef.current) {
+            onActiveTextarea(lineIndex, textareaRef.current);
+            onSelectionChange(
+              lineIndex,
+              textareaRef.current.selectionStart ?? 0,
+              textareaRef.current.selectionEnd ?? 0
+            );
+          }
+        }}
         rows={1}
         className="w-full resize-none overflow-hidden bg-transparent outline-none border-none p-0 m-0 block"
         style={style}
@@ -104,6 +158,27 @@ function InlineLine({ lineIndex, text, isActive, onFocus, onBlur, onChange, onKe
         components={{
           // Prevent wrapping in <p> for single-line content
           p: ({ children }) => <span>{children}</span>,
+          blockquote: ({ children, ...props }) => {
+            const admonition = parseAdmonition(children);
+            if (admonition) {
+              const config = ADMONITION_TYPES[admonition.type];
+              if (config) {
+                return (
+                  <div
+                    className="admonition my-2 rounded-lg border-l-4 p-3"
+                    style={{ borderLeftColor: config.color, background: `${config.color}10` }}
+                  >
+                    <div className="mb-1 flex items-center gap-1.5 font-semibold text-sm" style={{ color: config.color }}>
+                      <span>{config.icon}</span>
+                      <span>{config.label}</span>
+                    </div>
+                    <div className="text-sm leading-relaxed">{admonition.content}</div>
+                  </div>
+                );
+              }
+            }
+            return <blockquote {...props}>{children}</blockquote>;
+          },
         }}
       >
         {processed}
@@ -117,6 +192,8 @@ export function InlineMarkdownEditor({ onScroll }: { onScroll?: (fraction: numbe
   const tabs = useEditorStore((s) => s.tabs);
   const updateContent = useEditorStore((s) => s.updateContent);
   const settings = useEditorStore((s) => s.settings);
+  const setInlineTextarea = useEditorStore((s) => s.setInlineTextarea);
+  const setInlineSelection = useEditorStore((s) => s.setInlineSelection);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const [activeLineIdx, setActiveLineIdx] = useState<number | null>(null);
@@ -126,7 +203,11 @@ export function InlineMarkdownEditor({ onScroll }: { onScroll?: (fraction: numbe
 
   const handleFocus = useCallback((idx: number) => setActiveLineIdx(idx), []);
 
-  const handleBlur = useCallback(() => setActiveLineIdx(null), []);
+  const handleBlur = useCallback(() => {
+    setActiveLineIdx(null);
+    setInlineTextarea(null);
+    setInlineSelection(null);
+  }, [setInlineTextarea, setInlineSelection]);
 
   const handleChange = useCallback(
     (idx: number, value: string) => {
@@ -207,6 +288,21 @@ export function InlineMarkdownEditor({ onScroll }: { onScroll?: (fraction: numbe
             onBlur={handleBlur}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
+            onActiveTextarea={(lineIndex, el) => {
+              if (activeLineIdx !== lineIndex) return;
+              setInlineTextarea(el);
+              if (el) {
+                setInlineSelection({
+                  lineIndex,
+                  from: el.selectionStart ?? 0,
+                  to: el.selectionEnd ?? 0,
+                });
+              }
+            }}
+            onSelectionChange={(lineIndex, from, to) => {
+              if (activeLineIdx !== lineIndex) return;
+              setInlineSelection({ lineIndex, from, to });
+            }}
             settings={settings}
           />
         ))}

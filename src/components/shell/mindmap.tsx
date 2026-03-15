@@ -637,6 +637,32 @@ function NodeEditPopover({
 
 // ── Context Menu ──────────────────────────────────────────────────────────
 
+function MindmapContextMenuItem({
+  onClick,
+  onClose,
+  children,
+  disabled,
+}: {
+  onClick: () => void;
+  onClose: () => void;
+  children: React.ReactNode;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+        onClose();
+      }}
+      disabled={disabled}
+      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors"
+    >
+      {children}
+    </button>
+  );
+}
+
 function MindmapContextMenu({
   position,
   onClose,
@@ -662,39 +688,29 @@ function MindmapContextMenu({
     return () => window.removeEventListener("pointerdown", close);
   }, [onClose]);
 
-  const MenuItem = ({ onClick, children, disabled }: { onClick: () => void; children: React.ReactNode; disabled?: boolean }) => (
-    <button
-      onClick={(e) => { e.stopPropagation(); onClick(); onClose(); }}
-      disabled={disabled}
-      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors"
-    >
-      {children}
-    </button>
-  );
-
   return (
     <div
       className="absolute z-50 w-48 rounded-lg border border-border bg-popover p-1 shadow-xl animate-in fade-in zoom-in-95 duration-100"
       style={{ left: position.x, top: position.y }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <MenuItem onClick={onDuplicate} disabled={!hasSelection}>
+      <MindmapContextMenuItem onClick={onDuplicate} onClose={onClose} disabled={!hasSelection}>
         <Layers className="h-3.5 w-3.5" /> Duplicate
-      </MenuItem>
+      </MindmapContextMenuItem>
       <div className="my-1 h-px bg-border" />
-      <MenuItem onClick={onBringToFront} disabled={!hasSelection}>
+      <MindmapContextMenuItem onClick={onBringToFront} onClose={onClose} disabled={!hasSelection}>
         <ArrowUp className="h-3.5 w-3.5" /> Bring to Front
-      </MenuItem>
-      <MenuItem onClick={onSendToBack} disabled={!hasSelection}>
+      </MindmapContextMenuItem>
+      <MindmapContextMenuItem onClick={onSendToBack} onClose={onClose} disabled={!hasSelection}>
         <ArrowDown className="h-3.5 w-3.5" /> Send to Back
-      </MenuItem>
+      </MindmapContextMenuItem>
       <div className="my-1 h-px bg-border" />
-      <MenuItem onClick={onSelectAll}>
+      <MindmapContextMenuItem onClick={onSelectAll} onClose={onClose}>
         <MousePointer2 className="h-3.5 w-3.5" /> Select All
-      </MenuItem>
-      <MenuItem onClick={onDelete} disabled={!hasSelection}>
+      </MindmapContextMenuItem>
+      <MindmapContextMenuItem onClick={onDelete} onClose={onClose} disabled={!hasSelection}>
         <Trash2 className="h-3.5 w-3.5 text-destructive" /> <span className="text-destructive">Delete</span>
-      </MenuItem>
+      </MindmapContextMenuItem>
     </div>
   );
 }

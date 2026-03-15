@@ -10,6 +10,7 @@
 
 import type * as mindmaps from "../mindmaps.js";
 import type * as sharing from "../sharing.js";
+import type * as sites from "../sites.js";
 import type * as tabs from "../tabs.js";
 import type * as users from "../users.js";
 import type * as whiteboards from "../whiteboards.js";
@@ -24,6 +25,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   mindmaps: typeof mindmaps;
   sharing: typeof sharing;
+  sites: typeof sites;
   tabs: typeof tabs;
   users: typeof users;
   whiteboards: typeof whiteboards;

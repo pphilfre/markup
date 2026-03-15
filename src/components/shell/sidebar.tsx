@@ -542,12 +542,8 @@ function SyncButton({
     switch (syncState.status) {
       case "syncing":
         return "Syncing…";
-      case "synced": {
-        const ago = syncState.lastSyncedAt
-          ? `${Math.round((Date.now() - syncState.lastSyncedAt) / 1000)}s ago`
-          : "";
-        return `Synced${ago ? ` ${ago}` : ""} — click to sync now`;
-      }
+      case "synced":
+        return "Synced — click to sync now";
       case "error":
         return `Sync error — click to retry`;
       case "offline":
