@@ -223,14 +223,14 @@ export function ConvexSync() {
         openTabIds: workspace.openTabIds?.length
           ? workspace.openTabIds.filter((id) => tabs.some((t) => t.id === id))
           : tabs.map((t) => t.id),
-        activeTabId: workspace.activeTabId,
-        folders: workspace.folders.map((f) => ({
+        activeTabId: workspace.activeTabId ?? null,
+        folders: (workspace.folders ?? []).map((f) => ({
           ...f,
           parentId: f.parentId ?? null,
         })),
-        viewMode: workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap",
+        viewMode: (workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap") ?? "editor",
         theme: (workspace.theme === "dark" || workspace.theme === "light") ? workspace.theme : (workspace.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light"),
-        fileTreeOpen: workspace.fileTreeOpen,
+        fileTreeOpen: workspace.fileTreeOpen ?? true,
         settings: { ...DEFAULT_SETTINGS, ...workspace.settings } as Settings,
         profiles: workspace.profiles?.length
           ? workspace.profiles
@@ -333,14 +333,14 @@ export function ConvexSync() {
       useEditorStore.setState({
         tabs,
         openTabIds: workspace.openTabIds?.length ? workspace.openTabIds.filter((id) => tabs.some((t) => t.id === id)) : tabs.map((t) => t.id),
-        activeTabId: workspace.activeTabId,
-        folders: workspace.folders.map((f) => ({
+        activeTabId: workspace.activeTabId ?? null,
+        folders: (workspace.folders ?? []).map((f) => ({
           ...f,
           parentId: f.parentId ?? null,
         })),
-        viewMode: workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap",
+        viewMode: (workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap") ?? "editor",
         theme: (workspace.theme === "dark" || workspace.theme === "light") ? workspace.theme : (workspace.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light"),
-        fileTreeOpen: workspace.fileTreeOpen,
+        fileTreeOpen: workspace.fileTreeOpen ?? true,
         settings: { ...DEFAULT_SETTINGS, ...workspace.settings } as Settings,
         profiles: workspace.profiles?.length
           ? workspace.profiles
@@ -496,14 +496,14 @@ export function ConvexSync() {
       useEditorStore.setState({
         tabs,
         openTabIds: updatedOpenTabIds,
-        activeTabId: activeStillExists ? currentActiveId : workspace.activeTabId,
-        folders: workspace.folders.map((f) => ({
+        activeTabId: activeStillExists ? currentActiveId : (workspace.activeTabId ?? null),
+        folders: (workspace.folders ?? []).map((f) => ({
           ...f,
           parentId: f.parentId ?? null,
         })),
-        viewMode: workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap",
+        viewMode: (workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap") ?? "editor",
         theme: (workspace.theme === "dark" || workspace.theme === "light") ? workspace.theme : (String(workspace.theme).toLowerCase().includes("dark") ? "dark" : "light"),
-        fileTreeOpen: workspace.fileTreeOpen,
+        fileTreeOpen: workspace.fileTreeOpen ?? true,
         ...(settingsChanged ? { settings: newSettings } : {}),
         profiles: workspace.profiles?.length
           ? workspace.profiles
