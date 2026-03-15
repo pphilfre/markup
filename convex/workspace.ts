@@ -9,7 +9,7 @@ const folderValidator = v.object({
   sortOrder: v.number(),
 });
 
-const customThemeColorsValidator = v.optional(v.object({
+const customThemeColorsValidator = v.object({
   background: v.optional(v.string()),
   foreground: v.optional(v.string()),
   sidebar: v.optional(v.string()),
@@ -23,16 +23,16 @@ const customThemeColorsValidator = v.optional(v.object({
   accentForeground: v.optional(v.string()),
   primary: v.optional(v.string()),
   primaryForeground: v.optional(v.string()),
-}));
+});
 
 const settingsValidator = v.object({
-  fontFamily: v.string(),
-  fontSize: v.number(),
-  lineHeight: v.number(),
-  tabSize: v.number(),
-  editorMargin: v.number(),
-  accentColor: v.string(),
-  hideMdExtensions: v.boolean(),
+  fontFamily: v.optional(v.string()),
+  fontSize: v.optional(v.number()),
+  lineHeight: v.optional(v.number()),
+  tabSize: v.optional(v.number()),
+  editorMargin: v.optional(v.number()),
+  accentColor: v.optional(v.string()),
+  hideMdExtensions: v.optional(v.boolean()),
   // Typography
   letterSpacing: v.optional(v.number()),
   maxLineWidth: v.optional(v.number()),
@@ -53,7 +53,7 @@ const settingsValidator = v.object({
   multiCursorSupport: v.optional(v.boolean()),
   // Appearance - Theme
   themeMode: v.optional(v.string()),
-  customThemeColors: customThemeColorsValidator,
+  customThemeColors: v.optional(customThemeColorsValidator),
   // Appearance - UI
   sidebarPosition: v.optional(v.string()),
   sidebarWidth: v.optional(v.number()),
@@ -101,15 +101,15 @@ export const get = query({
 export const save = mutation({
   args: {
     userId: v.string(),
-    activeTabId: v.union(v.string(), v.null()),
+    activeTabId: v.optional(v.union(v.string(), v.null())),
     openTabIds: v.optional(v.array(v.string())),
-    folders: v.array(folderValidator),
-    viewMode: v.string(),
-    theme: v.string(),
-    fileTreeOpen: v.boolean(),
-    settings: settingsValidator,
-    profiles: v.array(profileValidator),
-    activeProfileId: v.string(),
+    folders: v.optional(v.array(folderValidator)),
+    viewMode: v.optional(v.string()),
+    theme: v.optional(v.string()),
+    fileTreeOpen: v.optional(v.boolean()),
+    settings: v.optional(settingsValidator),
+    profiles: v.optional(v.array(profileValidator)),
+    activeProfileId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { userId, ...data } = args;
@@ -120,9 +120,26 @@ export const save = mutation({
       .first();
 
     if (existing) {
-      await ctx.db.patch(existing._id, data);
+      // Filter out undefined values from data to avoid overwriting with null/undefined
+      const patchData = Object.fromEntries(
+        Object.entries(data).filter(([_, v]) => v !== undefined)
+      );
+      await ctx.db.patch(existing._id, patchData);
     } else {
-      await ctx.db.insert("workspaces", { userId, ...data });
+      // For insert, we need to provide defaults for required fields in schema
+      const insertData = {
+        userId,
+        activeTabId: data.activeTabId ?? null,
+        openTabIds: data.openTabIds ?? [],
+        folders: data.folders ?? [],
+        viewMode: data.viewMode ?? "editor",
+        theme: data.theme ?? "dark",
+        fileTreeOpen: data.fileTreeOpen ?? true,
+        settings: data.settings ?? {},
+        profiles: data.profiles ?? [{ id: "default", name: "Personal" }],
+        activeProfileId: data.activeProfileId ?? "default",
+      };
+      await ctx.db.insert("workspaces", insertData);
     }
   },
 });

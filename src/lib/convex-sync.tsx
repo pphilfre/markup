@@ -70,6 +70,7 @@ export function ConvexSync() {
     typeof navigator !== "undefined" ? navigator.onLine : true
   );
   const pendingPush = useRef(false);
+  const isRecreating = useRef(false);
 
   // ── Queries ─────────────────────────────────────────────────────────
   const workspace = useQuery(
@@ -431,18 +432,24 @@ export function ConvexSync() {
     if (workspace === undefined || remoteTabs === undefined) return;
 
     // If workspace is missing, recreate it
-    if (workspace === null) {
+    if (workspace === null && !isRecreating.current) {
       console.log("[ConvexSync] Workspace missing in Convex, recreating...");
-      pushCurrentState();
+      isRecreating.current = true;
+      pushCurrentState().finally(() => {
+        isRecreating.current = false;
+      });
       return;
     }
 
     // If tabs are missing (and we have local tabs), recreate them
-    if (remoteTabs && remoteTabs.length === 0 && useEditorStore.getState().tabs.length > 0) {
+    if (remoteTabs && remoteTabs.length === 0 && useEditorStore.getState().tabs.length > 0 && !isRecreating.current) {
       // Check if we also have an empty workspace (new user) or if this is a deletion
       // But here we assume deletion if we have local tabs but no remote tabs
       console.log("[ConvexSync] Tabs missing in Convex, recreating...");
-      pushCurrentState();
+      isRecreating.current = true;
+      pushCurrentState().finally(() => {
+        isRecreating.current = false;
+      });
     }
   }, [workspace, remoteTabs, isLoading, isAuthenticated, userId, pushCurrentState]);
 

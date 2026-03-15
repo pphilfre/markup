@@ -9,14 +9,30 @@ const folderValidator = v.object({
   sortOrder: v.number(),
 });
 
+const customThemeColorsValidator = v.object({
+  background: v.optional(v.string()),
+  foreground: v.optional(v.string()),
+  sidebar: v.optional(v.string()),
+  sidebarForeground: v.optional(v.string()),
+  popover: v.optional(v.string()),
+  popoverForeground: v.optional(v.string()),
+  border: v.optional(v.string()),
+  muted: v.optional(v.string()),
+  mutedForeground: v.optional(v.string()),
+  accent: v.optional(v.string()),
+  accentForeground: v.optional(v.string()),
+  primary: v.optional(v.string()),
+  primaryForeground: v.optional(v.string()),
+});
+
 const settingsValidator = v.object({
-  fontFamily: v.string(),
-  fontSize: v.number(),
-  lineHeight: v.number(),
-  tabSize: v.number(),
-  editorMargin: v.number(),
-  accentColor: v.string(),
-  hideMdExtensions: v.boolean(),
+  fontFamily: v.optional(v.string()),
+  fontSize: v.optional(v.number()),
+  lineHeight: v.optional(v.number()),
+  tabSize: v.optional(v.number()),
+  editorMargin: v.optional(v.number()),
+  accentColor: v.optional(v.string()),
+  hideMdExtensions: v.optional(v.boolean()),
   // Typography
   letterSpacing: v.optional(v.number()),
   maxLineWidth: v.optional(v.number()),
@@ -37,6 +53,7 @@ const settingsValidator = v.object({
   multiCursorSupport: v.optional(v.boolean()),
   // Appearance - Theme
   themeMode: v.optional(v.string()),
+  customThemeColors: v.optional(customThemeColorsValidator),
   // Appearance - UI
   sidebarPosition: v.optional(v.string()),
   sidebarWidth: v.optional(v.number()),
@@ -90,15 +107,15 @@ export default defineSchema({
   // ── Workspaces (UI state + settings per user, no tabs) ───────────────
   workspaces: defineTable({
     userId: v.string(),
-    activeTabId: v.union(v.string(), v.null()),
+    activeTabId: v.optional(v.union(v.string(), v.null())),
     openTabIds: v.optional(v.array(v.string())),
-    folders: v.array(folderValidator),
-    viewMode: v.string(),
-    theme: v.string(),
-    fileTreeOpen: v.boolean(),
-    settings: settingsValidator,
-    profiles: v.array(profileValidator),
-    activeProfileId: v.string(),
+    folders: v.optional(v.array(folderValidator)),
+    viewMode: v.optional(v.string()),
+    theme: v.optional(v.string()),
+    fileTreeOpen: v.optional(v.boolean()),
+    settings: v.optional(settingsValidator),
+    profiles: v.optional(v.array(profileValidator)),
+    activeProfileId: v.optional(v.string()),
   }).index("by_user", ["userId"]),
 
   // ── Whiteboards (one per user, stores canvas state) ────────────────
