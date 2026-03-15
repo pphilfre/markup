@@ -17,7 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Copy, ExternalLink, Globe, Check, Pencil, X } from "lucide-react";
+import { Copy, ExternalLink, Globe, Check } from "lucide-react";
 
 interface PublishDialogProps {
   open: boolean;
@@ -117,15 +117,9 @@ export function PublishDialog({ open, onOpenChange, tabId }: PublishDialogProps)
     setTimeout(() => setCopied(false), 1500);
   }, [siteUrl]);
 
-  const handleEdit = useCallback(() => {
-    if (!existingSite?.tabId) return;
-    const url = `${getSiteOrigin()}/?tab=${encodeURIComponent(existingSite.tabId)}`;
-    window.location.href = url;
-  }, [existingSite?.tabId]);
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+      <DialogContent className="w-[min(900px,calc(100%-2rem))] sm:max-w-none max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Globe className="h-4 w-4" /> Publish as Site
@@ -160,17 +154,17 @@ export function PublishDialog({ open, onOpenChange, tabId }: PublishDialogProps)
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <Button
                 onClick={handlePublish}
-                disabled={!tab || publishing || normalizedSlug.length < 3}
-                className="gap-2"
+                disabled={!tab || publishing || normalizedSlug.length < 3 || unpublishing}
+                className="gap-2 sm:self-start"
               >
                 <Globe className="h-4 w-4" />
                 {existingSite ? "Update Site" : "Publish Site"}
               </Button>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                 {existingSite?.slug && (
                   <Button
                     variant="outline"
@@ -198,15 +192,6 @@ export function PublishDialog({ open, onOpenChange, tabId }: PublishDialogProps)
                     </Button>
                   </>
                 )}
-                {existingSite?.tabId && (
-                  <Button variant="outline" size="sm" onClick={handleEdit} className="gap-1.5">
-                    <Pencil className="h-3.5 w-3.5" />
-                    Edit
-                  </Button>
-                )}
-                <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
-                  <X className="h-4 w-4" />
-                </Button>
               </div>
             </div>
 

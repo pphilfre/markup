@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useCallback, isValidElement, cloneElement, Component } from "react";
+import { useMemo, useCallback, isValidElement, cloneElement, Component, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { useAuthState } from "@/components/convex-client-provider";
@@ -74,11 +75,37 @@ class SiteErrorBoundary extends Component<
   }
 }
 
-function PublishedSitePageInner({ params }: { params: { slug: string } }) {
+function PublishedSitePageInner() {
   const { user } = useAuthState();
-  const site = useQuery(api.sites.getBySlug, params.slug ? { slug: params.slug } : "skip");
+  const routeParams = useParams<{ slug?: string | string[] }>();
+  const slugParam = routeParams?.slug;
+  const slug = Array.isArray(slugParam) ? slugParam[0] : slugParam;
 
-  const isOwner = !!(site && user?.id && site.ownerUserId === user.id);
+  if (!slug) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-2 px-6 text-center">
+        <p className="text-sm font-medium">Site not found</p>
+        <p className="text-xs text-muted-foreground">Missing site URL.</p>
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => (window.location.href = "/")}>
+          <ExternalLink className="h-3.5 w-3.5" /> Open Markup
+        </Button>
+      </div>
+    );
+  }
+
+  return <PublishedSiteContent key={slug} slug={slug} userId={user?.id ?? null} />;
+}
+
+function PublishedSiteContent({ slug, userId }: { slug: string; userId: string | null }) {
+  const site = useQuery(api.sites.getBySlug, { slug });
+  const [timedOut, setTimedOut] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setTimedOut(true), 8000);
+    return () => clearTimeout(t);
+  }, []);
+
+  const isOwner = !!(site && userId && site.ownerUserId === userId);
 
   const handleCopyLink = useCallback(async () => {
     await navigator.clipboard.writeText(window.location.href);
@@ -121,7 +148,22 @@ function PublishedSitePageInner({ params }: { params: { slug: string } }) {
   if (site === undefined) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <div className="flex flex-col items-center gap-2 px-6 text-center">
+          <p className="text-sm text-muted-foreground">Loading…</p>
+          {timedOut && (
+            <>
+              <p className="text-xs text-muted-foreground">This is taking longer than expected.</p>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+                  Retry
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => (window.location.href = "/")}>
+                  <ExternalLink className="h-3.5 w-3.5" /> Open Markup
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     );
   }
@@ -176,10 +218,10 @@ function PublishedSitePageInner({ params }: { params: { slug: string } }) {
   );
 }
 
-export default function PublishedSitePage({ params }: { params: { slug: string } }) {
+export default function PublishedSitePage() {
   return (
     <SiteErrorBoundary>
-      <PublishedSitePageInner params={params} />
+      <PublishedSitePageInner />
     </SiteErrorBoundary>
   );
 }
