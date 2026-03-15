@@ -5,10 +5,6 @@
     {
       "source": "/_widgets/:path*",
       "destination": "https://api.workos.com/_widgets/:path*"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/"
     }
   ]
 }

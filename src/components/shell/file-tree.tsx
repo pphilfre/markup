@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   ChevronRight,
   ChevronDown,
@@ -304,26 +304,33 @@ function IconPickerPopover({
 function FolderItem({
   folder,
   tabs,
+  childFolders,
   expandedFolders,
   toggleExpand,
   hideMd,
   sortAsc,
   sortByType,
   tabFilter,
+  depth,
+  renderFolder,
 }: {
   folder: Folder;
   tabs: Tab[];
+  childFolders: Folder[];
   expandedFolders: Set<string>;
   toggleExpand: (id: string) => void;
   hideMd: boolean;
   sortAsc: boolean | null;
   sortByType: boolean;
   tabFilter?: (tab: Tab) => boolean;
+  depth: number;
+  renderFolder: (folder: Folder, depth: number) => React.ReactNode;
 }) {
   const [renaming, setRenaming] = useState(false);
   const renameFolder = useEditorStore((s) => s.renameFolder);
   const colorFolder = useEditorStore((s) => s.colorFolder);
   const deleteFolder = useEditorStore((s) => s.deleteFolder);
+  const createFolder = useEditorStore((s) => s.createFolder);
   const createTab = useEditorStore((s) => s.createTab);
   const createWhiteboard = useEditorStore((s) => s.createWhiteboard);
   const createMindmap = useEditorStore((s) => s.createMindmap);
@@ -392,7 +399,8 @@ function FolderItem({
             onClick={() => toggleExpand(folder.id)}
             onDragOver={onDragOver}
             onDrop={onDrop}
-            className="flex w-full items-center gap-1.5 rounded-sm px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors group"
+            className="flex w-full items-center gap-1.5 rounded-sm pr-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors group"
+            style={{ paddingLeft: 8 + depth * 12 }}
           >
             {expanded ? (
               <ChevronDown className="h-3 w-3 shrink-0" />
@@ -430,6 +438,14 @@ function FolderItem({
         <ContextMenuContent>
           <ContextMenuItem onClick={() => createTab(folder.id)}>
             <Plus className="mr-2 h-3.5 w-3.5" /> New File
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() => {
+              createFolder("New Folder", folder.id);
+              if (!expandedFolders.has(folder.id)) toggleExpand(folder.id);
+            }}
+          >
+            <FolderPlus className="mr-2 h-3.5 w-3.5" /> New Subfolder
           </ContextMenuItem>
           <ContextMenuItem onClick={() => createWhiteboard(folder.id)}>
             <PenTool className="mr-2 h-3.5 w-3.5" /> New Whiteboard
@@ -473,11 +489,10 @@ function FolderItem({
 
       {/* Files in folder */}
       {expanded && (
-        <div className="ml-4 border-l border-border/50">
-          {folderTabs.length === 0 ? (
-            <p className="px-3 py-1 text-[10px] text-muted-foreground/50 italic">
-              Empty
-            </p>
+        <div className="border-l border-border/50" style={{ marginLeft: 16 + depth * 12 }}>
+          {childFolders.map((child) => renderFolder(child, depth + 1))}
+          {folderTabs.length === 0 && childFolders.length === 0 ? (
+            <p className="px-3 py-1 text-[10px] text-muted-foreground/50 italic">Empty</p>
           ) : (
             folderTabs.map((tab) => (
               <FileItem
@@ -1014,6 +1029,41 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
   const collapseAll = () => setExpandedFolders(new Set());
   const expandAll = () => setExpandedFolders(new Set(folders.map((f) => f.id)));
 
+  const folderIdSet = useMemo(() => new Set(folders.map((f) => f.id)), [folders]);
+  const foldersByParent = useMemo(() => {
+    const map = new Map<string | null, Folder[]>();
+    folders.forEach((f) => {
+      const parent = f.parentId && folderIdSet.has(f.parentId) ? f.parentId : null;
+      const list = map.get(parent) ?? [];
+      list.push({ ...f, parentId: parent });
+      map.set(parent, list);
+    });
+    for (const [key, list] of map) {
+      list.sort((a, b) => (a.sortOrder - b.sortOrder) || a.name.localeCompare(b.name));
+      map.set(key, list);
+    }
+    return map;
+  }, [folders, folderIdSet]);
+
+  function renderFolder(folder: Folder, depth: number) {
+    return (
+      <FolderItem
+        key={folder.id}
+        folder={folder}
+        tabs={tabs}
+        childFolders={foldersByParent.get(folder.id) ?? []}
+        expandedFolders={expandedFolders}
+        toggleExpand={toggleExpand}
+        hideMd={hideMd}
+        sortAsc={sortAsc}
+        sortByType={sortByType}
+        tabFilter={tabPassesFilter}
+        depth={depth}
+        renderFolder={renderFolder}
+      />
+    );
+  }
+
   // Root-level tabs (no folder), filtered
   let rootTabs = tabs.filter((t) => !t.folderId && tabPassesFilter(t));
   if (sortByType) rootTabs = [...rootTabs].sort((a, b) => (a.noteType ?? "note").localeCompare(b.noteType ?? "note"));
@@ -1343,19 +1393,7 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
             )}
 
             {/* Folders */}
-            {folders.map((folder) => (
-              <FolderItem
-                key={folder.id}
-                folder={folder}
-                tabs={tabs}
-                expandedFolders={expandedFolders}
-                toggleExpand={toggleExpand}
-                hideMd={hideMd}
-                sortAsc={sortAsc}
-                sortByType={sortByType}
-                tabFilter={tabPassesFilter}
-              />
-            ))}
+            {(foldersByParent.get(null) ?? []).map((folder) => renderFolder(folder, 0))}
 
             {/* Root files (no folder) */}
             {folders.length > 0 && unpinnedRootTabs.length > 0 && (

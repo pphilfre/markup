@@ -8,7 +8,7 @@ import { EditorView } from "@codemirror/view";
 
 export type ViewMode = "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap" | "inline";
 export type Theme = "dark" | "light";
-export type ThemeMode = "light" | "dark" | "system" | "solarized-light" | "nord-dark" | "catppuccin-mocha" | "catppuccin-latte" | "gruvbox-dark" | "gruvbox-light" | "tokyo-night" | "everforest-light";
+export type ThemeMode = "light" | "dark" | "system" | "solarized-light" | "nord-dark" | "catppuccin-mocha" | "catppuccin-latte" | "gruvbox-dark" | "gruvbox-light" | "tokyo-night" | "everforest-light" | "uwu";
 export type NoteType = "note" | "whiteboard" | "mindmap";
 
 export interface CustomThemeColors {
@@ -366,13 +366,23 @@ export const useEditorStore = create<EditorState>()(
       })),
 
     deleteFolder: (id) =>
-      set((s) => ({
-        folders: s.folders.filter((f) => f.id !== id),
-        // Move files in that folder to root
-        tabs: s.tabs.map((t) =>
-          t.folderId === id ? { ...t, folderId: null } : t
-        ),
-      })),
+      set((s) => {
+        const toDelete = new Set<string>();
+        const queue: string[] = [id];
+        while (queue.length) {
+          const current = queue.pop()!;
+          if (toDelete.has(current)) continue;
+          toDelete.add(current);
+          s.folders.forEach((f) => {
+            if (f.parentId === current) queue.push(f.id);
+          });
+        }
+
+        return {
+          folders: s.folders.filter((f) => !toDelete.has(f.id)),
+          tabs: s.tabs.map((t) => (t.folderId && toDelete.has(t.folderId) ? { ...t, folderId: null } : t)),
+        };
+      }),
 
     moveTabToFolder: (tabId, folderId) =>
       set((s) => ({

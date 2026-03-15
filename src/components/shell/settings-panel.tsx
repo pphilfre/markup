@@ -1271,6 +1271,12 @@ const BUILTIN_THEMES: { id: SettingsType["themeMode"]; label: string; descriptio
     description: "Natural, earthy light palette",
     preview: { bg: "#fdf6e3", sidebar: "#f4f0d9", text: "#5c6a72", accent: "#8da101" },
   },
+  {
+    id: "uwu",
+    label: "uwu",
+    description: "Cute, pastel pink vibes",
+    preview: { bg: "#fff1f8", sidebar: "#ffe4f2", text: "#3b0a2a", accent: "#ff4fa3" },
+  },
 ];
 
 const CUSTOM_COLOR_FIELDS: { key: keyof import("@/lib/store").CustomThemeColors; label: string }[] = [
@@ -1301,7 +1307,7 @@ function AppearanceSection({
 
   const handleThemeModeChange = (mode: SettingsType["themeMode"]) => {
     update({ themeMode: mode });
-    const lightModes: SettingsType["themeMode"][] = ["light", "solarized-light", "catppuccin-latte", "gruvbox-light", "everforest-light"];
+    const lightModes: SettingsType["themeMode"][] = ["light", "solarized-light", "catppuccin-latte", "gruvbox-light", "everforest-light", "uwu"];
     const darkModes: SettingsType["themeMode"][] = ["dark", "nord-dark", "catppuccin-mocha", "gruvbox-dark", "tokyo-night"];
     if (lightModes.includes(mode)) {
       if (theme === "dark") toggleTheme();

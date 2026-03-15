@@ -231,6 +231,28 @@ const THEME_VARS: Record<string, Record<string, string>> = {
     "--sidebar-foreground": "#5c6a72",
     "--sidebar-border": "rgba(92,106,114,0.15)",
   },
+  uwu: {
+    "--background": "#fff1f8",
+    "--foreground": "#3b0a2a",
+    "--card": "#ffe4f2",
+    "--card-foreground": "#3b0a2a",
+    "--popover": "#ffe4f2",
+    "--popover-foreground": "#3b0a2a",
+    "--primary": "#ff4fa3",
+    "--primary-foreground": "#ffffff",
+    "--secondary": "#ffd1e8",
+    "--secondary-foreground": "#3b0a2a",
+    "--muted": "#ffd1e8",
+    "--muted-foreground": "rgba(59,10,42,0.6)",
+    "--accent": "#ffd1e8",
+    "--accent-foreground": "#3b0a2a",
+    "--border": "rgba(59,10,42,0.15)",
+    "--input": "rgba(59,10,42,0.12)",
+    "--ring": "#ff4fa3",
+    "--sidebar": "#ffe4f2",
+    "--sidebar-foreground": "#3b0a2a",
+    "--sidebar-border": "rgba(59,10,42,0.15)",
+  },
 };
 
 // Which base class (dark/light) each theme uses
@@ -246,6 +268,7 @@ const THEME_BASE: Record<string, "dark" | "light"> = {
   "gruvbox-light": "light",
   "tokyo-night": "dark",
   "everforest-light": "light",
+  uwu: "light",
 };
 
 /**
