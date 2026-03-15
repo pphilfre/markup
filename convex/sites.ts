@@ -23,27 +23,39 @@ function validateSlug(slug: string): string {
   return normalized;
 }
 
+function pickLatestSite<T extends { updatedAt: number }>(sites: T[]): T | null {
+  if (sites.length === 0) return null;
+  let best = sites[0];
+  for (let i = 1; i < sites.length; i++) {
+    const s = sites[i];
+    if (s.updatedAt > best.updatedAt) best = s;
+  }
+  return best;
+}
+
 export const getBySlug = query({
   args: { slug: v.string() },
   handler: async (ctx, { slug }) => {
     const normalized = normalizeSlug(slug);
     if (!normalized) return null;
-    return await ctx.db
+    const matches = await ctx.db
       .query("sites")
       .withIndex("by_slug", (q) => q.eq("slug", normalized))
-      .unique();
+      .collect();
+    return pickLatestSite(matches);
   },
 });
 
 export const getByOwnerTab = query({
   args: { ownerUserId: v.string(), tabId: v.string() },
   handler: async (ctx, { ownerUserId, tabId }) => {
-    return await ctx.db
+    const matches = await ctx.db
       .query("sites")
       .withIndex("by_owner_tab", (q) =>
         q.eq("ownerUserId", ownerUserId).eq("tabId", tabId)
       )
-      .unique();
+      .collect();
+    return pickLatestSite(matches);
   },
 });
 
@@ -59,21 +71,23 @@ export const publish = mutation({
     const slug = validateSlug(args.slug);
 
     const now = Date.now();
-    const existingBySlug = await ctx.db
+    const slugMatches = await ctx.db
       .query("sites")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
-      .unique();
+      .collect();
+    const existingBySlug = pickLatestSite(slugMatches);
 
     if (existingBySlug && existingBySlug.ownerUserId !== args.ownerUserId) {
       throw new Error("That site URL is already taken.");
     }
 
-    const existingByTab = await ctx.db
+    const tabMatches = await ctx.db
       .query("sites")
       .withIndex("by_owner_tab", (q) =>
         q.eq("ownerUserId", args.ownerUserId).eq("tabId", args.tabId)
       )
-      .unique();
+      .collect();
+    const existingByTab = pickLatestSite(tabMatches);
 
     if (existingBySlug) {
       await ctx.db.patch(existingBySlug._id, {
@@ -82,6 +96,12 @@ export const publish = mutation({
         content: args.content,
         updatedAt: now,
       });
+
+      for (const doc of slugMatches) {
+        if (doc._id !== existingBySlug._id) {
+          await ctx.db.delete(doc._id);
+        }
+      }
 
       if (existingByTab && existingByTab._id !== existingBySlug._id) {
         await ctx.db.delete(existingByTab._id);
@@ -92,10 +112,11 @@ export const publish = mutation({
 
     if (existingByTab) {
       if (existingByTab.slug !== slug) {
-        const slugOwnerCollision = await ctx.db
+        const collisionMatches = await ctx.db
           .query("sites")
           .withIndex("by_slug", (q) => q.eq("slug", slug))
-          .unique();
+          .collect();
+        const slugOwnerCollision = pickLatestSite(collisionMatches);
         if (slugOwnerCollision && slugOwnerCollision.ownerUserId !== args.ownerUserId) {
           throw new Error("That site URL is already taken.");
         }
@@ -107,6 +128,13 @@ export const publish = mutation({
         content: args.content,
         updatedAt: now,
       });
+
+      for (const doc of tabMatches) {
+        if (doc._id !== existingByTab._id) {
+          await ctx.db.delete(doc._id);
+        }
+      }
+
       return { slug };
     }
 
