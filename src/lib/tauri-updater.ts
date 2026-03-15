@@ -73,8 +73,10 @@ export async function checkForUpdate(): Promise<void> {
     // eslint-disable-next-line no-console
     console.log("[Updater] check() result:", update);
     // Also log the current app version
-    // eslint-disable-next-line no-console
-    console.log("[Updater] current app version:", require("../../package.json").version);
+    const { getVersion } = await import("@tauri-apps/api/app");
+    const currentVersion = await getVersion();
+    console.log("[Updater] native app version:", currentVersion);
+    console.log("[Updater] package.json version:", require("../../package.json").version);
 
     if (!update) {
       setState({ status: "up-to-date", info: null });

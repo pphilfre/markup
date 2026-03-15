@@ -51,6 +51,9 @@ const settingsValidator = v.object({
   checkboxStyle: v.optional(v.string()),
   // Custom fonts
   customFontFamily: v.optional(v.union(v.string(), v.null())),
+  // Panel sizes
+  fileTreeWidth: v.optional(v.number()),
+  splitRatio: v.optional(v.number()),
 });
 
 const profileValidator = v.object({

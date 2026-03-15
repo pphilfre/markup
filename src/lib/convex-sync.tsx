@@ -161,7 +161,8 @@ export function ConvexSync() {
         "autoFormatLists", "continueListOnEnter", "smartQuotes", "smartDashes", "convertTabsToSpaces", "wordWrap",
         "highlightCurrentLine", "highlightMatchingBrackets", "cursorAnimation", "multiCursorSupport", "themeMode",
         "sidebarPosition", "sidebarWidth", "compactMode", "showIconsInSidebar", "showFileExtensions", "iconTheme",
-        "codeBlockTheme", "headingStyle", "linkStyle", "checkboxStyle", "customFontFamily"
+        "codeBlockTheme", "headingStyle", "linkStyle", "checkboxStyle", "customFontFamily",
+        "fileTreeWidth", "splitRatio"
       ];
       const sanitizedSettings = Object.fromEntries(
         Object.entries(slice.settings).filter(([k]) => allowedSettingsKeys.includes(k))
@@ -172,7 +173,7 @@ export function ConvexSync() {
       const mergedSettings = { ...DEFAULT_SETTINGS, ...sanitizedSettings };
       await saveWorkspace({
         userId,
-        activeTabId: slice.activeTabId,
+        activeTabId: slice.activeTabId ?? null,
         openTabIds: slice.openTabIds,
         folders: slice.folders.map((f) => ({
           id: f.id,
@@ -392,14 +393,15 @@ export function ConvexSync() {
         "autoFormatLists", "continueListOnEnter", "smartQuotes", "smartDashes", "convertTabsToSpaces", "wordWrap",
         "highlightCurrentLine", "highlightMatchingBrackets", "cursorAnimation", "multiCursorSupport", "themeMode",
         "sidebarPosition", "sidebarWidth", "compactMode", "showIconsInSidebar", "showFileExtensions", "iconTheme",
-        "codeBlockTheme", "headingStyle", "linkStyle", "checkboxStyle", "customFontFamily"
+        "codeBlockTheme", "headingStyle", "linkStyle", "checkboxStyle", "customFontFamily",
+        "fileTreeWidth", "splitRatio"
       ];
       const sanitizedSettings = Object.fromEntries(
         Object.entries(s.settings).filter(([k]) => allowedSettingsKeys.includes(k))
       );
       saveWorkspace({
         userId,
-        activeTabId: s.activeTabId,
+        activeTabId: s.activeTabId ?? null,
         openTabIds: s.openTabIds,
         folders: s.folders.map((f) => ({
           id: f.id,
@@ -422,6 +424,25 @@ export function ConvexSync() {
       });
     }
   }, [isLoading, isAuthenticated, userId, workspace, remoteTabs, saveWorkspace, syncAllTabs]);
+
+  // ── Auto-recreate: if data is deleted from Convex, push local state back up ──
+  useEffect(() => {
+    if (isLoading || !isAuthenticated || !userId || !hasHydratedFromConvex.current) return;
+    if (workspace === undefined || remoteTabs === undefined) return;
+
+    // If workspace is missing, recreate it
+    if (workspace === null) {
+      console.log("[ConvexSync] Workspace missing in Convex, recreating...");
+      pushCurrentState();
+      return;
+    }
+
+    // If tabs are missing (and we have local tabs), recreate them
+    if (remoteTabs && remoteTabs.length === 0 && useEditorStore.getState().tabs.length > 0) {
+      console.log("[ConvexSync] Tabs missing in Convex, recreating...");
+      pushCurrentState();
+    }
+  }, [workspace, remoteTabs, isLoading, isAuthenticated, userId, pushCurrentState]);
 
   // ── Live sync: apply remote changes from other devices ──────────────
   useEffect(() => {
