@@ -439,6 +439,8 @@ export function ConvexSync() {
 
     // If tabs are missing (and we have local tabs), recreate them
     if (remoteTabs && remoteTabs.length === 0 && useEditorStore.getState().tabs.length > 0) {
+      // Check if we also have an empty workspace (new user) or if this is a deletion
+      // But here we assume deletion if we have local tabs but no remote tabs
       console.log("[ConvexSync] Tabs missing in Convex, recreating...");
       pushCurrentState();
     }
@@ -588,7 +590,7 @@ export function ConvexSync() {
         profiles: s.profiles,
         activeProfileId: s.activeProfileId,
       }),
-      (slice) => {
+      () => {
         if (isHydrating.current) return;
 
         // If offline, mark that we have pending changes to push later
