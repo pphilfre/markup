@@ -160,7 +160,7 @@ export function ConvexSync() {
         "letterSpacing", "maxLineWidth", "showInvisibleCharacters", "autoCloseBrackets", "autoCloseMarkdownFormatting",
         "autoFormatLists", "continueListOnEnter", "smartQuotes", "smartDashes", "convertTabsToSpaces", "wordWrap",
         "highlightCurrentLine", "highlightMatchingBrackets", "cursorAnimation", "multiCursorSupport", "themeMode",
-        "sidebarPosition", "sidebarWidth", "compactMode", "showIconsInSidebar", "showFileExtensions", "iconTheme",
+        "customThemeColors", "sidebarPosition", "sidebarWidth", "compactMode", "showIconsInSidebar", "showFileExtensions", "iconTheme",
         "codeBlockTheme", "headingStyle", "linkStyle", "checkboxStyle", "customFontFamily",
         "fileTreeWidth", "splitRatio"
       ];

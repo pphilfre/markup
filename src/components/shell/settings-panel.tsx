@@ -31,6 +31,7 @@ import { useEditorStore, DEFAULT_SETTINGS, type Settings as SettingsType } from 
 import { useIsMobile } from "@/lib/use-mobile";
 import { WorkOsWidgets, UserProfile, UserSessions, UserSecurity } from "@workos-inc/widgets";
 import { getUpdateState, subscribeToUpdateState, downloadUpdate, installUpdate } from "@/lib/tauri-updater";
+import packageJson from "../../../package.json";
 
 // ---------------------------------------------------------------------------
 // Sidebar sections
@@ -1587,6 +1588,7 @@ function UpdatesSection() {
   }, []);
 
   const { status, info, error, downloadProgress } = updateState;
+  const currentVersion = packageJson.version;
 
   const statusLabel: Record<string, string> = {
     idle: "Not checked",
@@ -1609,36 +1611,68 @@ function UpdatesSection() {
         </p>
       </div>
 
+      <div className="rounded-md border border-border p-3 space-y-4">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">Current Version</span>
+          <span className="text-xs font-medium font-mono bg-muted px-1.5 py-0.5 rounded">v{currentVersion}</span>
+        </div>
+
+        {isTauri() && (
+          <>
+            <Separator />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Status</span>
+                <span className={cn(
+                  "text-xs font-medium",
+                  status === "up-to-date" && "text-green-400",
+                  status === "available" && "text-yellow-400",
+                  status === "ready" && "text-primary",
+                  status === "error" && "text-destructive",
+                )}>
+                  {statusLabel[status] ?? status}
+                </span>
+              </div>
+              
+              {info?.body && (
+                <p className="text-[11px] text-muted-foreground border-t border-border pt-2">
+                  {info.body}
+                </p>
+              )}
+
+              {status === "downloading" && downloadProgress !== null && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>Downloading update...</span>
+                    <span>{downloadProgress}%</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all duration-300"
+                      style={{ width: `${downloadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {status === "ready" && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>Installation ready</span>
+                    <span>100%</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-primary/20 overflow-hidden">
+                    <div className="h-full bg-primary w-full" />
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
       {isTauri() ? (
         <>
-          <div className="rounded-md border border-border p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Status</span>
-              <span className={cn(
-                "text-xs font-medium",
-                status === "up-to-date" && "text-green-400",
-                status === "available" && "text-yellow-400",
-                status === "ready" && "text-primary",
-                status === "error" && "text-destructive",
-              )}>
-                {statusLabel[status] ?? status}
-              </span>
-            </div>
-            {info?.body && (
-              <p className="text-[11px] text-muted-foreground border-t border-border pt-2">
-                {info.body}
-              </p>
-            )}
-            {status === "downloading" && downloadProgress !== null && (
-              <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
-                <div
-                  className="h-full bg-primary transition-all duration-300"
-                  style={{ width: `${downloadProgress}%` }}
-                />
-              </div>
-            )}
-          </div>
-
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
