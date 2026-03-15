@@ -167,6 +167,9 @@ export function ConvexSync() {
         Object.entries(slice.settings).filter(([k]) => allowedSettingsKeys.includes(k))
       );
 
+
+      // Ensure all required settings fields are present and valid, but do not specify them twice
+      const mergedSettings = { ...DEFAULT_SETTINGS, ...sanitizedSettings };
       await saveWorkspace({
         userId,
         activeTabId: slice.activeTabId,
@@ -181,7 +184,7 @@ export function ConvexSync() {
         viewMode: slice.viewMode,
         theme: safeTheme,
         fileTreeOpen: slice.fileTreeOpen,
-        settings: { ...DEFAULT_SETTINGS, ...sanitizedSettings } as Settings,
+        settings: mergedSettings,
         profiles: slice.profiles.map((p) => ({ id: p.id, name: p.name })),
         activeProfileId: slice.activeProfileId,
       });

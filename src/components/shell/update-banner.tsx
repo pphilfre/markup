@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Download, RefreshCw, X, ArrowUpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import packageJson from "../../../package.json";
 import {
   checkForUpdate,
   downloadUpdate,
@@ -41,6 +42,7 @@ export function UpdateBanner() {
   if (dismissed) return null;
 
   const { status, info, error, downloadProgress } = state;
+  const currentVersion = packageJson.version;
 
   if (status === "idle" || status === "checking" || status === "up-to-date") {
     return null;
@@ -63,6 +65,7 @@ export function UpdateBanner() {
         <ArrowUpCircle className="h-4 w-4 text-primary shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="font-medium">Update available: v{info?.version}</p>
+          <p className="text-xs text-muted-foreground">You are on v{currentVersion}</p>
           {info?.body && <p className="text-muted-foreground truncate">{info.body}</p>}
         </div>
         <Button size="sm" variant="outline" className="text-xs h-6 px-2 shrink-0" onClick={downloadUpdate}>
@@ -101,6 +104,7 @@ export function UpdateBanner() {
         <ArrowUpCircle className="h-4 w-4 text-primary shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="font-medium text-primary">Ready to install v{info?.version}</p>
+          <p className="text-xs text-muted-foreground">You are on v{currentVersion}</p>
           <p className="text-muted-foreground">Restart to apply the update</p>
         </div>
         <Button size="sm" className="text-xs h-6 px-2 shrink-0" onClick={installUpdate}>
