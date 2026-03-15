@@ -76,7 +76,7 @@ class SiteErrorBoundary extends Component<
 
 function PublishedSitePageInner({ params }: { params: { slug: string } }) {
   const { user } = useAuthState();
-  const site = useQuery(api.sites.getBySlug, { slug: params.slug });
+  const site = useQuery(api.sites.getBySlug, params.slug ? { slug: params.slug } : "skip");
 
   const isOwner = !!(site && user?.id && site.ownerUserId === user.id);
 

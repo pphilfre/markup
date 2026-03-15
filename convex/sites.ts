@@ -34,9 +34,10 @@ function pickLatestSite<T extends { updatedAt: number }>(sites: T[]): T | null {
 }
 
 export const getBySlug = query({
-  args: { slug: v.string() },
+  args: { slug: v.optional(v.string()) },
   handler: async (ctx, { slug }) => {
     try {
+      if (!slug) return null;
       const normalized = normalizeSlug(slug);
       if (!normalized) return null;
       const matches = await ctx.db

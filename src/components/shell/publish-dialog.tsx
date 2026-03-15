@@ -125,7 +125,7 @@ export function PublishDialog({ open, onOpenChange, tabId }: PublishDialogProps)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Globe className="h-4 w-4" /> Publish as Site
