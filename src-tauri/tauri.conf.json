@@ -30,7 +30,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["dmg", "nsis", "app"],
+    "targets": ["dmg", "nsis", "msi", "app"],
     "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
@@ -65,10 +65,7 @@
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDYyODA5QTE0MjQwQzQxRjMKUldUelFRd2tGSnFBWWdPMzh3cjBmeFhYRUNNREIvZG9KVk1ucEVzWE4xeFA5aENHQkczNTA4QUsK",
       "endpoints": [
         "https://github.com/pphilfre/markup/releases/latest/download/latest.json"
-      ],
-      "windows": {
-        "installMode": "passive"
-      }
+      ]
     }
   }
 }
