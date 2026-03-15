@@ -36,26 +36,34 @@ function pickLatestSite<T extends { updatedAt: number }>(sites: T[]): T | null {
 export const getBySlug = query({
   args: { slug: v.string() },
   handler: async (ctx, { slug }) => {
-    const normalized = normalizeSlug(slug);
-    if (!normalized) return null;
-    const matches = await ctx.db
-      .query("sites")
-      .withIndex("by_slug", (q) => q.eq("slug", normalized))
-      .collect();
-    return pickLatestSite(matches);
+    try {
+      const normalized = normalizeSlug(slug);
+      if (!normalized) return null;
+      const matches = await ctx.db
+        .query("sites")
+        .withIndex("by_slug", (q) => q.eq("slug", normalized))
+        .collect();
+      return pickLatestSite(matches);
+    } catch {
+      return null;
+    }
   },
 });
 
 export const getByOwnerTab = query({
   args: { ownerUserId: v.string(), tabId: v.string() },
   handler: async (ctx, { ownerUserId, tabId }) => {
-    const matches = await ctx.db
-      .query("sites")
-      .withIndex("by_owner_tab", (q) =>
-        q.eq("ownerUserId", ownerUserId).eq("tabId", tabId)
-      )
-      .collect();
-    return pickLatestSite(matches);
+    try {
+      const matches = await ctx.db
+        .query("sites")
+        .withIndex("by_owner_tab", (q) =>
+          q.eq("ownerUserId", ownerUserId).eq("tabId", tabId)
+        )
+        .collect();
+      return pickLatestSite(matches);
+    } catch {
+      return null;
+    }
   },
 });
 
@@ -149,5 +157,26 @@ export const publish = mutation({
     });
 
     return { slug };
+  },
+});
+
+export const unpublish = mutation({
+  args: {
+    ownerUserId: v.string(),
+    tabId: v.string(),
+  },
+  handler: async (ctx, { ownerUserId, tabId }) => {
+    const matches = await ctx.db
+      .query("sites")
+      .withIndex("by_owner_tab", (q) =>
+        q.eq("ownerUserId", ownerUserId).eq("tabId", tabId)
+      )
+      .collect();
+
+    for (const doc of matches) {
+      await ctx.db.delete(doc._id);
+    }
+
+    return { ok: true };
   },
 });

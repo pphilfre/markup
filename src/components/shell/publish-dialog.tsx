@@ -57,10 +57,12 @@ export function PublishDialog({ open, onOpenChange, tabId }: PublishDialogProps)
   );
 
   const publish = useMutation(api.sites.publish);
+  const unpublish = useMutation(api.sites.unpublish);
 
   const [slugInput, setSlugInput] = useState("");
   const normalizedSlug = useMemo(() => normalizeSlug(slugInput), [slugInput]);
   const [publishing, setPublishing] = useState(false);
+  const [unpublishing, setUnpublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -94,6 +96,19 @@ export function PublishDialog({ open, onOpenChange, tabId }: PublishDialogProps)
       setPublishing(false);
     }
   }, [publish, slugInput, tab, targetTabId, userId]);
+
+  const handleUnpublish = useCallback(async () => {
+    if (!userId || !targetTabId) return;
+    setUnpublishing(true);
+    setError(null);
+    try {
+      await unpublish({ ownerUserId: userId, tabId: targetTabId });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to unpublish site.");
+    } finally {
+      setUnpublishing(false);
+    }
+  }, [targetTabId, unpublish, userId]);
 
   const handleCopyLink = useCallback(async () => {
     if (!siteUrl) return;
@@ -156,6 +171,16 @@ export function PublishDialog({ open, onOpenChange, tabId }: PublishDialogProps)
               </Button>
 
               <div className="flex items-center gap-2">
+                {existingSite?.slug && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleUnpublish}
+                    disabled={publishing || unpublishing}
+                  >
+                    {unpublishing ? "Unpublishing…" : "Unpublish"}
+                  </Button>
+                )}
                 {siteUrl && (
                   <>
                     <Button variant="outline" size="sm" onClick={handleCopyLink} className="gap-1.5">
