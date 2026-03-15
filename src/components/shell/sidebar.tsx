@@ -45,7 +45,6 @@ import { Separator } from "@/components/ui/separator";
 import { useEditorStore } from "@/lib/store";
 import { useAuthState } from "@/components/convex-client-provider";
 import { useSyncState, triggerManualSync } from "@/lib/convex-sync";
-import { UserAccountPanel } from "@/components/shell/user-account-panel";
 import { OrgPanel } from "@/components/shell/org-panel";
 import { signIn, signOut } from "@/lib/tauri";
 
@@ -393,13 +392,13 @@ export function Sidebar() {
                     </p>
                   </div>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => document.dispatchEvent(new CustomEvent("open-user-account", { detail: "profile" }))}>
+                  <DropdownMenuItem onClick={() => document.dispatchEvent(new CustomEvent("open-settings", { detail: { open: true, section: "user", userTab: "profile" } }))}>
                     <User className="mr-2 h-3.5 w-3.5" /> Profile
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => document.dispatchEvent(new CustomEvent("open-user-account", { detail: "sessions" }))}>
+                  <DropdownMenuItem onClick={() => document.dispatchEvent(new CustomEvent("open-settings", { detail: { open: true, section: "user", userTab: "sessions" } }))}>
                     <Monitor className="mr-2 h-3.5 w-3.5" /> Sessions
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => document.dispatchEvent(new CustomEvent("open-user-account", { detail: "security" }))}>
+                  <DropdownMenuItem onClick={() => document.dispatchEvent(new CustomEvent("open-settings", { detail: { open: true, section: "user", userTab: "security" } }))}>
                     <Shield className="mr-2 h-3.5 w-3.5" /> Security
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
@@ -493,7 +492,6 @@ export function Sidebar() {
         style={{ [sidebarPosition === "right" ? "left" : "right"]: 0 }}
       />
 
-      <UserAccountPanel />
       <OrgPanel />
     </aside>
   );

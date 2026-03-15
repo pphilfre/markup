@@ -270,8 +270,8 @@ function GeneralSection({
   );
 }
 
-function UserSection() {
-  const [widgetTab, setWidgetTab] = useState<"profile" | "sessions" | "security">("profile");
+function UserSection({ initialTab }: { initialTab?: "profile" | "sessions" | "security" }) {
+  const [widgetTab, setWidgetTab] = useState<"profile" | "sessions" | "security">(initialTab ?? "profile");
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [fetchFailed, setFetchFailed] = useState(false);
@@ -1795,6 +1795,7 @@ function AboutSection() {
 export function SettingsPanel() {
   const [open, setOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionId>("general");
+  const [userTabOverride, setUserTabOverride] = useState<"profile" | "sessions" | "security" | null>(null);
   const settings = useEditorStore((s) => s.settings);
   const updateSettings = useEditorStore((s) => s.updateSettings);
   const theme = useEditorStore((s) => s.theme);
@@ -1804,7 +1805,21 @@ export function SettingsPanel() {
 
   // Listen for custom event
   useEffect(() => {
-    const handler = () => setOpen((prev) => !prev);
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as unknown;
+      if (detail && typeof detail === "object") {
+        const d = detail as { open?: boolean; section?: SectionId; userTab?: "profile" | "sessions" | "security" };
+        if (typeof d.open === "boolean") setOpen(d.open);
+        else setOpen(true);
+        if (d.section) setActiveSection(d.section);
+        if (d.userTab) {
+          setActiveSection("user");
+          setUserTabOverride(d.userTab);
+        }
+        return;
+      }
+      setOpen((prev) => !prev);
+    };
     document.addEventListener("open-settings", handler);
     return () => document.removeEventListener("open-settings", handler);
   }, []);
@@ -1863,7 +1878,12 @@ export function SettingsPanel() {
       {activeSection === "general" && (
         <GeneralSection settings={settings} update={updateSettings} reset={reset} />
       )}
-      {activeSection === "user" && <UserSection />}
+      {activeSection === "user" && (
+        <UserSection
+          key={userTabOverride ?? "user"}
+          initialTab={userTabOverride ?? undefined}
+        />
+      )}
       {activeSection === "appearance" && (
         <AppearanceSection
           settings={settings}

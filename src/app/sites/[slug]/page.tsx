@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useCallback, isValidElement, cloneElement } from "react";
+import { useMemo, useCallback, isValidElement, cloneElement, Component } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { useAuthState } from "@/components/convex-client-provider";
@@ -48,7 +48,33 @@ function parseAdmonition(children: React.ReactNode): { type: string; content: Re
   return { type, content };
 }
 
-export default function PublishedSitePage({ params }: { params: { slug: string } }) {
+class SiteErrorBoundary extends Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-2 px-6 text-center">
+          <p className="text-sm font-medium">Unable to load site</p>
+          <p className="text-xs text-muted-foreground break-words max-w-lg">{this.state.error.message}</p>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => (window.location.href = "/")}>
+            <ExternalLink className="h-3.5 w-3.5" /> Open Markup
+          </Button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function PublishedSitePageInner({ params }: { params: { slug: string } }) {
   const { user } = useAuthState();
   const site = useQuery(api.sites.getBySlug, { slug: params.slug });
 
@@ -147,5 +173,13 @@ export default function PublishedSitePage({ params }: { params: { slug: string }
         </article>
       </main>
     </div>
+  );
+}
+
+export default function PublishedSitePage({ params }: { params: { slug: string } }) {
+  return (
+    <SiteErrorBoundary>
+      <PublishedSitePageInner params={params} />
+    </SiteErrorBoundary>
   );
 }

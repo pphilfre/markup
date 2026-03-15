@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useEditorStore } from "@/lib/store";
+import { isTauri } from "@/lib/tauri";
 
 // CSS variable sets for each built-in theme
 const THEME_VARS: Record<string, Record<string, string>> = {
@@ -311,6 +312,17 @@ export function ThemeSync() {
 
     root.classList.toggle("dark", base === "dark");
     root.classList.toggle("light", base === "light");
+
+    if (isTauri()) {
+      (async () => {
+        try {
+          const { getCurrentWindow } = await import("@tauri-apps/api/window");
+          await getCurrentWindow().setTheme(base);
+        } catch {
+          // ignore
+        }
+      })();
+    }
 
     // Apply built-in theme vars
     const vars = THEME_VARS[themeMode === "system" ? base : themeMode] ?? THEME_VARS[base];

@@ -50,7 +50,6 @@ import { GraphView } from "@/components/shell/graph-view";
 import { WhiteboardView } from "@/components/shell/whiteboard";
 import { MindmapView } from "@/components/shell/mindmap";
 import { useAuthState } from "@/components/convex-client-provider";
-import { UserAccountPanel } from "@/components/shell/user-account-panel";
 import { signIn, signOut } from "@/lib/tauri";
 import {
   DropdownMenu,
@@ -676,7 +675,6 @@ export function MobileLayout() {
       <SpotlightSearch />
       <SettingsPanel />
       <PublishDialog open={publishOpen} onOpenChange={setPublishOpen} />
-      <UserAccountPanel />
 
       {/* Top navigation bar */}
       <MobileNavBar
