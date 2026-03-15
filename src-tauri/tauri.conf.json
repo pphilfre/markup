@@ -62,7 +62,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDYyODA5QTE0MjQwQzQxRjMKUldUelFRd2tGSnFBWWdPMzh3cjBmeFhYRUNNREIvZG9KVk1ucEVzWE4xeFA5aENHQkczNTA4QUsK",
+      "pubkey": "ZFc1MGNuVnpkR1ZrSUdOdmJXMWxiblE2SUcxcGJtbHphV2R1SUhCMVlteHBZeUJyWlhrNklFUTBOREl4TlVNeE16aENSRFl5UXdwU1YxRnpNVzl6VkZoRFJrVkVXbGRtWXpjNFRVSnRSSHBoVm5Kc1NHMWthREZTYVZkSllXSlZZek14Y0VsbVMybFhOVGx3Um0xM0t3bz0=",
       "endpoints": [
         "https://github.com/pphilfre/markup/releases/latest/download/latest.json"
       ]
