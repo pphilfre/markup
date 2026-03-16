@@ -492,7 +492,6 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
             <FileOutput className="h-5 w-5" />
             Export Notes
           </DialogTitle>
-          <DialogDescription>Export your notes in various formats</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">

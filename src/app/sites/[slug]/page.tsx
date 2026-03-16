@@ -99,6 +99,7 @@ function PublishedSitePageInner() {
 function PublishedSiteContent({ slug, userId }: { slug: string; userId: string | null }) {
   const site = useQuery(api.sites.getBySlug, { slug });
   const [timedOut, setTimedOut] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setTimedOut(true), 8000);
@@ -109,6 +110,8 @@ function PublishedSiteContent({ slug, userId }: { slug: string; userId: string |
 
   const handleCopyLink = useCallback(async () => {
     await navigator.clipboard.writeText(window.location.href);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }, []);
 
   const handleEdit = useCallback(() => {
@@ -181,7 +184,7 @@ function PublishedSiteContent({ slug, userId }: { slug: string; userId: string |
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <div className="sticky top-0 z-10 border-b border-border bg-card/90 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-2">
           <div className="min-w-0">
@@ -203,7 +206,18 @@ function PublishedSiteContent({ slug, userId }: { slug: string; userId: string |
         </div>
       </div>
 
-      <main className="mx-auto max-w-4xl px-4 py-8">
+      {/* Copied to Clipboard Banner */}
+      {copied && (
+        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 flex items-center gap-2 rounded-lg bg-green-600 text-white px-4 py-2 shadow-lg animate-fade-in">
+          <svg className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="10" cy="10" r="10" fill="#22c55e" />
+            <path d="M6 10.5l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span className="font-semibold text-sm">Copied to Clipboard</span>
+        </div>
+      )}
+
+      <main className="flex-1 overflow-auto mx-auto max-w-4xl px-4 py-8">
         <article className="markdown-body">
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkMath]}

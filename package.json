@@ -1,6 +1,6 @@
 {
   "name": "markup",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "private": true,
   "scripts": {
     "dev": "npm-run-all --parallel dev:convex dev:next",

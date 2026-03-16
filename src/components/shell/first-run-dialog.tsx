@@ -73,6 +73,16 @@ export function FirstRunDialog() {
             <SkipForward className="h-4 w-4" />
             Skip for now
           </Button>
+            <DialogDescription>
+            <a
+              href="https://github.com/pphilfre"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline text-muted-foreground hover:text-primary"
+            >
+              @pphilfre
+            </a>
+            </DialogDescription>
         </div>
       </DialogContent>
     </Dialog>
