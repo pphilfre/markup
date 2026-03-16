@@ -109,7 +109,10 @@ export function ConvexSync() {
     if (!userId) return;
     const slice = useEditorStore.getState();
 
-    const tabsPayload = slice.tabs.map((t) => ({
+    const onlineTabs = slice.tabs.filter((t) => t.origin !== "local");
+    const onlineTabIdSet = new Set(onlineTabs.map((t) => t.id));
+
+    const tabsPayload = onlineTabs.map((t) => ({
       tabId: t.id,
       title: t.title,
       content: t.content,
@@ -121,18 +124,26 @@ export function ConvexSync() {
       iconColor: t.iconColor,
     }));
 
-    lastPushedTabs.current = JSON.stringify(
+    const nextTabsKey = JSON.stringify(
       tabsPayload.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: t.noteType ?? "note" }))
     );
     // Only allow 'dark' or 'light' for theme
     const themeStr = String(slice.theme);
     const safeTheme = themeStr === "dark" || themeStr === "light" ? themeStr : (themeStr.toLowerCase().includes("dark") ? "dark" : "light");
-    lastPushedWorkspace.current = JSON.stringify({
-      activeTabId: slice.activeTabId,
+    const nextWorkspaceKey = JSON.stringify({
+      activeTabId: slice.activeTabId && onlineTabIdSet.has(slice.activeTabId) ? slice.activeTabId : null,
+      openTabIds: slice.openTabIds.filter((id) => onlineTabIdSet.has(id)),
       viewMode: slice.viewMode,
       theme: safeTheme,
       fileTreeOpen: slice.fileTreeOpen,
     });
+
+    if (nextTabsKey === lastPushedTabs.current && nextWorkspaceKey === lastPushedWorkspace.current) {
+      return;
+    }
+
+    lastPushedTabs.current = nextTabsKey;
+    lastPushedWorkspace.current = nextWorkspaceKey;
 
     setSyncState({ status: "syncing", error: null });
 
@@ -142,7 +153,7 @@ export function ConvexSync() {
       // Sync shared note content in real-time
       if (sharedTabs) {
         const sharedTabIds = new Set(sharedTabs.map((s) => s.tabId));
-        for (const t of slice.tabs) {
+        for (const t of onlineTabs) {
           if (sharedTabIds.has(t.id)) {
             updateSharedContent({
               ownerUserId: userId,
@@ -174,8 +185,8 @@ export function ConvexSync() {
       const mergedSettings = { ...DEFAULT_SETTINGS, ...sanitizedSettings };
       await saveWorkspace({
         userId,
-        activeTabId: slice.activeTabId ?? null,
-        openTabIds: slice.openTabIds,
+        activeTabId: slice.activeTabId && onlineTabIdSet.has(slice.activeTabId) ? slice.activeTabId : null,
+        openTabIds: slice.openTabIds.filter((id) => onlineTabIdSet.has(id)),
         folders: slice.folders.map((f) => ({
           id: f.id,
           name: f.name,
@@ -216,14 +227,30 @@ export function ConvexSync() {
         noteType: (((t as Record<string, unknown>).noteType as string) ?? "note") as NoteType,
         customIcon: (t as Record<string, unknown>).customIcon as string | undefined,
         iconColor: (t as Record<string, unknown>).iconColor as string | undefined,
+        origin: "online" as const,
       }));
 
+      const current = useEditorStore.getState();
+      const localTabs = current.tabs.filter((t) => t.origin === "local");
+      const localTabIdSet = new Set(localTabs.map((t) => t.id));
+      const mergedTabs = [...tabs, ...localTabs];
+      const onlineTabIdSet = new Set(tabs.map((t) => t.id));
+
+      const remoteOpenTabIds = workspace.openTabIds?.length
+        ? workspace.openTabIds.filter((id) => onlineTabIdSet.has(id))
+        : tabs.map((t) => t.id);
+      const localOpenTabIds = current.openTabIds.filter((id) => localTabIdSet.has(id));
+      const mergedOpenTabIds = Array.from(new Set([...remoteOpenTabIds, ...localOpenTabIds]));
+
+      const nextActiveTabId =
+        current.activeTabId && localTabIdSet.has(current.activeTabId)
+          ? current.activeTabId
+          : (workspace.activeTabId ?? null);
+
       useEditorStore.setState({
-        tabs,
-        openTabIds: workspace.openTabIds?.length
-          ? workspace.openTabIds.filter((id) => tabs.some((t) => t.id === id))
-          : tabs.map((t) => t.id),
-        activeTabId: workspace.activeTabId ?? null,
+        tabs: mergedTabs,
+        openTabIds: mergedOpenTabIds,
+        activeTabId: nextActiveTabId,
         folders: (workspace.folders ?? []).map((f) => ({
           ...f,
           parentId: f.parentId ?? null,
@@ -243,6 +270,7 @@ export function ConvexSync() {
       );
       lastPushedWorkspace.current = JSON.stringify({
         activeTabId: workspace.activeTabId,
+        openTabIds: remoteOpenTabIds,
         viewMode: workspace.viewMode,
         theme: (workspace.theme === "dark" || workspace.theme === "light") ? workspace.theme : (workspace.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: workspace.fileTreeOpen,
@@ -328,12 +356,30 @@ export function ConvexSync() {
         noteType: (((t as Record<string, unknown>).noteType as string) ?? "note") as NoteType,
         customIcon: (t as Record<string, unknown>).customIcon as string | undefined,
         iconColor: (t as Record<string, unknown>).iconColor as string | undefined,
+        origin: "online" as const,
       }));
 
+      const current = useEditorStore.getState();
+      const localTabs = current.tabs.filter((t) => t.origin === "local");
+      const localTabIdSet = new Set(localTabs.map((t) => t.id));
+      const mergedTabs = [...tabs, ...localTabs];
+      const onlineTabIdSet = new Set(tabs.map((t) => t.id));
+
+      const remoteOpenTabIds = workspace.openTabIds?.length
+        ? workspace.openTabIds.filter((id) => onlineTabIdSet.has(id))
+        : tabs.map((t) => t.id);
+      const localOpenTabIds = current.openTabIds.filter((id) => localTabIdSet.has(id));
+      const mergedOpenTabIds = Array.from(new Set([...remoteOpenTabIds, ...localOpenTabIds]));
+
+      const nextActiveTabId =
+        current.activeTabId && localTabIdSet.has(current.activeTabId)
+          ? current.activeTabId
+          : (workspace.activeTabId ?? null);
+
       useEditorStore.setState({
-        tabs,
-        openTabIds: workspace.openTabIds?.length ? workspace.openTabIds.filter((id) => tabs.some((t) => t.id === id)) : tabs.map((t) => t.id),
-        activeTabId: workspace.activeTabId ?? null,
+        tabs: mergedTabs,
+        openTabIds: mergedOpenTabIds,
+        activeTabId: nextActiveTabId,
         folders: (workspace.folders ?? []).map((f) => ({
           ...f,
           parentId: f.parentId ?? null,
@@ -351,10 +397,11 @@ export function ConvexSync() {
 
       // Record what we just loaded as our "last pushed" baseline
       lastPushedTabs.current = JSON.stringify(
-        remoteTabs.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false }))
+        remoteTabs.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: ((t as Record<string, unknown>).noteType as string) ?? "note" }))
       );
       lastPushedWorkspace.current = JSON.stringify({
         activeTabId: workspace.activeTabId,
+        openTabIds: remoteOpenTabIds,
         viewMode: workspace.viewMode,
         theme: (workspace.theme === "dark" || workspace.theme === "light") ? workspace.theme : (workspace.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: workspace.fileTreeOpen,
@@ -372,7 +419,7 @@ export function ConvexSync() {
 
       syncAllTabs({
         userId,
-        tabs: s.tabs.map((t) => ({
+        tabs: s.tabs.filter((t) => t.origin !== "local").map((t) => ({
           tabId: t.id,
           title: t.title,
           content: t.content,
@@ -441,8 +488,8 @@ export function ConvexSync() {
       return;
     }
 
-    // If tabs are missing (and we have local tabs), recreate them
-    if (remoteTabs && remoteTabs.length === 0 && useEditorStore.getState().tabs.length > 0 && !isRecreating.current) {
+    // If tabs are missing (and we have online tabs locally), recreate them
+    if (remoteTabs && remoteTabs.length === 0 && useEditorStore.getState().tabs.some((t) => t.origin !== "local") && !isRecreating.current) {
       // Check if we also have an empty workspace (new user) or if this is a deletion
       // But here we assume deletion if we have local tabs but no remote tabs
       console.log("[ConvexSync] Tabs missing in Convex, recreating...");
@@ -478,15 +525,23 @@ export function ConvexSync() {
         noteType: (((t as Record<string, unknown>).noteType as string) ?? "note") as NoteType,
         customIcon: (t as Record<string, unknown>).customIcon as string | undefined,
         iconColor: (t as Record<string, unknown>).iconColor as string | undefined,
+        origin: "online" as const,
       }));
 
-      const currentActiveId = useEditorStore.getState().activeTabId;
-      const activeStillExists = tabs.some((t) => t.id === currentActiveId);
+      const current = useEditorStore.getState();
+      const localTabs = current.tabs.filter((t) => t.origin === "local");
+      const localTabIdSet = new Set(localTabs.map((t) => t.id));
+      const mergedTabs = [...tabs, ...localTabs];
+      const onlineTabIdSet = new Set(tabs.map((t) => t.id));
+
+      const currentActiveId = current.activeTabId;
+      const activeStillExists = currentActiveId ? onlineTabIdSet.has(currentActiveId) : false;
       // Use remote openTabIds if available, otherwise keep current open tabs that still exist
-      const tabIdSet = new Set(tabs.map((t) => t.id));
-      const updatedOpenTabIds = workspace.openTabIds?.length
-        ? workspace.openTabIds.filter((id) => tabIdSet.has(id))
-        : useEditorStore.getState().openTabIds.filter((id) => tabIdSet.has(id));
+      const remoteOpenTabIds = workspace.openTabIds?.length
+        ? workspace.openTabIds.filter((id) => onlineTabIdSet.has(id))
+        : current.openTabIds.filter((id) => onlineTabIdSet.has(id));
+      const localOpenTabIds = current.openTabIds.filter((id) => localTabIdSet.has(id));
+      const updatedOpenTabIds = Array.from(new Set([...remoteOpenTabIds, ...localOpenTabIds]));
 
       // Only update settings if they actually changed to prevent unnecessary editor recreations
       const currentSettings = useEditorStore.getState().settings;
@@ -494,9 +549,12 @@ export function ConvexSync() {
       const settingsChanged = JSON.stringify(currentSettings) !== JSON.stringify(newSettings);
 
       useEditorStore.setState({
-        tabs,
+        tabs: mergedTabs,
         openTabIds: updatedOpenTabIds,
-        activeTabId: activeStillExists ? currentActiveId : (workspace.activeTabId ?? null),
+        activeTabId:
+          currentActiveId && localTabIdSet.has(currentActiveId)
+            ? currentActiveId
+            : (activeStillExists ? currentActiveId : (workspace.activeTabId ?? null)),
         folders: (workspace.folders ?? []).map((f) => ({
           ...f,
           parentId: f.parentId ?? null,
@@ -561,7 +619,9 @@ export function ConvexSync() {
         useEditorStore.setState({ tabs: newTabs });
         // Also update lastPushedTabs to prevent main sync from overwriting
         lastPushedTabs.current = JSON.stringify(
-          newTabs.map((t) => ({ tabId: t.id, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false }))
+          newTabs
+            .filter((t) => t.origin !== "local")
+            .map((t) => ({ tabId: t.id, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false }))
         );
         requestAnimationFrame(() => { isHydrating.current = false; });
       }

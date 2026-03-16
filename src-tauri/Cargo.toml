@@ -1,6 +1,6 @@
 [package]
 name = "markup"
-version = "1.0.6"
+version = "1.0.7"
 description = "A fast, keyboard-first markdown editor"
 authors = ["Freddie Philpot"]
 license = "MIT"
@@ -29,3 +29,5 @@ tauri-plugin-oauth = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-updater = "2.10.0"
+
+

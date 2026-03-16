@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Markup",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "identifier": "dev.freddiephilpot.markup",
   "build": {
     "frontendDist": "../out",
@@ -30,7 +30,12 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["dmg", "nsis", "msi", "app"],
+    "targets": [
+      "dmg",
+      "nsis",
+      "msi",
+      "app"
+    ],
     "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
@@ -45,7 +50,10 @@
     "copyright": "© 2026 Freddie Philpot",
     "linux": {
       "deb": {
-        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0"
+        ]
       },
       "appimage": {
         "bundleMediaFramework": true

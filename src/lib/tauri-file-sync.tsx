@@ -94,7 +94,7 @@ export function TauriFileSync() {
       }
 
       const localFiles = await readLocalFiles(localSyncFolder);
-      const tabs = useEditorStore.getState().tabs;
+      const tabs = useEditorStore.getState().tabs.filter((t) => t.origin === "local");
       const localFileMap = new Map(localFiles.map((f) => [f.name, f]));
       const tabFilenameMap = new Map(
         tabs.map((t) => [ensureExtension(t.title, t.noteType), t])
@@ -116,6 +116,7 @@ export function TauriFileSync() {
               tags: [],
               pinned: false,
               noteType: localFile.noteType,
+              origin: "local",
             });
           }
         }
@@ -135,7 +136,7 @@ export function TauriFileSync() {
       }
 
       // --- Ongoing sync: write changed tabs to folder ---
-      const currentTabs = useEditorStore.getState().tabs;
+      const currentTabs = useEditorStore.getState().tabs.filter((t) => t.origin === "local");
       for (const tab of currentTabs) {
         const filename = ensureExtension(tab.title, tab.noteType);
         const lastContent = lastSyncedContent.current.get(filename);
@@ -161,7 +162,7 @@ export function TauriFileSync() {
         if (lastContent !== undefined && localFile.content !== lastContent) {
           // File changed externally — update store
           const tabIdx = updatedTabs.findIndex(
-            (t) => ensureExtension(t.title, t.noteType) === localFile.name
+            (t) => t.origin === "local" && ensureExtension(t.title, t.noteType) === localFile.name
           );
           if (tabIdx !== -1 && updatedTabs[tabIdx].content !== localFile.content) {
             updatedTabs[tabIdx] = { ...updatedTabs[tabIdx], content: localFile.content };

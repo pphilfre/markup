@@ -32,6 +32,8 @@ import {
   Search,
   Layers,
   MoreHorizontal,
+  CloudUpload,
+  HardDrive,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -969,12 +971,16 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
   const createMindmap = useEditorStore((s) => s.createMindmap);
   const switchTab = useEditorStore((s) => s.switchTab);
   const deleteTab = useEditorStore((s) => s.deleteTab);
+  const syncLocalTabToOnline = useEditorStore((s) => s.syncLocalTabToOnline);
   const moveTabToFolder = useEditorStore((s) => s.moveTabToFolder);
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const hideMd = useEditorStore((s) => s.settings.hideMdExtensions || !s.settings.showFileExtensions);
   const getAllTags = useEditorStore((s) => s.getAllTags);
   const tagColors = useEditorStore((s) => s.tagColors);
   const setTagColor = useEditorStore((s) => s.setTagColor);
+
+  const onlineTabs = useMemo(() => tabs.filter((t) => t.origin !== "local"), [tabs]);
+  const localTabs = useMemo(() => tabs.filter((t) => t.origin === "local"), [tabs]);
 
   /** Get the color for a tag, falling back to the default palette color */
   const getTagColor = useCallback(
@@ -991,6 +997,7 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
   // Tag filter
   const [activeTagFilters, setActiveTagFilters] = useState<Set<string>>(new Set());
   const [tagFilterOpen, setTagFilterOpen] = useState(false);
+  const [localDrawerOpen, setLocalDrawerOpen] = useState(() => isTauri());
 
   const allTags = getAllTags();
 
@@ -1050,7 +1057,7 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
       <FolderItem
         key={folder.id}
         folder={folder}
-        tabs={tabs}
+        tabs={onlineTabs}
         childFolders={foldersByParent.get(folder.id) ?? []}
         expandedFolders={expandedFolders}
         toggleExpand={toggleExpand}
@@ -1065,7 +1072,7 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
   }
 
   // Root-level tabs (no folder), filtered
-  let rootTabs = tabs.filter((t) => !t.folderId && tabPassesFilter(t));
+  let rootTabs = onlineTabs.filter((t) => !t.folderId && tabPassesFilter(t));
   if (sortByType) rootTabs = [...rootTabs].sort((a, b) => (a.noteType ?? "note").localeCompare(b.noteType ?? "note"));
   if (sortAsc === true) rootTabs = [...rootTabs].sort((a, b) => a.title.localeCompare(b.title));
   else if (sortAsc === false) rootTabs = [...rootTabs].sort((a, b) => b.title.localeCompare(a.title));
@@ -1372,12 +1379,12 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
             onDrop={onRootDrop}
           >
             {/* Pinned files (across all folders) */}
-            {tabs.some((t) => t.pinned && tabPassesFilter(t)) && (
+            {onlineTabs.some((t) => t.pinned && tabPassesFilter(t)) && (
               <div className="mb-1 pb-1 border-b border-border/50">
                 <p className="px-2 py-0.5 text-[10px] text-muted-foreground/50 uppercase tracking-wider flex items-center gap-1">
                   <Pin className="h-2.5 w-2.5" /> Pinned
                 </p>
-                {tabs
+                {onlineTabs
                   .filter((t) => t.pinned && tabPassesFilter(t))
                   .map((tab) => (
                     <FileItem
@@ -1414,7 +1421,7 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
               />
             ))}
 
-            {tabs.length === 0 && (
+            {onlineTabs.length === 0 && (
               <p className="px-3 py-4 text-center text-[10px] text-muted-foreground/50">
                 No files yet
               </p>
@@ -1439,6 +1446,67 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+      {isTauri() && (
+        <div className="border-t border-border">
+          <button
+            onClick={() => setLocalDrawerOpen((v) => !v)}
+            className="flex w-full items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+          >
+            <HardDrive className="h-3.5 w-3.5" />
+            <span className="font-medium">Local</span>
+            <span className="ml-auto text-[10px] text-muted-foreground/70">{localTabs.length}</span>
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", localDrawerOpen ? "rotate-180" : "")} />
+          </button>
+          {localDrawerOpen && (
+            <div className="max-h-56 overflow-y-auto px-1 py-1">
+              {localTabs.length === 0 ? (
+                <p className="px-3 py-3 text-center text-[10px] text-muted-foreground/50">
+                  No local files
+                </p>
+              ) : (
+                [...localTabs]
+                  .sort((a, b) => a.title.localeCompare(b.title))
+                  .map((tab) => {
+                    const Icon = getTabIcon(tab);
+                    return (
+                      <div
+                        key={`local-${tab.id}`}
+                        className={cn(
+                          "group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-muted/50 transition-colors",
+                          tab.id === activeTabId && "bg-accent text-accent-foreground"
+                        )}
+                      >
+                        <button
+                          onClick={() => switchTab(tab.id)}
+                          className="flex min-w-0 flex-1 items-center gap-2 text-left text-xs"
+                        >
+                          <Icon className="h-3.5 w-3.5 shrink-0" style={tab.iconColor ? { color: tab.iconColor } : undefined} />
+                          <span className="truncate">{hideMd ? tab.title.replace(/\.(md|canvas|mindmap)$/i, "") : tab.title}</span>
+                        </button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                syncLocalTabToOnline(tab.id);
+                              }}
+                            >
+                              <CloudUpload className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="left">Sync to Online</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+          )}
+        </div>
+      )}
       {/* Profile selector — bottom */}
       <div className="flex items-center px-2 py-1.5 border-t border-border">
         <ProfileSelector />

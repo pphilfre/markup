@@ -369,7 +369,7 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
   const noteType = (sharedNote as Record<string, unknown>).noteType as string | undefined;
 
   return (
-    <div className="flex h-screen flex-col bg-background">
+    <div className="flex h-screen min-h-0 flex-col bg-background">
       {/* Top bar */}
       <div className="flex items-center gap-2 border-b border-border bg-card px-4 py-2">
         <Button
@@ -438,9 +438,9 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
       ) : noteType === "mindmap" && (sharedNote as Record<string, unknown>).mindmapData ? (
         <ReadOnlyMindmapCanvas data={(sharedNote as Record<string, unknown>).mindmapData as string} />
       ) : canEdit ? (
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* Editor */}
-          <div className="flex flex-1 flex-col overflow-hidden border-r border-border">
+          <div className="flex flex-1 min-h-0 flex-col overflow-hidden border-r border-border">
             <textarea
               ref={textareaRef}
               value={displayContent}
@@ -450,12 +450,12 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
             />
           </div>
           {/* Preview */}
-          <div className="flex flex-1 flex-col overflow-auto">
+          <div className="flex flex-1 min-h-0 flex-col overflow-auto">
             <MarkdownPreviewStandalone content={displayContent} />
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 min-h-0 overflow-auto">
           <MarkdownPreviewStandalone content={displayContent} />
         </div>
       )}

@@ -10,6 +10,7 @@ export type ViewMode = "editor" | "split" | "preview" | "graph" | "whiteboard" |
 export type Theme = "dark" | "light";
 export type ThemeMode = "light" | "dark" | "system" | "solarized-light" | "nord-dark" | "catppuccin-mocha" | "catppuccin-latte" | "gruvbox-dark" | "gruvbox-light" | "tokyo-night" | "everforest-light" | "uwu";
 export type NoteType = "note" | "whiteboard" | "mindmap";
+export type TabOrigin = "online" | "local";
 
 export interface CustomThemeColors {
   background?: string;
@@ -37,6 +38,7 @@ export interface Tab {
   noteType: NoteType;
   customIcon?: string;  // lucide icon name
   iconColor?: string;   // hex color
+  origin?: TabOrigin;
 }
 
 export interface Folder {
@@ -197,6 +199,7 @@ interface EditorState {
   deleteTab: (id: string) => void;
   openTab: (id: string) => void;
   switchTab: (id: string) => void;
+  syncLocalTabToOnline: (localTabId: string) => void;
   updateContent: (id: string, content: string) => void;
   updateTitle: (id: string, title: string) => void;
   renameTab: (id: string, title: string) => void;
@@ -258,6 +261,7 @@ function newTab(folderId: string | null = null, noteType: NoteType = "note"): Ta
     tags: [],
     pinned: false,
     noteType,
+    origin: "online",
   };
 }
 
@@ -566,6 +570,33 @@ export const useEditorStore = create<EditorState>()(
       };
     }),
 
+    syncLocalTabToOnline: (localTabId) =>
+      set((s) => {
+        const local = s.tabs.find((t) => t.id === localTabId);
+        if (!local || local.origin !== "local") return {};
+
+        const tab: Tab = {
+          ...local,
+          id: crypto.randomUUID(),
+          folderId: null,
+          tags: [],
+          pinned: false,
+          origin: "online",
+        };
+
+        let vm = s.viewMode;
+        if (tab.noteType === "whiteboard") vm = "whiteboard";
+        else if (tab.noteType === "mindmap") vm = "mindmap";
+        else if (vm === "whiteboard" || vm === "mindmap") vm = "editor";
+
+        return {
+          tabs: [...s.tabs, tab],
+          openTabIds: s.openTabIds.includes(tab.id) ? s.openTabIds : [...s.openTabIds, tab.id],
+          activeTabId: tab.id,
+          viewMode: vm,
+        };
+      }),
+
     updateContent: (id, content) =>
       set((s) => ({
         tabs: s.tabs.map((t) => {
@@ -619,7 +650,7 @@ export const useEditorStore = create<EditorState>()(
     getAllTags: () => {
       const { tabs } = get();
       const tagSet = new Set<string>();
-      tabs.forEach((t) => t.tags.forEach((tag) => tagSet.add(tag)));
+      tabs.filter((t) => t.origin !== "local").forEach((t) => t.tags.forEach((tag) => tagSet.add(tag)));
       return Array.from(tagSet).sort();
     },
 

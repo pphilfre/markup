@@ -184,7 +184,7 @@ function PublishedSiteContent({ slug, userId }: { slug: string; userId: string |
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-full min-h-0 bg-background flex flex-col">
       <div className="sticky top-0 z-10 border-b border-border bg-card/90 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-2">
           <div className="min-w-0">
@@ -217,7 +217,7 @@ function PublishedSiteContent({ slug, userId }: { slug: string; userId: string |
         </div>
       )}
 
-      <main className="flex-1 overflow-auto mx-auto max-w-4xl px-4 py-8">
+      <main className="flex-1 min-h-0 overflow-auto mx-auto max-w-4xl px-4 py-8">
         <article className="markdown-body">
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkMath]}
