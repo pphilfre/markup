@@ -126,7 +126,7 @@ export const DEFAULT_SETTINGS: Settings = {
   wordWrap: true,
   highlightCurrentLine: true,
   highlightMatchingBrackets: true,
-  cursorAnimation: "blink",
+  cursorAnimation: "smooth",
   multiCursorSupport: true,
   // Appearance - Theme
   themeMode: "dark",

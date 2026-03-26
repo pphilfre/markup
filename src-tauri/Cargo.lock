@@ -2108,7 +2108,7 @@ checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 
 [[package]]
 name = "markup"
-version = "1.0.7"
+version = "1.0.8"
 dependencies = [
  "log",
  "serde",
@@ -6021,6 +6021,7 @@ dependencies = [
  "syn 2.0.117",
  "winnow 0.7.15",
 ]
+
 
 
 

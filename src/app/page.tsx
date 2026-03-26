@@ -23,13 +23,8 @@ export default function Home() {
   const isMobile = useIsMobile();
   const sidebarPosition = useEditorStore((s) => s.settings.sidebarPosition);
   const compactMode = useEditorStore((s) => s.settings.compactMode);
-  const zoomLevel = useEditorStore((s) => s.zoomLevel);
 
-  // Apply zoom level to the root element
-  useEffect(() => {
-    document.documentElement.style.zoom = `${zoomLevel}%`;
-    return () => { document.documentElement.style.zoom = ""; };
-  }, [zoomLevel]);
+  // Removed custom zoom logic to match website behavior in Tauri
 
   // Check for shared note URL parameter
   const [shareId, setShareId] = useState<string | null>(null);

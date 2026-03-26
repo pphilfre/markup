@@ -338,7 +338,7 @@ export function MarkdownPreview({
       <article className="markdown-body mx-auto max-w-3xl px-8 py-6">
         <ReactMarkdown
           remarkPlugins={[
-            [remarkGfm, { singleTilde: false }],
+            [remarkGfm, { singleTilde: false, breaks: true }],
             remarkMath,
             remarkSupersub,
             remarkDefinitionList,

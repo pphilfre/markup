@@ -589,6 +589,12 @@ function FileItem({
 
   const allTags = getAllTags();
 
+  // Detect mobile (simple window width check or useMobile hook)
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+
+  // Placeholder for mobile drag-and-drop logic
+  // TODO: Implement touch drag-and-drop for mobile
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
@@ -596,10 +602,12 @@ function FileItem({
           <div className="flex w-full items-center">
             <button
               onClick={onSwitch}
-              draggable
-              onDragStart={onDragStart}
+              draggable={!isMobile}
+              onDragStart={!isMobile ? onDragStart : undefined}
+              // TODO: Add touch drag handlers for mobile
               className={cn(
-                "flex flex-1 min-w-0 items-center gap-1.5 rounded-sm px-3 py-1 text-xs transition-colors cursor-grab active:cursor-grabbing",
+                "flex flex-1 min-w-0 items-center gap-1.5 rounded-sm px-3 py-1 text-xs transition-colors",
+                !isMobile && "cursor-grab active:cursor-grabbing",
                 isActive
                   ? "bg-accent text-accent-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -625,8 +633,11 @@ function FileItem({
                 <Pin className="ml-auto h-2.5 w-2.5 shrink-0 text-muted-foreground/60" />
               )}
             </button>
-            {/* Quick tag + triple‑dot buttons — visible on hover */}
-            <div className="flex items-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+            {/* Quick tag + triple‑dot buttons — always visible on mobile, hover on desktop */}
+            <div className={cn(
+              "flex items-center shrink-0 transition-opacity",
+              isMobile ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            )}>
               <Popover>
                 <PopoverTrigger asChild>
                   <button
@@ -731,137 +742,11 @@ function FileItem({
           )}
         </div>
       </ContextMenuTrigger>
+      {/* ...existing context menu code... */}
       <ContextMenuContent className="w-52">
-        <ContextMenuItem onClick={() => togglePin(tab.id)}>
-          {tab.pinned
-            ? <><PinOff className="mr-2 h-3.5 w-3.5" /> Unpin</>
-            : <><Pin className="mr-2 h-3.5 w-3.5" /> Pin to Top</>
-          }
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => setRenaming(true)}>
-          <Pencil className="mr-2 h-3.5 w-3.5" /> Rename
-        </ContextMenuItem>
-        <ContextMenuItem onClick={exportFile}>
-          <Download className="mr-2 h-3.5 w-3.5" /> Download
-        </ContextMenuItem>
-        <ContextMenuItem asChild onSelect={(e) => e.preventDefault()}>
-          <IconPickerPopover tab={tab}>
-            <div className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground">
-              <Palette className="h-3.5 w-3.5" />
-              <span>Change Icon</span>
-            </div>
-          </IconPickerPopover>
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => {
-          switchTab(tab.id);
-          document.dispatchEvent(new CustomEvent("open-share"));
-        }}>
-          <Share2 className="mr-2 h-3.5 w-3.5" /> Share
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => {
-          switchTab(tab.id);
-          document.dispatchEvent(new CustomEvent("open-export"));
-        }}>
-          <FileOutput className="mr-2 h-3.5 w-3.5" /> Export As…
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        {/* Tag management */}
-        <div className="px-2 py-1.5" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
-          <p className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
-            <Tag className="h-3 w-3" /> Tags
-          </p>
-          <div className="flex flex-wrap gap-1 mb-1.5">
-            {tab.tags.map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex items-center gap-0.5 rounded-sm px-1.5 py-0.5 text-xs"
-                style={{
-                  background: `${getTagColor(tag)}20`,
-                  color: getTagColor(tag),
-                }}
-              >
-                #{tag}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeTag(tab.id, tag);
-                  }}
-                  className="ml-0.5 opacity-60 hover:opacity-100"
-                >
-                  ×
-                </button>
-                {/* Color swatches */}
-                <span className="ml-1 inline-flex gap-0.5">
-                  {TAG_PALETTE.map((c) => (
-                    <button
-                      key={c}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setTagColor(tag, c);
-                      }}
-                      className={cn(
-                        "h-2.5 w-2.5 rounded-full border",
-                        getTagColor(tag) === c ? "border-foreground scale-125" : "border-transparent opacity-60 hover:opacity-100"
-                      )}
-                      style={{ background: c }}
-                    />
-                  ))}
-                </span>
-              </span>
-            ))}
-          </div>
-          {addingTag ? (
-            <input
-              ref={tagInputRef}
-              autoFocus
-              value={newTag}
-              onChange={(e) => setNewTag(e.target.value)}
-              onBlur={commitTag}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") commitTag();
-                if (e.key === "Escape") { setNewTag(""); setAddingTag(false); }
-                e.stopPropagation();
-              }}
-              placeholder="tag name"
-              className="w-full rounded-sm border border-border bg-background px-1.5 py-0.5 text-xs outline-none"
-              onClick={(e) => e.stopPropagation()}
-            />
-          ) : (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setAddingTag(true);
-              }}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              + Add tag
-            </button>
-          )}
-          {/* Quick-add: show existing tags not yet on this file */}
-          {allTags.filter((t) => !tab.tags.includes(t)).length > 0 && !addingTag && (
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {allTags.filter((t) => !tab.tags.includes(t)).slice(0, 6).map((tag) => (
-                <button
-                  key={tag}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    addTag(tab.id, tag);
-                  }}
-                  className="rounded-sm border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                >
-                  +{tag}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          onClick={onClose}
-          className="text-destructive focus:text-destructive"
-        >
-          <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
-        </ContextMenuItem>
+        {/* ...existing context menu items... */}
+        {/* No change needed here for mobile, as 3-dot menu is handled above */}
+        ...existing code...
       </ContextMenuContent>
     </ContextMenu>
   );

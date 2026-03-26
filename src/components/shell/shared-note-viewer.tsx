@@ -5,6 +5,9 @@ import { api } from "../../../convex/_generated/api";
 import { useAuthState } from "@/components/convex-client-provider";
 import { MarkdownPreviewStandalone } from "@/components/editor/markdown-preview-standalone";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Sun, Moon, Palette } from "lucide-react";
+import { BUILTIN_THEMES } from "@/components/shell/settings-panel";
 import { Button } from "@/components/ui/button";
 import { Globe, Lock, Eye, Pencil, ArrowLeft, Copy, Check, Layout, GitBranch } from "lucide-react";
 
@@ -268,6 +271,16 @@ function ReadOnlyMindmapCanvas({ data }: { data: string }) {
 }
 
 export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
+  // Theme selection for unauthenticated users
+  const [localTheme, setLocalTheme] = useState<string | null>(null);
+  useEffect(() => {
+    if (localTheme) {
+      document.documentElement.classList.remove(
+        ...BUILTIN_THEMES.map((t) => t.id)
+      );
+      document.documentElement.classList.add(localTheme);
+    }
+  }, [localTheme]);
   const { user } = useAuthState();
   const sharedNote = useQuery(api.sharing.getByShareId, { shareId });
   const updateByShareId = useMutation(api.sharing.updateByShareId);
@@ -430,6 +443,28 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
           )}
           {copied ? "Copied" : "Copy link"}
         </Button>
+
+        {/* Theme selector for unauthenticated users */}
+        {!user && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7" title="Change theme">
+                <Palette className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {BUILTIN_THEMES.map((t) => (
+                <DropdownMenuItem
+                  key={t.id}
+                  onClick={() => setLocalTheme(t.id)}
+                  className={localTheme === t.id ? "font-bold" : ""}
+                >
+                  {t.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {/* Content */}

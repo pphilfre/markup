@@ -13,7 +13,9 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import type { Components } from "react-markdown";
 import { Button } from "@/components/ui/button";
-import { Copy, ExternalLink, Pencil } from "lucide-react";
+import { Copy, ExternalLink, Pencil, Palette } from "lucide-react";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { BUILTIN_THEMES } from "@/components/shell/settings-panel";
 
 const ADMONITION_TYPES: Record<string, { color: string; icon: string; label: string }> = {
   NOTE: { color: "#3b82f6", icon: "ℹ️", label: "Note" },
@@ -97,6 +99,16 @@ function PublishedSitePageInner() {
 }
 
 function PublishedSiteContent({ slug, userId }: { slug: string; userId: string | null }) {
+  // Theme selection for unauthenticated users
+  const [localTheme, setLocalTheme] = useState<string | null>(null);
+  useEffect(() => {
+    if (localTheme) {
+      document.documentElement.classList.remove(
+        ...BUILTIN_THEMES.map((t) => t.id)
+      );
+      document.documentElement.classList.add(localTheme);
+    }
+  }, [localTheme]);
   const site = useQuery(api.sites.getBySlug, { slug });
   const [timedOut, setTimedOut] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -197,6 +209,27 @@ function PublishedSiteContent({ slug, userId }: { slug: string; userId: string |
             <Button variant="outline" size="sm" className="gap-1.5" onClick={handleCopyLink}>
               <Copy className="h-3.5 w-3.5" /> Copy link
             </Button>
+            {/* Theme selector for unauthenticated users */}
+            {!userId && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Change theme">
+                    <Palette className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {BUILTIN_THEMES.map((t) => (
+                    <DropdownMenuItem
+                      key={t.id}
+                      onClick={() => setLocalTheme(t.id)}
+                      className={localTheme === t.id ? "font-bold" : ""}
+                    >
+                      {t.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             {isOwner && (
               <Button size="sm" className="gap-1.5" onClick={handleEdit}>
                 <Pencil className="h-3.5 w-3.5" /> Edit
