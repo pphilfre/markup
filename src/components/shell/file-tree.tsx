@@ -29,6 +29,8 @@ import {
   FileOutput,
   PenTool,
   GitBranch,
+  KanbanSquare,
+  FileType,
   Search,
   Layers,
   MoreHorizontal,
@@ -115,6 +117,8 @@ function getTabIcon(tab: Tab): React.ComponentType<{ className?: string; style?:
   }
   if (tab.noteType === "whiteboard") return PenTool;
   if (tab.noteType === "mindmap") return GitBranch;
+  if (tab.noteType === "kanban") return KanbanSquare;
+  if (tab.noteType === "pdf") return FileType;
   return FileText;
 }
 
@@ -315,6 +319,10 @@ function FolderItem({
   tabFilter,
   depth,
   renderFolder,
+  mobile,
+  mobileDraggingTabId,
+  onStartMobileDrag,
+  onMobileDropTab,
 }: {
   folder: Folder;
   tabs: Tab[];
@@ -327,18 +335,25 @@ function FolderItem({
   tabFilter?: (tab: Tab) => boolean;
   depth: number;
   renderFolder: (folder: Folder, depth: number) => React.ReactNode;
+  mobile?: boolean;
+  mobileDraggingTabId?: string | null;
+  onStartMobileDrag?: (tabId: string) => void;
+  onMobileDropTab?: (folderId: string) => void;
 }) {
   const [renaming, setRenaming] = useState(false);
   const renameFolder = useEditorStore((s) => s.renameFolder);
   const colorFolder = useEditorStore((s) => s.colorFolder);
   const deleteFolder = useEditorStore((s) => s.deleteFolder);
   const createFolder = useEditorStore((s) => s.createFolder);
-  const createTab = useEditorStore((s) => s.createTab);
+  const requestCreateTab = useEditorStore((s) => s.requestCreateTab);
   const createWhiteboard = useEditorStore((s) => s.createWhiteboard);
   const createMindmap = useEditorStore((s) => s.createMindmap);
+  const createKanban = useEditorStore((s) => s.createKanban);
+  const createPdf = useEditorStore((s) => s.createPdf);
   const switchTab = useEditorStore((s) => s.switchTab);
   const deleteTab = useEditorStore((s) => s.deleteTab);
   const moveTabToFolder = useEditorStore((s) => s.moveTabToFolder);
+  const reorderFolder = useEditorStore((s) => s.reorderFolder);
   const activeTabId = useEditorStore((s) => s.activeTabId);
 
   const expanded = expandedFolders.has(folder.id);
@@ -377,6 +392,12 @@ function FolderItem({
   };
 
   // Drag-drop: accept files dragged onto folder
+  const onFolderDragStart = (e: React.DragEvent) => {
+    if (mobile) return;
+    e.dataTransfer.setData("text/folder-id", folder.id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
   const onDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -386,6 +407,15 @@ function FolderItem({
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+
+    const draggedFolderId = e.dataTransfer.getData("text/folder-id");
+    if (draggedFolderId) {
+      if (draggedFolderId !== folder.id) {
+        reorderFolder(draggedFolderId, folder.id);
+      }
+      return;
+    }
+
     const tabId = e.dataTransfer.getData("text/tab-id");
     if (tabId) {
       moveTabToFolder(tabId, folder.id);
@@ -398,16 +428,29 @@ function FolderItem({
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <button
-            onClick={() => toggleExpand(folder.id)}
+            onClick={() => {
+              if (mobile && mobileDraggingTabId) {
+                onMobileDropTab?.(folder.id);
+                if (!expandedFolders.has(folder.id)) toggleExpand(folder.id);
+                return;
+              }
+              toggleExpand(folder.id);
+            }}
+            draggable={!mobile}
+            onDragStart={onFolderDragStart}
             onDragOver={onDragOver}
             onDrop={onDrop}
-            className="flex w-full items-center gap-1.5 rounded-sm pr-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors group"
-            style={{ paddingLeft: 8 + depth * 12 }}
+            className={cn(
+              "flex w-full items-center gap-1.5 rounded-sm pr-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors group",
+              mobile ? "py-2 text-[13px]" : "py-1 text-xs",
+              mobile && mobileDraggingTabId && "border border-dashed border-primary/50 bg-primary/5 text-foreground"
+            )}
+            style={{ paddingLeft: (mobile ? 10 : 8) + depth * (mobile ? 14 : 12) }}
           >
             {expanded ? (
-              <ChevronDown className="h-3 w-3 shrink-0" />
+              <ChevronDown className={cn("shrink-0", mobile ? "h-4 w-4" : "h-3 w-3")} />
             ) : (
-              <ChevronRight className="h-3 w-3 shrink-0" />
+              <ChevronRight className={cn("shrink-0", mobile ? "h-4 w-4" : "h-3 w-3")} />
             )}
             {/* Clickable colour dot */}
             <ColorPicker
@@ -415,7 +458,7 @@ function FolderItem({
               onPick={(c) => colorFolder(folder.id, c)}
             >
               <span
-                className="h-2.5 w-2.5 rounded-sm shrink-0 cursor-pointer hover:scale-125 transition-transform"
+                className={cn("rounded-sm shrink-0 cursor-pointer hover:scale-125 transition-transform", mobile ? "h-3.5 w-3.5" : "h-2.5 w-2.5")}
                 style={{ background: folder.color }}
                 onClick={(e) => e.stopPropagation()}
               />
@@ -438,7 +481,7 @@ function FolderItem({
           </button>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onClick={() => createTab(folder.id)}>
+          <ContextMenuItem onClick={() => requestCreateTab(folder.id)}>
             <Plus className="mr-2 h-3.5 w-3.5" /> New File
           </ContextMenuItem>
           <ContextMenuItem
@@ -454,6 +497,12 @@ function FolderItem({
           </ContextMenuItem>
           <ContextMenuItem onClick={() => createMindmap(folder.id)}>
             <GitBranch className="mr-2 h-3.5 w-3.5" /> New Mindmap
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => createKanban(folder.id)}>
+            <KanbanSquare className="mr-2 h-3.5 w-3.5" /> New Kanban
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => createPdf(folder.id)}>
+            <FileType className="mr-2 h-3.5 w-3.5" /> New PDF
           </ContextMenuItem>
           <ContextMenuItem onClick={() => setRenaming(true)}>
             <Pencil className="mr-2 h-3.5 w-3.5" /> Rename
@@ -504,6 +553,9 @@ function FolderItem({
                 onSwitch={() => switchTab(tab.id)}
                 onClose={() => deleteTab(tab.id)}
                 hideMd={hideMd}
+                mobile={mobile}
+                mobileDraggingTabId={mobileDraggingTabId}
+                onStartMobileDrag={onStartMobileDrag}
               />
             ))
           )}
@@ -520,12 +572,18 @@ function FileItem({
   onSwitch,
   onClose,
   hideMd,
+  mobile,
+  mobileDraggingTabId,
+  onStartMobileDrag,
 }: {
   tab: Tab;
   isActive: boolean;
   onSwitch: () => void;
   onClose: () => void;
   hideMd: boolean;
+  mobile?: boolean;
+  mobileDraggingTabId?: string | null;
+  onStartMobileDrag?: (tabId: string) => void;
 }) {
   const renameTab = useEditorStore((s) => s.renameTab);
   const switchTab = useEditorStore((s) => s.switchTab);
@@ -543,10 +601,15 @@ function FileItem({
   const [addingTag, setAddingTag] = useState(false);
   const [newTag, setNewTag] = useState("");
   const tagInputRef = useRef<HTMLInputElement>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggeredRef = useRef(false);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
-  const displayName = hideMd && (tab.title.endsWith(".md") || tab.title.endsWith(".canvas") || tab.title.endsWith(".mindmap"))
-    ? tab.title.replace(/\.(md|canvas|mindmap)$/, "")
+  const displayName = hideMd && (tab.title.endsWith(".md") || tab.title.endsWith(".canvas") || tab.title.endsWith(".mindmap") || tab.title.endsWith(".kanban") || tab.title.endsWith(".pdf"))
+    ? tab.title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/, "")
     : tab.title;
+
+  const expectedExt = tab.noteType === "whiteboard" ? ".canvas" : tab.noteType === "mindmap" ? ".mindmap" : tab.noteType === "kanban" ? ".kanban" : tab.noteType === "pdf" ? ".pdf" : ".md";
 
   const exportFile = async () => {
     if (isTauri()) {
@@ -580,6 +643,37 @@ function FileItem({
     e.dataTransfer.effectAllowed = "move";
   };
 
+  const clearLongPressTimer = () => {
+    if (!longPressTimerRef.current) return;
+    clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = null;
+  };
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (!mobile || !onStartMobileDrag) return;
+    if (e.touches.length !== 1) return;
+    longPressTriggeredRef.current = false;
+    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      onStartMobileDrag(tab.id);
+    }, 300);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!mobile || !touchStartRef.current || e.touches.length !== 1) return;
+    const dx = Math.abs(e.touches[0].clientX - touchStartRef.current.x);
+    const dy = Math.abs(e.touches[0].clientY - touchStartRef.current.y);
+    if (dx > 8 || dy > 8) {
+      clearLongPressTimer();
+    }
+  };
+
+  const onTouchEnd = () => {
+    clearLongPressTimer();
+    touchStartRef.current = null;
+  };
+
   const commitTag = () => {
     const t = newTag.trim().toLowerCase();
     if (t) addTag(tab.id, t);
@@ -595,11 +689,25 @@ function FileItem({
         <div className="group">
           <div className="flex w-full items-center">
             <button
-              onClick={onSwitch}
-              draggable
+              onClick={(e) => {
+                if (mobile && longPressTriggeredRef.current) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  longPressTriggeredRef.current = false;
+                  return;
+                }
+                onSwitch();
+              }}
+              draggable={!mobile}
               onDragStart={onDragStart}
+              onTouchStart={onTouchStart}
+              onTouchMove={onTouchMove}
+              onTouchEnd={onTouchEnd}
               className={cn(
-                "flex flex-1 min-w-0 items-center gap-1.5 rounded-sm px-3 py-1 text-xs transition-colors cursor-grab active:cursor-grabbing",
+                "flex flex-1 min-w-0 items-center gap-1.5 rounded-sm px-3 transition-colors",
+                mobile ? "py-2 text-[13px]" : "py-1 text-xs",
+                mobile ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
+                mobileDraggingTabId === tab.id && "border border-dashed border-primary/60 bg-primary/10 text-foreground",
                 isActive
                   ? "bg-accent text-accent-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -607,13 +715,14 @@ function FileItem({
             >
               {(() => {
                 const Icon = getTabIcon(tab);
-                return <Icon className="h-3 w-3 shrink-0" style={tab.iconColor ? { color: tab.iconColor } : undefined} />;
+                return <Icon className={cn("shrink-0", mobile ? "h-4 w-4" : "h-3 w-3")} style={tab.iconColor ? { color: tab.iconColor } : undefined} />;
               })()}
               {renaming ? (
                 <InlineRename
                   initial={tab.title}
                   onCommit={(v) => {
-                    renameTab(tab.id, v.endsWith(".md") ? v : v + ".md");
+                    const base = v.replace(/\.(md|canvas|mindmap|kanban|pdf)$/i, "");
+                    renameTab(tab.id, `${base}${expectedExt}`);
                     setRenaming(false);
                   }}
                   onCancel={() => setRenaming(false)}
@@ -625,52 +734,57 @@ function FileItem({
                 <Pin className="ml-auto h-2.5 w-2.5 shrink-0 text-muted-foreground/60" />
               )}
             </button>
-            {/* Quick tag + triple‑dot buttons — visible on hover */}
-            <div className="flex items-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                    title="Quick add tag"
-                  >
-                    <Tag className="h-2.5 w-2.5" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent side="right" align="start" className="w-48 p-2" onPointerDownOutside={(e) => e.stopPropagation()}>
-                  <p className="text-[10px] font-medium text-muted-foreground mb-1.5">Add tag</p>
-                  <div className="flex flex-wrap gap-1 mb-1.5">
-                    {allTags.filter((t) => !tab.tags.includes(t)).map((tag) => (
-                      <button
-                        key={tag}
-                        onClick={(e) => { e.stopPropagation(); addTag(tab.id, tag); }}
-                        className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                      >
-                        +{tag}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <input
-                      placeholder="New tag…"
-                      className="flex-1 rounded-sm border border-input bg-background px-1.5 py-0.5 text-[10px] outline-none focus:ring-1 focus:ring-ring"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          const val = (e.target as HTMLInputElement).value.trim().toLowerCase();
-                          if (val) { addTag(tab.id, val); (e.target as HTMLInputElement).value = ""; }
-                        }
-                        e.stopPropagation();
-                      }}
+            {/* Quick tag + triple‑dot buttons */}
+            <div className={cn("flex items-center shrink-0 transition-opacity", mobile ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
+              {!mobile && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
                       onClick={(e) => e.stopPropagation()}
-                    />
-                  </div>
-                </PopoverContent>
-              </Popover>
+                      className="flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      title="Quick add tag"
+                    >
+                      <Tag className="h-2.5 w-2.5" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent side="right" align="start" className="w-48 p-2" onPointerDownOutside={(e) => e.stopPropagation()}>
+                    <p className="text-[10px] font-medium text-muted-foreground mb-1.5">Add tag</p>
+                    <div className="flex flex-wrap gap-1 mb-1.5">
+                      {allTags.filter((t) => !tab.tags.includes(t)).map((tag) => (
+                        <button
+                          key={tag}
+                          onClick={(e) => { e.stopPropagation(); addTag(tab.id, tag); }}
+                          className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                        >
+                          +{tag}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <input
+                        placeholder="New tag…"
+                        className="flex-1 rounded-sm border border-input bg-background px-1.5 py-0.5 text-[10px] outline-none focus:ring-1 focus:ring-ring"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            const val = (e.target as HTMLInputElement).value.trim().toLowerCase();
+                            if (val) { addTag(tab.id, val); (e.target as HTMLInputElement).value = ""; }
+                          }
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     onClick={(e) => e.stopPropagation()}
-                    className="flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    className={cn(
+                      "flex items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors",
+                      mobile ? "h-7 w-7" : "h-5 w-5"
+                    )}
                     title="More actions"
                   >
                     <MoreHorizontal className="h-3 w-3" />
@@ -966,13 +1080,16 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
   const tabs = useEditorStore((s) => s.tabs);
   const folders = useEditorStore((s) => s.folders);
   const createFolder = useEditorStore((s) => s.createFolder);
-  const createTab = useEditorStore((s) => s.createTab);
+  const requestCreateTab = useEditorStore((s) => s.requestCreateTab);
   const createWhiteboard = useEditorStore((s) => s.createWhiteboard);
   const createMindmap = useEditorStore((s) => s.createMindmap);
+  const createKanban = useEditorStore((s) => s.createKanban);
+  const createPdf = useEditorStore((s) => s.createPdf);
   const switchTab = useEditorStore((s) => s.switchTab);
   const deleteTab = useEditorStore((s) => s.deleteTab);
   const syncLocalTabToOnline = useEditorStore((s) => s.syncLocalTabToOnline);
   const moveTabToFolder = useEditorStore((s) => s.moveTabToFolder);
+  const moveFolderToParent = useEditorStore((s) => s.moveFolderToParent);
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const hideMd = useEditorStore((s) => s.settings.hideMdExtensions || !s.settings.showFileExtensions);
   const getAllTags = useEditorStore((s) => s.getAllTags);
@@ -998,6 +1115,16 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
   const [activeTagFilters, setActiveTagFilters] = useState<Set<string>>(new Set());
   const [tagFilterOpen, setTagFilterOpen] = useState(false);
   const [localDrawerOpen, setLocalDrawerOpen] = useState(() => isTauri());
+  const [localDrawerHeight, setLocalDrawerHeight] = useState(() => {
+    if (typeof window === "undefined") return 224;
+    const cached = window.localStorage.getItem("markup-local-drawer-height-v1");
+    const parsed = cached ? Number(cached) : NaN;
+    if (Number.isNaN(parsed)) return 224;
+    return Math.max(120, Math.min(420, parsed));
+  });
+  const localDrawerDraggingRef = useRef(false);
+  const pendingLocalDrawerHeightRef = useRef(localDrawerHeight);
+  const [mobileDraggedTabId, setMobileDraggedTabId] = useState<string | null>(null);
 
   const allTags = getAllTags();
 
@@ -1013,6 +1140,21 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
   const clearTagFilters = useCallback(() => {
     setActiveTagFilters(new Set());
     setTagFilterOpen(false);
+  }, []);
+
+  const startMobileDrag = useCallback((tabId: string) => {
+    if (!mobile) return;
+    setMobileDraggedTabId(tabId);
+  }, [mobile]);
+
+  const dropMobileDraggedTab = useCallback((folderId: string | null) => {
+    if (!mobileDraggedTabId) return;
+    moveTabToFolder(mobileDraggedTabId, folderId);
+    setMobileDraggedTabId(null);
+  }, [mobileDraggedTabId, moveTabToFolder]);
+
+  const cancelMobileDrag = useCallback(() => {
+    setMobileDraggedTabId(null);
   }, []);
 
   // Filter function: tab passes if it has ALL active tag filters
@@ -1067,6 +1209,10 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
         tabFilter={tabPassesFilter}
         depth={depth}
         renderFolder={renderFolder}
+        mobile={mobile}
+        mobileDraggingTabId={mobileDraggedTabId}
+        onStartMobileDrag={startMobileDrag}
+        onMobileDropTab={(folderId) => dropMobileDraggedTab(folderId)}
       />
     );
   }
@@ -1088,6 +1234,11 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
   };
   const onRootDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    const folderId = e.dataTransfer.getData("text/folder-id");
+    if (folderId) {
+      moveFolderToParent(folderId, null);
+      return;
+    }
     const tabId = e.dataTransfer.getData("text/tab-id");
     if (tabId) moveTabToFolder(tabId, null);
   };
@@ -1135,14 +1286,43 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
     window.addEventListener("mouseup", onUp);
   } : undefined;
 
+  const toolbarButtonSize = mobile ? "h-9 w-9" : "h-6 w-6";
+  const toolbarIconSize = mobile ? "h-4 w-4" : "h-3.5 w-3.5";
+  const onLocalDrawerResizeMouseDown = !mobile ? (e: React.MouseEvent) => {
+    e.preventDefault();
+    localDrawerDraggingRef.current = true;
+    const startY = e.clientY;
+    const startHeight = localDrawerHeight;
+
+    const onMove = (ev: MouseEvent) => {
+      if (!localDrawerDraggingRef.current) return;
+      const next = Math.max(120, Math.min(420, startHeight - (ev.clientY - startY)));
+      pendingLocalDrawerHeightRef.current = next;
+      setLocalDrawerHeight(next);
+    };
+
+    const onUp = () => {
+      if (!localDrawerDraggingRef.current) return;
+      localDrawerDraggingRef.current = false;
+      const committed = Math.round(pendingLocalDrawerHeightRef.current);
+      setLocalDrawerHeight(committed);
+      window.localStorage.setItem("markup-local-drawer-height-v1", String(committed));
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  } : undefined;
+
   return (
     <aside
       className={cn("relative flex h-full flex-col border-r border-border bg-card overflow-hidden")}
       style={!mobile ? { width: `var(--filetree-drag-width, ${fileTreeWidth}px)`, maxWidth: "100vw" } : undefined}
     >
       {/* Header row 1: title + main controls */}
-      <div className="flex items-center px-2 py-1.5 border-b border-border gap-1">
-        <div className="flex items-center gap-0.5 flex-wrap">
+      <div className={cn("flex items-center px-2 border-b border-border", mobile ? "py-2 gap-1.5" : "py-1.5 gap-1")}>
+        <div className={cn("flex items-center flex-wrap", mobile ? "gap-1" : "gap-0.5")}>
           <DropdownMenu>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1150,16 +1330,16 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                    className={cn(toolbarButtonSize, "text-muted-foreground hover:text-foreground")}
                   >
-                    <Plus className="h-3.5 w-3.5" />
+                    <Plus className={toolbarIconSize} />
                   </Button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
               <TooltipContent side="bottom">New…</TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="start" className="min-w-[140px]">
-              <DropdownMenuItem onClick={() => createTab()}>
+              <DropdownMenuItem onClick={() => requestCreateTab()}>
                 <FileText className="mr-2 h-3.5 w-3.5" /> Note
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => createWhiteboard()}>
@@ -1167,6 +1347,12 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => createMindmap()}>
                 <GitBranch className="mr-2 h-3.5 w-3.5" /> Mindmap
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => createKanban()}>
+                <KanbanSquare className="mr-2 h-3.5 w-3.5" /> Kanban
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => createPdf()}>
+                <FileType className="mr-2 h-3.5 w-3.5" /> PDF
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -1176,9 +1362,9 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
                 variant="ghost"
                 size="icon"
                 onClick={() => createFolder("New Folder")}
-                className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                className={cn(toolbarButtonSize, "text-muted-foreground hover:text-foreground")}
               >
-                <FolderPlus className="h-3.5 w-3.5" />
+                <FolderPlus className={toolbarIconSize} />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">New Folder</TooltipContent>
@@ -1195,14 +1381,15 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
                   )
                 }
                 className={cn(
-                  "h-6 w-6 text-muted-foreground hover:text-foreground",
+                  toolbarButtonSize,
+                  "text-muted-foreground hover:text-foreground",
                   sortAsc !== null && "text-foreground"
                 )}
               >
                 {sortAsc === false ? (
-                  <ArrowUpZA className="h-3.5 w-3.5" />
+                  <ArrowUpZA className={toolbarIconSize} />
                 ) : (
-                  <ArrowDownAZ className="h-3.5 w-3.5" />
+                  <ArrowDownAZ className={toolbarIconSize} />
                 )}
               </Button>
             </TooltipTrigger>
@@ -1218,11 +1405,12 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
                 size="icon"
                 onClick={() => setSortByType((prev) => !prev)}
                 className={cn(
-                  "h-6 w-6 text-muted-foreground hover:text-foreground",
+                  toolbarButtonSize,
+                  "text-muted-foreground hover:text-foreground",
                   sortByType && "text-foreground"
                 )}
               >
-                <Layers className="h-3.5 w-3.5" />
+                <Layers className={toolbarIconSize} />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
@@ -1236,12 +1424,12 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
                 variant="ghost"
                 size="icon"
                 onClick={expandedFolders.size > 0 ? collapseAll : expandAll}
-                className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                className={cn(toolbarButtonSize, "text-muted-foreground hover:text-foreground")}
               >
                 {expandedFolders.size > 0 ? (
-                  <ChevronsDownUp className="h-3.5 w-3.5" />
+                  <ChevronsDownUp className={toolbarIconSize} />
                 ) : (
-                  <ChevronsUpDown className="h-3.5 w-3.5" />
+                  <ChevronsUpDown className={toolbarIconSize} />
                 )}
               </Button>
             </TooltipTrigger>
@@ -1257,11 +1445,12 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
                 size="icon"
                 onClick={() => setTagFilterOpen((prev) => !prev)}
                 className={cn(
-                  "h-6 w-6 text-muted-foreground hover:text-foreground",
+                  toolbarButtonSize,
+                  "text-muted-foreground hover:text-foreground",
                   (tagFilterOpen || activeTagFilters.size > 0) && "text-foreground"
                 )}
               >
-                <Tag className="h-3.5 w-3.5" />
+                <Tag className={toolbarIconSize} />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
@@ -1277,9 +1466,9 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
                   variant="ghost"
                   size="icon"
                   onClick={toggleFileTree}
-                  className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                  className={cn(toolbarButtonSize, "text-muted-foreground hover:text-foreground")}
                 >
-                  <PanelLeftClose className="h-3.5 w-3.5" />
+                  <PanelLeftClose className={toolbarIconSize} />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">
@@ -1293,9 +1482,9 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
               variant="ghost"
               size="icon"
               onClick={onMobileClose}
-              className="h-6 w-6 text-muted-foreground hover:text-foreground"
+              className={cn(toolbarButtonSize, "text-muted-foreground hover:text-foreground")}
             >
-              <X className="h-3.5 w-3.5" />
+              <X className={toolbarIconSize} />
             </Button>
           )}
         </div>
@@ -1394,8 +1583,31 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
                       onSwitch={() => switchTab(tab.id)}
                       onClose={() => deleteTab(tab.id)}
                       hideMd={hideMd}
+                      mobile={mobile}
+                      mobileDraggingTabId={mobileDraggedTabId}
+                      onStartMobileDrag={startMobileDrag}
                     />
                   ))}
+              </div>
+            )}
+
+            {mobile && mobileDraggedTabId && (
+              <div className="mx-1 mb-2 rounded-md border border-dashed border-primary/50 bg-primary/5 p-2">
+                <p className="text-[10px] text-muted-foreground mb-1">Move file: tap a folder to drop, or place it in root.</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => dropMobileDraggedTab(null)}
+                    className="rounded-md border border-border bg-background px-2 py-1 text-[10px] text-foreground hover:bg-muted transition-colors"
+                  >
+                    Move to Root
+                  </button>
+                  <button
+                    onClick={cancelMobileDrag}
+                    className="rounded-md border border-border bg-background px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1418,6 +1630,9 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
                 onSwitch={() => switchTab(tab.id)}
                 onClose={() => deleteTab(tab.id)}
                 hideMd={hideMd}
+                mobile={mobile}
+                mobileDraggingTabId={mobileDraggedTabId}
+                onStartMobileDrag={startMobileDrag}
               />
             ))}
 
@@ -1432,7 +1647,7 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onClick={() => createTab()}>
+          <ContextMenuItem onClick={() => requestCreateTab()}>
             <Plus className="mr-2 h-3.5 w-3.5" /> New File
           </ContextMenuItem>
           <ContextMenuItem onClick={() => createWhiteboard()}>
@@ -1440,6 +1655,12 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
           </ContextMenuItem>
           <ContextMenuItem onClick={() => createMindmap()}>
             <GitBranch className="mr-2 h-3.5 w-3.5" /> New Mindmap
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => createKanban()}>
+            <KanbanSquare className="mr-2 h-3.5 w-3.5" /> New Kanban
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => createPdf()}>
+            <FileType className="mr-2 h-3.5 w-3.5" /> New PDF
           </ContextMenuItem>
           <ContextMenuItem onClick={() => createFolder("New Folder")}>
             <FolderPlus className="mr-2 h-3.5 w-3.5" /> New Folder
@@ -1458,7 +1679,19 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
             <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", localDrawerOpen ? "rotate-180" : "")} />
           </button>
           {localDrawerOpen && (
-            <div className="max-h-56 overflow-y-auto px-1 py-1">
+            <div className="border-t border-border/60">
+              {!mobile && (
+                <button
+                  type="button"
+                  onMouseDown={onLocalDrawerResizeMouseDown}
+                  className="block h-1.5 w-full cursor-row-resize bg-transparent hover:bg-primary/20 active:bg-primary/30 transition-colors"
+                  aria-label="Resize local files drawer"
+                />
+              )}
+              <div
+                className="overflow-y-auto px-1 py-1"
+                style={!mobile ? { height: localDrawerHeight } : { maxHeight: 224 }}
+              >
               {localTabs.length === 0 ? (
                 <p className="px-3 py-3 text-center text-[10px] text-muted-foreground/50">
                   No local files
@@ -1481,7 +1714,7 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
                           className="flex min-w-0 flex-1 items-center gap-2 text-left text-xs"
                         >
                           <Icon className="h-3.5 w-3.5 shrink-0" style={tab.iconColor ? { color: tab.iconColor } : undefined} />
-                          <span className="truncate">{hideMd ? tab.title.replace(/\.(md|canvas|mindmap)$/i, "") : tab.title}</span>
+                          <span className="truncate">{hideMd ? tab.title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/i, "") : tab.title}</span>
                         </button>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -1503,6 +1736,7 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
                     );
                   })
               )}
+            </div>
             </div>
           )}
         </div>

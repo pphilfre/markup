@@ -6,6 +6,8 @@ import { MarkdownEditor, MarkdownPreview, InlineMarkdownEditor } from "@/compone
 import { GraphView } from "@/components/shell/graph-view";
 import { WhiteboardView } from "@/components/shell/whiteboard";
 import { MindmapView } from "@/components/shell/mindmap";
+import { KanbanView } from "@/components/shell/kanban";
+import { PdfEditorView } from "@/components/shell/pdf-editor";
 
 export function MainContent() {
   const viewMode = useEditorStore((s) => s.viewMode);
@@ -94,7 +96,7 @@ export function MainContent() {
     );
   }
 
-  if (activeTab?.noteType === "whiteboard" || (viewMode === "whiteboard" && activeTab?.noteType !== "note")) {
+  if (activeTab?.noteType === "whiteboard") {
     return (
       <main className="flex flex-1 overflow-hidden bg-background">
         <WhiteboardView key={activeTabId} />
@@ -102,10 +104,26 @@ export function MainContent() {
     );
   }
 
-  if (activeTab?.noteType === "mindmap" || (viewMode === "mindmap" && activeTab?.noteType !== "note")) {
+  if (activeTab?.noteType === "mindmap") {
     return (
       <main className="flex flex-1 overflow-hidden bg-background">
         <MindmapView key={activeTabId} />
+      </main>
+    );
+  }
+
+  if (activeTab?.noteType === "kanban") {
+    return (
+      <main className="flex flex-1 overflow-hidden bg-background">
+        <KanbanView key={activeTabId} />
+      </main>
+    );
+  }
+
+  if (activeTab?.noteType === "pdf") {
+    return (
+      <main className="flex flex-1 overflow-hidden bg-background">
+        <PdfEditorView key={activeTabId} />
       </main>
     );
   }
@@ -130,7 +148,7 @@ export function MainContent() {
   if (viewMode === "split") {
     const ratio = localRatio ?? splitRatio;
     return (
-      <main ref={containerRef} className="flex flex-1 overflow-hidden bg-background select-none" style={editorStyle}>
+      <main ref={containerRef} className="flex flex-1 overflow-hidden bg-background" style={editorStyle}>
         <div className="flex flex-col overflow-hidden" style={{ width: `${ratio * 100}%` }}>
           <MarkdownEditor onScroll={onEditorScroll} />
         </div>

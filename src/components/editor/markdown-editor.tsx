@@ -165,6 +165,23 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
         ? { ".cm-cursor": { transition: "left 80ms ease, top 80ms ease" } }
         : {}),
     }),
+    EditorView.contentAttributes.of({
+      spellcheck: s.spellCheck ? "true" : "false",
+      autocorrect: s.spellCheck && s.suggestCorrectionsOnDoubleTap ? "on" : "off",
+      autocomplete: s.spellCheck && s.suggestCorrectionsOnDoubleTap ? "on" : "off",
+      autocapitalize: s.autoPunctuation ? "sentences" : "off",
+    }),
+    EditorView.inputHandler.of((view, from, to, text) => {
+      if (!s.autoPunctuation || text !== " " || from !== to || from < 2) return false;
+      const trailing = view.state.sliceDoc(from - 2, from);
+      if (trailing[1] !== " " || !/[A-Za-z0-9\])"']/.test(trailing[0])) return false;
+
+      view.dispatch({
+        changes: { from: from - 1, to: from, insert: ". " },
+        selection: { anchor: from + 1 },
+      });
+      return true;
+    }),
     ...(s.wordWrap ? [EditorView.lineWrapping] : []),
     ...(s.showInvisibleCharacters ? [highlightWhitespace()] : []),
     syntaxHighlighting(

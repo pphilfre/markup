@@ -1612,7 +1612,7 @@ export function WhiteboardView() {
       )}
 
       {/* Top-left: Toolbar */}
-      <div className="absolute left-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-popover/95 backdrop-blur-sm p-1 shadow-lg mobile-canvas-toolbar">
+      <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-popover/95 backdrop-blur-sm p-1 shadow-lg md:bottom-auto md:right-auto md:top-2 mobile-canvas-toolbar">
         {tools.map(({ tool, icon: Icon, label, shortcut }) => (
           <Tooltip key={tool}>
             <TooltipTrigger asChild>
@@ -1636,7 +1636,7 @@ export function WhiteboardView() {
       </div>
 
       {/* Top-right: Actions */}
-      <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-popover/95 backdrop-blur-sm p-1 shadow-lg mobile-canvas-actions">
+      <div className="absolute bottom-14 left-2 right-2 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-popover/95 backdrop-blur-sm p-1 shadow-lg md:bottom-auto md:left-auto md:right-2 md:top-2 mobile-canvas-actions">
         <Tooltip>
           <TooltipTrigger asChild>
             <button

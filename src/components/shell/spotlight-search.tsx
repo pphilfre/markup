@@ -7,17 +7,33 @@ import {
   Bold,
   Italic,
   Strikethrough,
+  Heading,
+  List,
+  ListOrdered,
+  CheckSquare,
+  Quote,
+  Code2,
+  Link,
+  Image as ImageIcon,
   Eye,
   PenLine,
   Columns2,
+  Layers,
+  Network,
   Sun,
   Moon,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
   Settings,
   Plus,
-  Download,
+  X,
+  PenTool,
+  GitBranch,
+  KanbanSquare,
+  FileType,
   FolderPlus,
   FolderOpen,
-  PanelLeftClose,
   PanelLeft,
   Share2,
   FileOutput,
@@ -36,11 +52,22 @@ interface Feature {
 
 function useFeatures(): Feature[] {
   const wrapSelection = useEditorStore((s) => s.wrapSelection);
+  const insertLinePrefix = useEditorStore((s) => s.insertLinePrefix);
+  const insertSnippet = useEditorStore((s) => s.insertSnippet);
+  const toggleView = useEditorStore((s) => s.toggleView);
   const toggleTheme = useEditorStore((s) => s.toggleTheme);
   const setViewMode = useEditorStore((s) => s.setViewMode);
-  const createTab = useEditorStore((s) => s.createTab);
+  const requestCreateTab = useEditorStore((s) => s.requestCreateTab);
+  const closeTab = useEditorStore((s) => s.closeTab);
+  const createWhiteboard = useEditorStore((s) => s.createWhiteboard);
+  const createMindmap = useEditorStore((s) => s.createMindmap);
+  const createKanban = useEditorStore((s) => s.createKanban);
+  const createPdf = useEditorStore((s) => s.createPdf);
   const createFolder = useEditorStore((s) => s.createFolder);
   const toggleFileTree = useEditorStore((s) => s.toggleFileTree);
+  const zoomLevel = useEditorStore((s) => s.zoomLevel);
+  const setZoomLevel = useEditorStore((s) => s.setZoomLevel);
+  const activeTabId = useEditorStore((s) => s.activeTabId);
   const theme = useEditorStore((s) => s.theme);
 
   return useMemo<Feature[]>(
@@ -64,10 +91,64 @@ function useFeatures(): Feature[] {
         action: () => wrapSelection("~~", "~~"),
       },
       {
+        label: "Insert Heading",
+        keywords: ["heading", "title", "h1", "h2", "markdown"],
+        icon: <Heading className="h-4 w-4" />,
+        action: () => insertLinePrefix("## "),
+      },
+      {
+        label: "Insert Bullet List",
+        keywords: ["list", "bullet", "unordered", "markdown"],
+        icon: <List className="h-4 w-4" />,
+        action: () => insertLinePrefix("- "),
+      },
+      {
+        label: "Insert Numbered List",
+        keywords: ["ordered", "numbered", "list", "markdown"],
+        icon: <ListOrdered className="h-4 w-4" />,
+        action: () => insertLinePrefix("1. "),
+      },
+      {
+        label: "Insert Task List",
+        keywords: ["task", "todo", "checkbox", "list", "markdown"],
+        icon: <CheckSquare className="h-4 w-4" />,
+        action: () => insertLinePrefix("- [ ] "),
+      },
+      {
+        label: "Insert Blockquote",
+        keywords: ["blockquote", "quote", "markdown"],
+        icon: <Quote className="h-4 w-4" />,
+        action: () => insertLinePrefix("> "),
+      },
+      {
+        label: "Insert Code Block",
+        keywords: ["code", "fence", "snippet", "markdown"],
+        icon: <Code2 className="h-4 w-4" />,
+        action: () => insertSnippet("```\n$SEL\n```"),
+      },
+      {
+        label: "Insert Link",
+        keywords: ["link", "url", "markdown"],
+        icon: <Link className="h-4 w-4" />,
+        action: () => insertSnippet("[$SEL](url)"),
+      },
+      {
+        label: "Insert Image",
+        keywords: ["image", "img", "markdown"],
+        icon: <ImageIcon className="h-4 w-4" />,
+        action: () => insertSnippet("![alt]($SEL)"),
+      },
+      {
         label: "Editor View",
         keywords: ["editor", "write", "edit"],
         icon: <PenLine className="h-4 w-4" />,
         action: () => setViewMode("editor"),
+      },
+      {
+        label: "Inline View",
+        keywords: ["inline", "mixed", "live preview"],
+        icon: <Layers className="h-4 w-4" />,
+        action: () => setViewMode("inline"),
       },
       {
         label: "Split View",
@@ -82,6 +163,42 @@ function useFeatures(): Feature[] {
         action: () => setViewMode("preview"),
       },
       {
+        label: "Graph View",
+        keywords: ["graph", "network", "links"],
+        icon: <Network className="h-4 w-4" />,
+        action: () => setViewMode("graph"),
+      },
+      {
+        label: "Whiteboard View",
+        keywords: ["whiteboard", "canvas", "draw"],
+        icon: <PenTool className="h-4 w-4" />,
+        action: () => setViewMode("whiteboard"),
+      },
+      {
+        label: "Mindmap View",
+        keywords: ["mindmap", "map", "nodes"],
+        icon: <GitBranch className="h-4 w-4" />,
+        action: () => setViewMode("mindmap"),
+      },
+      {
+        label: "Kanban View",
+        keywords: ["kanban", "board", "cards"],
+        icon: <KanbanSquare className="h-4 w-4" />,
+        action: () => setViewMode("kanban"),
+      },
+      {
+        label: "PDF View",
+        keywords: ["pdf", "document", "viewer"],
+        icon: <FileType className="h-4 w-4" />,
+        action: () => setViewMode("pdf"),
+      },
+      {
+        label: "Cycle View Mode",
+        keywords: ["cycle", "toggle view", "next view"],
+        icon: <Columns2 className="h-4 w-4" />,
+        action: () => toggleView(),
+      },
+      {
         label: theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode",
         keywords: ["theme", "dark", "light", "mode", "toggle"],
         icon: theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />,
@@ -91,7 +208,39 @@ function useFeatures(): Feature[] {
         label: "New File",
         keywords: ["new", "file", "tab", "create"],
         icon: <Plus className="h-4 w-4" />,
-        action: () => createTab(),
+        action: () => requestCreateTab(),
+      },
+      {
+        label: "Close Current File",
+        keywords: ["close", "tab", "file"],
+        icon: <X className="h-4 w-4" />,
+        action: () => {
+          if (activeTabId) closeTab(activeTabId);
+        },
+      },
+      {
+        label: "New Whiteboard",
+        keywords: ["whiteboard", "canvas", "draw"],
+        icon: <PenTool className="h-4 w-4" />,
+        action: () => createWhiteboard(),
+      },
+      {
+        label: "New Mindmap",
+        keywords: ["mindmap", "map", "nodes"],
+        icon: <GitBranch className="h-4 w-4" />,
+        action: () => createMindmap(),
+      },
+      {
+        label: "New Kanban",
+        keywords: ["kanban", "board", "tasks"],
+        icon: <KanbanSquare className="h-4 w-4" />,
+        action: () => createKanban(),
+      },
+      {
+        label: "New PDF",
+        keywords: ["pdf", "document"],
+        icon: <FileType className="h-4 w-4" />,
+        action: () => createPdf(),
       },
       {
         label: "New Folder",
@@ -104,6 +253,24 @@ function useFeatures(): Feature[] {
         keywords: ["sidebar", "file tree", "panel", "tree", "toggle sidebar"],
         icon: <PanelLeft className="h-4 w-4" />,
         action: toggleFileTree,
+      },
+      {
+        label: "Zoom In",
+        keywords: ["zoom", "increase", "bigger"],
+        icon: <ZoomIn className="h-4 w-4" />,
+        action: () => setZoomLevel(zoomLevel + 10),
+      },
+      {
+        label: "Zoom Out",
+        keywords: ["zoom", "decrease", "smaller"],
+        icon: <ZoomOut className="h-4 w-4" />,
+        action: () => setZoomLevel(zoomLevel - 10),
+      },
+      {
+        label: "Reset Zoom",
+        keywords: ["zoom", "reset", "100%"],
+        icon: <RotateCcw className="h-4 w-4" />,
+        action: () => setZoomLevel(100),
       },
       {
         label: "Settings",
@@ -130,7 +297,26 @@ function useFeatures(): Feature[] {
         action: () => document.dispatchEvent(new CustomEvent("open-export")),
       },
     ],
-    [wrapSelection, toggleTheme, setViewMode, createTab, createFolder, toggleFileTree, theme]
+    [
+      wrapSelection,
+      toggleTheme,
+      setViewMode,
+      requestCreateTab,
+      createWhiteboard,
+      createMindmap,
+      createKanban,
+      createPdf,
+      createFolder,
+      closeTab,
+      toggleFileTree,
+      toggleView,
+      theme,
+      zoomLevel,
+      setZoomLevel,
+      activeTabId,
+      insertLinePrefix,
+      insertSnippet,
+    ]
   );
 }
 
@@ -283,7 +469,7 @@ export function SpotlightSearch() {
 
   const toggleFileTree = useEditorStore((s) => s.toggleFileTree);
   const expandFolderById = useCallback(
-    (folderId: string) => {
+    () => {
       // Focus the sidebar and open the folder — open the file tree if closed
       const s = useEditorStore.getState();
       if (!s.fileTreeOpen) toggleFileTree();
@@ -322,7 +508,7 @@ export function SpotlightSearch() {
           switchTab(item.tab.id);
           break;
         case "folder":
-          expandFolderById(item.folder.id);
+          expandFolderById();
           break;
         case "feature":
           item.feature.action();

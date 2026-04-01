@@ -69,12 +69,6 @@ export async function checkForUpdate(): Promise<void> {
   try {
     const { check } = await import("@tauri-apps/plugin-updater");
     const update = await check();
-    // Debug: log what we got from the updater
-    console.log("[Updater] check() result:", update);
-    // Also log the current app version
-    const { getVersion } = await import("@tauri-apps/api/app");
-    const currentVersion = await getVersion();
-    console.log("[Updater] native app version:", currentVersion);
 
     if (!update) {
       setState({ status: "up-to-date", info: null });

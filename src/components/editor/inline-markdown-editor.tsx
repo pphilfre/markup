@@ -10,9 +10,12 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo, isValidElement, cloneElement } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import remarkSupersub from "remark-supersub";
 import { remarkDefinitionList, defListHastHandlers } from "remark-definition-list";
 import rehypeRaw from "rehype-raw";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import { emojify } from "node-emoji";
 import { useEditorStore } from "@/lib/store";
 
@@ -66,7 +69,14 @@ interface LineProps {
   onKeyDown: (idx: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onActiveTextarea: (lineIndex: number, el: HTMLTextAreaElement | null) => void;
   onSelectionChange: (lineIndex: number, from: number, to: number) => void;
-  settings: { fontFamily: string; fontSize: number; lineHeight: number };
+  settings: {
+    fontFamily: string;
+    fontSize: number;
+    lineHeight: number;
+    spellCheck: boolean;
+    autoPunctuation: boolean;
+    suggestCorrectionsOnDoubleTap: boolean;
+  };
 }
 
 function InlineLine({ lineIndex, text, isActive, onFocus, onBlur, onChange, onKeyDown, onActiveTextarea, onSelectionChange, settings }: LineProps) {
@@ -85,7 +95,7 @@ function InlineLine({ lineIndex, text, isActive, onFocus, onBlur, onChange, onKe
     if (!isActive) {
       onActiveTextarea(lineIndex, null);
     }
-  }, [isActive]);
+  }, [isActive, lineIndex, onActiveTextarea, onSelectionChange]);
 
   // Auto-resize textarea height
   useEffect(() => {
@@ -125,7 +135,10 @@ function InlineLine({ lineIndex, text, isActive, onFocus, onBlur, onChange, onKe
         rows={1}
         className="w-full resize-none overflow-hidden bg-transparent outline-none border-none p-0 m-0 block"
         style={style}
-        spellCheck
+        spellCheck={settings.spellCheck}
+        autoCorrect={settings.spellCheck && settings.suggestCorrectionsOnDoubleTap ? "on" : "off"}
+        autoComplete={settings.spellCheck && settings.suggestCorrectionsOnDoubleTap ? "on" : "off"}
+        autoCapitalize={settings.autoPunctuation ? "sentences" : "off"}
       />
     );
   }
@@ -152,9 +165,9 @@ function InlineLine({ lineIndex, text, isActive, onFocus, onBlur, onChange, onKe
       style={style}
     >
       <ReactMarkdown
-        remarkPlugins={[[remarkGfm, { singleTilde: false }], remarkSupersub, remarkDefinitionList]}
+        remarkPlugins={[[remarkGfm, { singleTilde: false }], remarkMath, remarkSupersub, remarkDefinitionList]}
         remarkRehypeOptions={{ handlers: defListHastHandlers, allowDangerousHtml: true }}
-        rehypePlugins={[rehypeRaw]}
+        rehypePlugins={[rehypeRaw, rehypeKatex]}
         components={{
           // Prevent wrapping in <p> for single-line content
           p: ({ children }) => <span>{children}</span>,
@@ -226,6 +239,35 @@ export function InlineMarkdownEditor({ onScroll }: { onScroll?: (fraction: numbe
 
   const handleKeyDown = useCallback(
     (idx: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (settings.autoPunctuation && e.key === " " && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+        const input = e.currentTarget;
+        const selStart = input.selectionStart ?? 0;
+        const selEnd = input.selectionEnd ?? 0;
+        const lineText = lines[idx] ?? "";
+
+        if (
+          selStart === selEnd &&
+          selStart >= 2 &&
+          lineText[selStart - 1] === " " &&
+          /[A-Za-z0-9\])"']/.test(lineText[selStart - 2])
+        ) {
+          e.preventDefault();
+          if (!activeTab) return;
+
+          const updatedLine = `${lineText.slice(0, selStart - 1)}. ${lineText.slice(selStart)}`;
+          const newLines = [...lines];
+          newLines[idx] = updatedLine;
+          updateContent(activeTab.id, newLines.join("\n"));
+
+          queueMicrotask(() => {
+            const cursorPos = selStart + 1;
+            input.setSelectionRange(cursorPos, cursorPos);
+            setInlineSelection({ lineIndex: idx, from: cursorPos, to: cursorPos });
+          });
+          return;
+        }
+      }
+
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         if (!activeTab) return;
@@ -248,7 +290,7 @@ export function InlineMarkdownEditor({ onScroll }: { onScroll?: (fraction: numbe
         setActiveLineIdx(idx + 1);
       }
     },
-    [activeTab, lines, updateContent]
+    [activeTab, lines, settings.autoPunctuation, setInlineSelection, updateContent]
   );
 
   // Scroll sync

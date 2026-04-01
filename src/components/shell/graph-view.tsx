@@ -110,6 +110,13 @@ const DEFAULT_FORCES: ForceSettings = {
   collideRadius: 30,
 };
 
+const MIN_ZOOM = 0.2;
+const MAX_ZOOM = 3;
+
+function clampZoom(value: number): number {
+  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value));
+}
+
 // ── Collapsible panel section ─────────────────────────────────────────────
 
 function PanelSection({
@@ -259,7 +266,7 @@ export function GraphView() {
       const group = groups.find((g) => g.nodeIds.has(tab.id));
       nodeMap.set(tab.id, {
         id: tab.id,
-        title: tab.title.replace(/\.(md|canvas|mindmap)$/, ""),
+        title: tab.title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/, ""),
         tags: tab.tags,
         hasContent: tab.content.trim().length > 0,
         groupId: group?.id,
@@ -611,6 +618,27 @@ export function GraphView() {
     [display.nodeSize]
   );
 
+  const zoomAtClientPoint = useCallback(
+    (clientX: number, clientY: number, nextZoomInput: number) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const cursorX = clientX - rect.left;
+      const cursorY = clientY - rect.top;
+      const nextZoom = clampZoom(nextZoomInput);
+      if (Math.abs(nextZoom - zoom) < 0.0001) return;
+
+      const graphX = (cursorX - pan.x) / zoom;
+      const graphY = (cursorY - pan.y) / zoom;
+      setPan({
+        x: cursorX - graphX * nextZoom,
+        y: cursorY - graphY * nextZoom,
+      });
+      setZoom(nextZoom);
+    },
+    [pan.x, pan.y, zoom]
+  );
+
   // Mouse handlers
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -730,12 +758,12 @@ export function GraphView() {
     if (!canvas) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      setZoom((z) => Math.max(0.2, Math.min(3, z * delta)));
+      const deltaScale = Math.exp(-e.deltaY * 0.0015);
+      zoomAtClientPoint(e.clientX, e.clientY, zoom * deltaScale);
     };
     canvas.addEventListener("wheel", onWheel, { passive: false });
     return () => canvas.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [zoom, zoomAtClientPoint]);
 
   // Touch handlers
   const touchStartRef = useRef<{ x: number; y: number; dist: number } | null>(null);
@@ -781,12 +809,12 @@ export function GraphView() {
 
       if (touchStartRef.current.dist > 0) {
         const scale = dist / touchStartRef.current.dist;
-        setZoom((z) => Math.max(0.2, Math.min(3, z * scale)));
+        zoomAtClientPoint(cx, cy, zoom * scale);
       }
 
       touchStartRef.current = { x: cx, y: cy, dist };
     }
-  }, []);
+  }, [zoom, zoomAtClientPoint]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     const start = touchStartRef.current;
@@ -911,10 +939,34 @@ export function GraphView() {
       {/* Top-left: zoom + link controls */}
       <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
         <div className="flex items-center gap-0.5 rounded-md border border-border bg-card/90 backdrop-blur-sm p-0.5">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setZoom((z) => Math.min(3, z * 1.2))}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={() => {
+              const rect = canvasRef.current?.getBoundingClientRect();
+              if (!rect) {
+                setZoom((z) => clampZoom(z * 1.2));
+                return;
+              }
+              zoomAtClientPoint(rect.left + rect.width / 2, rect.top + rect.height / 2, zoom * 1.2);
+            }}
+          >
             <ZoomIn className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setZoom((z) => Math.max(0.2, z * 0.8))}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={() => {
+              const rect = canvasRef.current?.getBoundingClientRect();
+              if (!rect) {
+                setZoom((z) => clampZoom(z * 0.8));
+                return;
+              }
+              zoomAtClientPoint(rect.left + rect.width / 2, rect.top + rect.height / 2, zoom * 0.8);
+            }}
+          >
             <ZoomOut className="h-3.5 w-3.5" />
           </Button>
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={resetView}>

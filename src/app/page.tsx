@@ -10,6 +10,7 @@ import { TauriFileSync } from "../lib/tauri-file-sync";
 import { SharedNoteViewer } from "@/components/shell/shared-note-viewer";
 import { FirstRunDialog } from "@/components/shell/first-run-dialog";
 import { DesktopDebugNotice } from "@/components/shell/desktop-debug-notice";
+import { NewFileTemplateDialog } from "@/components/shell/new-file-template-dialog";
 import { useEditorStore } from "@/lib/store";
 import { useGlobalKeybinds } from "@/lib/keybinds";
 import { useIsMobile } from "@/lib/use-mobile";
@@ -20,6 +21,7 @@ export default function Home() {
   const hydrate = useEditorStore((s) => s.hydrate);
   const openTab = useEditorStore((s) => s.openTab);
   const tabs = useEditorStore((s) => s.tabs);
+  const activeTabId = useEditorStore((s) => s.activeTabId);
   const isMobile = useIsMobile();
   const sidebarPosition = useEditorStore((s) => s.settings.sidebarPosition);
   const compactMode = useEditorStore((s) => s.settings.compactMode);
@@ -43,8 +45,8 @@ export default function Home() {
     }
 
     const tab = params.get("tab");
-    if (tab && /^[0-9a-fA-F-]{16,64}$/.test(tab)) {
-      pendingTabIdRef.current = tab;
+    if (tab?.trim()) {
+      pendingTabIdRef.current = tab.trim();
     }
 
     // Desktop OAuth relay: after browser sign-in, redirect to the Tauri
@@ -80,12 +82,17 @@ export default function Home() {
     if (!tabId) return;
     const exists = tabs.some((t) => t.id === tabId);
     if (!exists) return;
+
+    if (activeTabId !== tabId) {
+      openTab(tabId);
+      return;
+    }
+
     pendingTabIdRef.current = null;
-    openTab(tabId);
     const url = new URL(window.location.href);
     url.searchParams.delete("tab");
     window.history.replaceState({}, "", url.toString());
-  }, [hydrated, openTab, tabs]);
+  }, [activeTabId, hydrated, openTab, tabs]);
 
   const handleBackFromShared = useCallback(() => {
     setShareId(null);
@@ -136,6 +143,7 @@ export default function Home() {
       <FirstRunDialog />
       <SpotlightSearch />
       <SettingsPanel />
+      <NewFileTemplateDialog />
       {sidebarPosition === "left" && sidebarElements}
       <div className="flex flex-1 flex-col overflow-hidden">
         <TabBar />

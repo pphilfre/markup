@@ -14,18 +14,20 @@ import { isTauri } from "@/lib/tauri";
  * 4. Watches for external changes and updates the store
  */
 
-const SYNC_EXTENSIONS = [".md", ".canvas", ".mindmap"];
+const SYNC_EXTENSIONS = [".md", ".canvas", ".mindmap", ".kanban"];
 const SYNC_INTERVAL_MS = 5000; // Poll every 5 seconds for changes
 
 function extensionToNoteType(ext: string): NoteType {
   if (ext === ".canvas") return "whiteboard";
   if (ext === ".mindmap") return "mindmap";
+  if (ext === ".kanban") return "kanban";
   return "note";
 }
 
 function noteTypeToExtension(noteType: NoteType): string {
   if (noteType === "whiteboard") return ".canvas";
   if (noteType === "mindmap") return ".mindmap";
+  if (noteType === "kanban") return ".kanban";
   return ".md";
 }
 
@@ -94,7 +96,7 @@ export function TauriFileSync() {
       }
 
       const localFiles = await readLocalFiles(localSyncFolder);
-      const tabs = useEditorStore.getState().tabs.filter((t) => t.origin === "local");
+      const tabs = useEditorStore.getState().tabs.filter((t) => t.origin === "local" && t.noteType !== "pdf");
       const localFileMap = new Map(localFiles.map((f) => [f.name, f]));
       const tabFilenameMap = new Map(
         tabs.map((t) => [ensureExtension(t.title, t.noteType), t])
@@ -136,7 +138,7 @@ export function TauriFileSync() {
       }
 
       // --- Ongoing sync: write changed tabs to folder ---
-      const currentTabs = useEditorStore.getState().tabs.filter((t) => t.origin === "local");
+      const currentTabs = useEditorStore.getState().tabs.filter((t) => t.origin === "local" && t.noteType !== "pdf");
       for (const tab of currentTabs) {
         const filename = ensureExtension(tab.title, tab.noteType);
         const lastContent = lastSyncedContent.current.get(filename);

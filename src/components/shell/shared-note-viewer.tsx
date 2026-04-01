@@ -4,9 +4,12 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useAuthState } from "@/components/convex-client-provider";
 import { MarkdownPreviewStandalone } from "@/components/editor/markdown-preview-standalone";
+import { PublicThemeMenu } from "@/components/shell/public-theme-menu";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Globe, Lock, Eye, Pencil, ArrowLeft, Copy, Check, Layout, GitBranch } from "lucide-react";
+import type { CustomThemeColors, ThemeMode } from "@/lib/store";
+import { writeClipboardText } from "@/lib/clipboard";
 
 interface SharedNoteViewerProps {
   shareId: string;
@@ -270,6 +273,7 @@ function ReadOnlyMindmapCanvas({ data }: { data: string }) {
 export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
   const { user } = useAuthState();
   const sharedNote = useQuery(api.sharing.getByShareId, { shareId });
+  const workspace = useQuery(api.workspace.get, user?.id ? { userId: user.id } : "skip");
   const updateByShareId = useMutation(api.sharing.updateByShareId);
 
   const [editContent, setEditContent] = useState<string | null>(null);
@@ -316,8 +320,12 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
     [shareId, sharedNote?.title, updateByShareId]
   );
 
-  const handleCopyLink = useCallback(() => {
-    navigator.clipboard.writeText(window.location.href);
+  const handleCopyLink = useCallback(async () => {
+    try {
+      await writeClipboardText(window.location.href);
+    } catch {
+      return;
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, []);
@@ -367,6 +375,9 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
   const canEdit = sharedNote.permission === "edit";
   const displayContent = editContent ?? sharedNote.content;
   const noteType = (sharedNote as Record<string, unknown>).noteType as string | undefined;
+  const workspaceSettings = (workspace as { settings?: { themeMode?: ThemeMode; customThemeColors?: CustomThemeColors } } | null)?.settings;
+  const workspaceThemeMode = workspaceSettings?.themeMode;
+  const workspaceCustomThemeColors = workspaceSettings?.customThemeColors;
 
   return (
     <div className="flex h-screen min-h-0 flex-col bg-background">
@@ -430,6 +441,12 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
           )}
           {copied ? "Copied" : "Copy link"}
         </Button>
+
+        <PublicThemeMenu
+          loggedIn={!!user}
+          workspaceThemeMode={workspaceThemeMode ?? null}
+          workspaceCustomThemeColors={workspaceCustomThemeColors ?? null}
+        />
       </div>
 
       {/* Content */}
@@ -451,7 +468,7 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
           </div>
           {/* Preview */}
           <div className="flex flex-1 min-h-0 flex-col overflow-auto">
-            <MarkdownPreviewStandalone content={displayContent} />
+            <MarkdownPreviewStandalone content={displayContent} onContentChange={handleContentChange} />
           </div>
         </div>
       ) : (

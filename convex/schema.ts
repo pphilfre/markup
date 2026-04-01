@@ -42,6 +42,9 @@ const settingsValidator = v.object({
   autoCloseMarkdownFormatting: v.optional(v.boolean()),
   autoFormatLists: v.optional(v.boolean()),
   continueListOnEnter: v.optional(v.boolean()),
+  spellCheck: v.optional(v.boolean()),
+  autoPunctuation: v.optional(v.boolean()),
+  suggestCorrectionsOnDoubleTap: v.optional(v.boolean()),
   smartQuotes: v.optional(v.boolean()),
   smartDashes: v.optional(v.boolean()),
   convertTabsToSpaces: v.optional(v.boolean()),
@@ -97,9 +100,22 @@ export default defineSchema({
     folderId: v.union(v.string(), v.null()),
     tags: v.optional(v.array(v.string())),
     pinned: v.optional(v.boolean()),
-    noteType: v.optional(v.string()),    // "note" | "whiteboard" | "mindmap"
+    noteType: v.optional(v.string()),    // "note" | "whiteboard" | "mindmap" | "kanban" | "pdf"
     customIcon: v.optional(v.string()),  // lucide icon name
     iconColor: v.optional(v.string()),   // hex color
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_tab", ["userId", "tabId"]),
+
+  // ── PDF files (binary data stored in Convex file storage) ────────────
+  pdfFiles: defineTable({
+    userId: v.string(),
+    tabId: v.string(),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    mimeType: v.string(),
+    size: v.number(),
+    uploadedAt: v.number(),
   })
     .index("by_user", ["userId"])
     .index("by_user_tab", ["userId", "tabId"]),

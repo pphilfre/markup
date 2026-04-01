@@ -6,11 +6,95 @@ import { EditorView } from "@codemirror/view";
 // Types
 // ---------------------------------------------------------------------------
 
-export type ViewMode = "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap" | "inline";
+export type ViewMode = "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap" | "kanban" | "pdf" | "inline";
 export type Theme = "dark" | "light";
 export type ThemeMode = "light" | "dark" | "system" | "solarized-light" | "nord-dark" | "catppuccin-mocha" | "catppuccin-latte" | "gruvbox-dark" | "gruvbox-light" | "tokyo-night" | "everforest-light" | "uwu";
-export type NoteType = "note" | "whiteboard" | "mindmap";
+export type NoteType = "note" | "whiteboard" | "mindmap" | "kanban" | "pdf";
+export type NoteTemplateId = "blank" | "todo" | "calendar" | "moodboard";
 export type TabOrigin = "online" | "local";
+
+interface NoteTemplateDefinition {
+  id: NoteTemplateId;
+  label: string;
+  description: string;
+  titlePrefix: string;
+  content: string;
+}
+
+export const NOTE_TEMPLATES: NoteTemplateDefinition[] = [
+  {
+    id: "blank",
+    label: "Blank Note",
+    description: "Start from an empty markdown file.",
+    titlePrefix: "Untitled",
+    content: "",
+  },
+  {
+    id: "todo",
+    label: "Todo List",
+    description: "Track daily tasks and priorities.",
+    titlePrefix: "Todo",
+    content: `# Todo List
+
+## Today
+- [ ] Top priority
+- [ ] Second priority
+- [ ] Quick win
+
+## This Week
+- [ ]
+- [ ]
+
+## Notes
+-`,
+  },
+  {
+    id: "calendar",
+    label: "Calendar",
+    description: "Plan your month and upcoming events.",
+    titlePrefix: "Calendar",
+    content: `# Calendar
+
+## Month Overview
+| Mon | Tue | Wed | Thu | Fri | Sat | Sun |
+| --- | --- | --- | --- | --- | --- | --- |
+|     |     |     |     |     |     |     |
+|     |     |     |     |     |     |     |
+|     |     |     |     |     |     |     |
+|     |     |     |     |     |     |     |
+|     |     |     |     |     |     |     |
+
+## Upcoming
+-`,
+  },
+  {
+    id: "moodboard",
+    label: "Moodboard",
+    description: "Collect visual direction, palette, and references.",
+    titlePrefix: "Moodboard",
+    content: `# Moodboard
+
+## Vision
+- Theme:
+- Keywords:
+
+## Color Palette
+- Primary:
+- Secondary:
+- Accent:
+
+## Inspiration
+- [Reference 1](https://)
+- [Reference 2](https://)
+
+## Notes
+-`,
+  },
+];
+
+function getTemplate(templateId: NoteTemplateId): NoteTemplateDefinition {
+  return NOTE_TEMPLATES.find((t) => t.id === templateId) ?? NOTE_TEMPLATES[0];
+}
 
 export interface CustomThemeColors {
   background?: string;
@@ -49,6 +133,51 @@ export interface Folder {
   sortOrder: number;
 }
 
+function normalizeFolderSortOrders(folders: Folder[]): Folder[] {
+  const byParent = new Map<string | null, Folder[]>();
+  for (const folder of folders) {
+    const key = folder.parentId ?? null;
+    const list = byParent.get(key) ?? [];
+    list.push(folder);
+    byParent.set(key, list);
+  }
+
+  const nextSortOrder = new Map<string, number>();
+  for (const list of byParent.values()) {
+    const sorted = [...list].sort((a, b) => (a.sortOrder - b.sortOrder) || a.name.localeCompare(b.name));
+    sorted.forEach((folder, idx) => {
+      nextSortOrder.set(folder.id, idx);
+    });
+  }
+
+  return folders.map((folder) => {
+    const normalizedParentId = folder.parentId ?? null;
+    const sortOrder = nextSortOrder.get(folder.id);
+    if (sortOrder === undefined) return { ...folder, parentId: normalizedParentId };
+    if (folder.parentId === normalizedParentId && folder.sortOrder === sortOrder) return folder;
+    return {
+      ...folder,
+      parentId: normalizedParentId,
+      sortOrder,
+    };
+  });
+}
+
+function isFolderAncestor(
+  folders: Folder[],
+  ancestorId: string,
+  childParentId: string | null
+): boolean {
+  if (!childParentId) return false;
+  const parentById = new Map(folders.map((f) => [f.id, f.parentId]));
+  let current: string | null = childParentId;
+  while (current) {
+    if (current === ancestorId) return true;
+    current = parentById.get(current) ?? null;
+  }
+  return false;
+}
+
 export interface Profile {
   id: string;
   name: string;
@@ -71,6 +200,9 @@ export interface Settings {
   autoCloseMarkdownFormatting: boolean;
   autoFormatLists: boolean;
   continueListOnEnter: boolean;
+  spellCheck: boolean;
+  autoPunctuation: boolean;
+  suggestCorrectionsOnDoubleTap: boolean;
   smartQuotes: boolean;
   smartDashes: boolean;
   convertTabsToSpaces: boolean;
@@ -90,6 +222,7 @@ export interface Settings {
   showIconsInSidebar: boolean;
   showFileExtensions: boolean;
   iconTheme: "default" | "minimal" | "colorful";
+  promptForTemplateOnNewFile: boolean;
   // Appearance - Editor Look
   codeBlockTheme: "github" | "monokai" | "dracula" | "nord" | "one-dark" | "solarized";
   headingStyle: "default" | "underlined" | "bordered" | "highlighted";
@@ -119,6 +252,9 @@ export const DEFAULT_SETTINGS: Settings = {
   autoCloseMarkdownFormatting: true,
   autoFormatLists: true,
   continueListOnEnter: true,
+  spellCheck: true,
+  autoPunctuation: true,
+  suggestCorrectionsOnDoubleTap: true,
   smartQuotes: false,
   smartDashes: false,
   convertTabsToSpaces: true,
@@ -138,6 +274,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showIconsInSidebar: true,
   showFileExtensions: true,
   iconTheme: "default",
+  promptForTemplateOnNewFile: true,
   // Appearance - Editor Look
   codeBlockTheme: "github",
   headingStyle: "default",
@@ -163,6 +300,8 @@ interface EditorState {
   renameFolder: (id: string, name: string) => void;
   colorFolder: (id: string, color: string) => void;
   deleteFolder: (id: string) => void;
+  reorderFolder: (folderId: string, targetFolderId: string) => void;
+  moveFolderToParent: (folderId: string, parentId: string | null) => void;
   moveTabToFolder: (tabId: string, folderId: string | null) => void;
 
   // Settings
@@ -181,6 +320,13 @@ interface EditorState {
   fileTreeOpen: boolean;
   toggleFileTree: () => void;
 
+  // New note template prompt
+  newTabTemplateDialogOpen: boolean;
+  newTabTemplateFolderId: string | null;
+  requestCreateTab: (folderId?: string | null) => void;
+  createTabFromTemplate: (templateId: NoteTemplateId) => void;
+  closeTemplateDialog: () => void;
+
   // Ref to the live CodeMirror EditorView (not serialised)
   editorView: EditorView | null;
   setEditorView: (view: EditorView | null) => void;
@@ -195,6 +341,8 @@ interface EditorState {
   createTab: (folderId?: string | null) => void;
   createWhiteboard: (folderId?: string | null) => void;
   createMindmap: (folderId?: string | null) => void;
+  createKanban: (folderId?: string | null) => void;
+  createPdf: (folderId?: string | null) => void;
   closeTab: (id: string) => void;
   deleteTab: (id: string) => void;
   openTab: (id: string) => void;
@@ -245,18 +393,76 @@ interface EditorState {
 
 let tabCounter = 0;
 
-function newTab(folderId: string | null = null, noteType: NoteType = "note"): Tab {
+function newTab(
+  folderId: string | null = null,
+  noteType: NoteType = "note",
+  templateId: NoteTemplateId = "blank"
+): Tab {
   tabCounter += 1;
-  const prefix = noteType === "whiteboard" ? "Whiteboard" : noteType === "mindmap" ? "Mindmap" : "Untitled";
-  const ext = noteType === "whiteboard" ? ".canvas" : noteType === "mindmap" ? ".mindmap" : ".md";
+  const template = getTemplate(templateId);
+  const prefix =
+    noteType === "whiteboard"
+      ? "Whiteboard"
+      : noteType === "mindmap"
+      ? "Mindmap"
+      : noteType === "kanban"
+      ? "Kanban"
+      : noteType === "pdf"
+      ? "PDF"
+      : template.titlePrefix;
+  const ext = noteType === "whiteboard" ? ".canvas" : noteType === "mindmap" ? ".mindmap" : noteType === "kanban" ? ".kanban" : noteType === "pdf" ? ".pdf" : ".md";
   return {
     id: crypto.randomUUID(),
     title: `${prefix}-${tabCounter}${ext}`,
-    content: noteType === "note" ? "" : JSON.stringify(
-      noteType === "whiteboard"
-        ? { elements: [], canvasSettings: {} }
-        : { nodes: [], connections: [], settings: {} }
-    ),
+    content: noteType === "note"
+      ? template.content
+      : JSON.stringify(
+          noteType === "whiteboard"
+            ? { elements: [], canvasSettings: {} }
+            : noteType === "mindmap"
+            ? { nodes: [], connections: [], settings: {} }
+            : noteType === "kanban"
+            ? {
+                version: 2,
+                boardTitle: "Project Board",
+                showCompleted: true,
+                columns: [
+                  {
+                    id: "todo",
+                    title: "To Do",
+                    color: "#2563eb",
+                    wipLimit: null,
+                    cards: [
+                      {
+                        id: crypto.randomUUID(),
+                        title: "Set board goal",
+                        description: "Define what this board tracks.",
+                        labels: ["planning"],
+                        dueDate: null,
+                        priority: "medium",
+                        completed: false,
+                        createdAt: Date.now(),
+                      },
+                    ],
+                  },
+                  {
+                    id: "in-progress",
+                    title: "In Progress",
+                    color: "#7c3aed",
+                    wipLimit: 5,
+                    cards: [],
+                  },
+                  {
+                    id: "done",
+                    title: "Done",
+                    color: "#16a34a",
+                    wipLimit: null,
+                    cards: [],
+                  },
+                ],
+              }
+            : { version: 1, fileName: null, source: "local", dataBase64: null, storageId: null, annotations: [] }
+        ),
     folderId,
     tags: [],
     pinned: false,
@@ -281,6 +487,7 @@ const FOLDER_COLORS = [
 ];
 
 const DEFAULT_PROFILE_ID = "default";
+const CUSTOM_FONT_CACHE_KEY = "markup-custom-font-cache-v1";
 
 const DEFAULT_PROFILES: Profile[] = [
   { id: DEFAULT_PROFILE_ID, name: "Personal" },
@@ -335,6 +542,8 @@ export const useEditorStore = create<EditorState>()(
     folders: [],
     settings: { ...DEFAULT_SETTINGS },
     fileTreeOpen: true,
+    newTabTemplateDialogOpen: false,
+    newTabTemplateFolderId: null,
     profiles: [...DEFAULT_PROFILES],
     activeProfileId: DEFAULT_PROFILE_ID,
     tagColors: {},
@@ -349,11 +558,12 @@ export const useEditorStore = create<EditorState>()(
     createFolder: (name, parentId = null) => {
       const id = crypto.randomUUID();
       const { folders } = get();
+      const siblingCount = folders.filter((f) => (f.parentId ?? null) === (parentId ?? null)).length;
       const color = FOLDER_COLORS[folders.length % FOLDER_COLORS.length];
       set({
         folders: [
           ...folders,
-          { id, name, color, parentId, sortOrder: folders.length },
+          { id, name, color, parentId, sortOrder: siblingCount },
         ],
       });
       return id;
@@ -383,9 +593,56 @@ export const useEditorStore = create<EditorState>()(
         }
 
         return {
-          folders: s.folders.filter((f) => !toDelete.has(f.id)),
+          folders: normalizeFolderSortOrders(s.folders.filter((f) => !toDelete.has(f.id))),
           tabs: s.tabs.map((t) => (t.folderId && toDelete.has(t.folderId) ? { ...t, folderId: null } : t)),
         };
+      }),
+
+    reorderFolder: (folderId, targetFolderId) =>
+      set((s) => {
+        if (folderId === targetFolderId) return {};
+
+        const moving = s.folders.find((f) => f.id === folderId);
+        const target = s.folders.find((f) => f.id === targetFolderId);
+        if (!moving || !target) return {};
+
+        const nextParentId = target.parentId ?? null;
+        if (isFolderAncestor(s.folders, moving.id, nextParentId)) return {};
+
+        const movedFolder: Folder = { ...moving, parentId: nextParentId };
+        const siblings = s.folders
+          .filter((f) => (f.parentId ?? null) === nextParentId && f.id !== moving.id)
+          .sort((a, b) => (a.sortOrder - b.sortOrder) || a.name.localeCompare(b.name));
+
+        const targetIndex = siblings.findIndex((f) => f.id === target.id);
+        const insertAt = targetIndex >= 0 ? targetIndex : siblings.length;
+        siblings.splice(insertAt, 0, movedFolder);
+
+        const nextFolders = s.folders.map((f) => {
+          if (f.id === movedFolder.id) return movedFolder;
+          const siblingIndex = siblings.findIndex((sibling) => sibling.id === f.id);
+          if (siblingIndex === -1) return f;
+          return { ...f, sortOrder: siblingIndex, parentId: nextParentId };
+        });
+
+        return { folders: normalizeFolderSortOrders(nextFolders) };
+      }),
+
+    moveFolderToParent: (folderId, parentId) =>
+      set((s) => {
+        const moving = s.folders.find((f) => f.id === folderId);
+        if (!moving) return {};
+
+        const nextParentId = parentId ?? null;
+        if (isFolderAncestor(s.folders, moving.id, nextParentId)) return {};
+
+        const siblings = s.folders
+          .filter((f) => (f.parentId ?? null) === nextParentId && f.id !== moving.id)
+          .sort((a, b) => (a.sortOrder - b.sortOrder) || a.name.localeCompare(b.name));
+        const movedFolder: Folder = { ...moving, parentId: nextParentId, sortOrder: siblings.length };
+
+        const nextFolders = s.folders.map((f) => (f.id === folderId ? movedFolder : f));
+        return { folders: normalizeFolderSortOrders(nextFolders) };
       }),
 
     moveTabToFolder: (tabId, folderId) =>
@@ -430,15 +687,77 @@ export const useEditorStore = create<EditorState>()(
     // ── File tree ──────────────────────────────────────────────────────
     toggleFileTree: () => set((s) => ({ fileTreeOpen: !s.fileTreeOpen })),
 
+    // ── New note template prompt ───────────────────────────────────────
+    requestCreateTab: (folderId = null) =>
+      set((s) => {
+        if (s.settings.promptForTemplateOnNewFile) {
+          return {
+            newTabTemplateDialogOpen: true,
+            newTabTemplateFolderId: folderId,
+          };
+        }
+
+        const tab = newTab(folderId, "note", "blank");
+        const vm =
+          s.viewMode === "preview" || s.viewMode === "whiteboard" || s.viewMode === "mindmap" || s.viewMode === "kanban" || s.viewMode === "pdf"
+            ? "editor"
+            : s.viewMode;
+
+        return {
+          tabs: [...s.tabs, tab],
+          openTabIds: [...s.openTabIds, tab.id],
+          activeTabId: tab.id,
+          viewMode: vm,
+        };
+      }),
+
+    createTabFromTemplate: (templateId) =>
+      set((s) => {
+        const folderId = s.newTabTemplateFolderId ?? null;
+        const tab = newTab(folderId, "note", templateId);
+        const vm =
+          s.viewMode === "preview" || s.viewMode === "whiteboard" || s.viewMode === "mindmap" || s.viewMode === "kanban" || s.viewMode === "pdf"
+            ? "editor"
+            : s.viewMode;
+
+        return {
+          tabs: [...s.tabs, tab],
+          openTabIds: [...s.openTabIds, tab.id],
+          activeTabId: tab.id,
+          viewMode: vm,
+          newTabTemplateDialogOpen: false,
+          newTabTemplateFolderId: null,
+        };
+      }),
+
+    closeTemplateDialog: () => set({ newTabTemplateDialogOpen: false, newTabTemplateFolderId: null }),
+
     // ── Hydrate ────────────────────────────────────────────────────────
     hydrate: async () => {
       const saved = await loadFromStorage();
       if (saved && saved.tabs.length > 0) {
         const maxNum = saved.tabs.reduce((max, t) => {
-          const m = t.title.match(/^Untitled-(\d+)\.md$/);
+          const m = t.title.match(/-(\d+)\.(md|canvas|mindmap|kanban|pdf)$/i);
           return m ? Math.max(max, parseInt(m[1], 10)) : max;
         }, 0);
         tabCounter = maxNum;
+
+        const cachedCustomFont =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem(CUSTOM_FONT_CACHE_KEY)
+            : null;
+        const mergedSettings: Settings = {
+          ...DEFAULT_SETTINGS,
+          ...(saved.settings ?? {}),
+        };
+        if (cachedCustomFont) {
+          const hasSavedCustomFont = Boolean(mergedSettings.customFontFamily);
+          const usesDefaultFont = mergedSettings.fontFamily === DEFAULT_SETTINGS.fontFamily;
+          if (!hasSavedCustomFont || usesDefaultFont) {
+            mergedSettings.customFontFamily = cachedCustomFont;
+            mergedSettings.fontFamily = cachedCustomFont;
+          }
+        }
 
         set({
           tabs: saved.tabs.map((t) => ({ ...t, folderId: t.folderId ?? null, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: (t as Tab & { noteType?: NoteType }).noteType ?? "note" })),
@@ -447,7 +766,7 @@ export const useEditorStore = create<EditorState>()(
           viewMode: saved.viewMode,
           theme: saved.theme ?? "dark",
           folders: saved.folders ?? [],
-          settings: { ...DEFAULT_SETTINGS, ...(saved.settings ?? {}) },
+          settings: mergedSettings,
           fileTreeOpen: saved.fileTreeOpen ?? true,
           profiles: saved.profiles?.length ? saved.profiles : [...DEFAULT_PROFILES],
           activeProfileId: saved.activeProfileId ?? DEFAULT_PROFILE_ID,
@@ -471,7 +790,7 @@ export const useEditorStore = create<EditorState>()(
       const tab = newTab(folderId);
       set((s) => {
         // Reset viewMode to editor for note-type tabs
-        const vm = (s.viewMode === "preview" || s.viewMode === "whiteboard" || s.viewMode === "mindmap") ? "editor" : s.viewMode;
+        const vm = (s.viewMode === "preview" || s.viewMode === "whiteboard" || s.viewMode === "mindmap" || s.viewMode === "kanban" || s.viewMode === "pdf") ? "editor" : s.viewMode;
         return {
           tabs: [...s.tabs, tab],
           openTabIds: [...s.openTabIds, tab.id],
@@ -498,6 +817,26 @@ export const useEditorStore = create<EditorState>()(
         openTabIds: [...s.openTabIds, tab.id],
         activeTabId: tab.id,
         viewMode: "mindmap" as ViewMode,
+      }));
+    },
+
+    createKanban: (folderId = null) => {
+      const tab = newTab(folderId, "kanban");
+      set((s) => ({
+        tabs: [...s.tabs, tab],
+        openTabIds: [...s.openTabIds, tab.id],
+        activeTabId: tab.id,
+        viewMode: "kanban" as ViewMode,
+      }));
+    },
+
+    createPdf: (folderId = null) => {
+      const tab = newTab(folderId, "pdf");
+      set((s) => ({
+        tabs: [...s.tabs, tab],
+        openTabIds: [...s.openTabIds, tab.id],
+        activeTabId: tab.id,
+        viewMode: "pdf" as ViewMode,
       }));
     },
 
@@ -547,7 +886,9 @@ export const useEditorStore = create<EditorState>()(
         let vm = s.viewMode;
         if (nt === "whiteboard") vm = "whiteboard";
         else if (nt === "mindmap") vm = "mindmap";
-        else if (vm === "whiteboard" || vm === "mindmap") vm = "editor";
+        else if (nt === "kanban") vm = "kanban";
+        else if (nt === "pdf") vm = "pdf";
+        else if (vm === "whiteboard" || vm === "mindmap" || vm === "kanban" || vm === "pdf") vm = "editor";
         return {
           openTabIds: s.openTabIds.includes(id) ? s.openTabIds : [...s.openTabIds, id],
           activeTabId: id,
@@ -562,7 +903,9 @@ export const useEditorStore = create<EditorState>()(
       let vm = s.viewMode;
       if (nt === "whiteboard") vm = "whiteboard";
       else if (nt === "mindmap") vm = "mindmap";
-      else if (vm === "whiteboard" || vm === "mindmap") vm = "editor";
+      else if (nt === "kanban") vm = "kanban";
+      else if (nt === "pdf") vm = "pdf";
+      else if (vm === "whiteboard" || vm === "mindmap" || vm === "kanban" || vm === "pdf") vm = "editor";
       return {
         activeTabId: id,
         openTabIds: s.openTabIds.includes(id) ? s.openTabIds : [...s.openTabIds, id],
@@ -587,7 +930,9 @@ export const useEditorStore = create<EditorState>()(
         let vm = s.viewMode;
         if (tab.noteType === "whiteboard") vm = "whiteboard";
         else if (tab.noteType === "mindmap") vm = "mindmap";
-        else if (vm === "whiteboard" || vm === "mindmap") vm = "editor";
+        else if (tab.noteType === "kanban") vm = "kanban";
+        else if (tab.noteType === "pdf") vm = "pdf";
+        else if (vm === "whiteboard" || vm === "mindmap" || vm === "kanban" || vm === "pdf") vm = "editor";
 
         return {
           tabs: [...s.tabs, tab],
@@ -668,7 +1013,7 @@ export const useEditorStore = create<EditorState>()(
 
     toggleView: () =>
       set((s) => {
-        const cycle: ViewMode[] = ["editor", "split", "preview", "inline", "graph", "whiteboard", "mindmap"];
+        const cycle: ViewMode[] = ["editor", "split", "preview", "inline", "graph", "whiteboard", "mindmap", "kanban", "pdf"];
         const idx = cycle.indexOf(s.viewMode);
         return { viewMode: cycle[(idx + 1) % cycle.length] };
       }),
@@ -678,6 +1023,19 @@ export const useEditorStore = create<EditorState>()(
         const s = useEditorStore.getState();
         return s.tabs.find((t) => t.id === s.activeTabId);
       })();
+
+      // Note-oriented modes should never try to render non-note content.
+      // If a canvas/mindmap/etc. tab is active, create a fresh note tab first.
+      if ((mode === "editor" || mode === "split" || mode === "preview" || mode === "inline") && activeTab && activeTab.noteType !== "note") {
+        const tab = newTab(activeTab.folderId ?? null, "note", "blank");
+        set((s) => ({
+          tabs: [...s.tabs, tab],
+          openTabIds: [...s.openTabIds, tab.id],
+          activeTabId: tab.id,
+          viewMode: mode,
+        }));
+        return;
+      }
 
       // When switching to whiteboard/mindmap, create a new file if the active tab
       // is not already that type — never overwrite an existing file.
@@ -701,6 +1059,30 @@ export const useEditorStore = create<EditorState>()(
             openTabIds: [...s.openTabIds, tab.id],
             activeTabId: tab.id,
             viewMode: "mindmap" as ViewMode,
+          }));
+          return;
+        }
+      }
+      if (mode === "kanban") {
+        if (!activeTab || activeTab.noteType !== "kanban") {
+          const tab = newTab(activeTab?.folderId ?? null, "kanban");
+          set((s) => ({
+            tabs: [...s.tabs, tab],
+            openTabIds: [...s.openTabIds, tab.id],
+            activeTabId: tab.id,
+            viewMode: "kanban" as ViewMode,
+          }));
+          return;
+        }
+      }
+      if (mode === "pdf") {
+        if (!activeTab || activeTab.noteType !== "pdf") {
+          const tab = newTab(activeTab?.folderId ?? null, "pdf");
+          set((s) => ({
+            tabs: [...s.tabs, tab],
+            openTabIds: [...s.openTabIds, tab.id],
+            activeTabId: tab.id,
+            viewMode: "pdf" as ViewMode,
           }));
           return;
         }

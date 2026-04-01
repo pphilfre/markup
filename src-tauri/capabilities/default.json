@@ -8,6 +8,7 @@
     "core:window:allow-create",
     "core:window:allow-close",
     "core:window:allow-set-focus",
+    "core:window:allow-start-dragging",
     "core:webview:allow-create-webview",
     "core:webview:allow-create-webview-window",
     "opener:default",
@@ -16,6 +17,8 @@
     "oauth:allow-cancel",
     "dialog:default",
     "fs:default",
+    "fs:allow-font-read-recursive",
+    "clipboard-manager:default",
     {
       "identifier": "fs:allow-read-text-file",
       "allow": [{ "path": "**" }]

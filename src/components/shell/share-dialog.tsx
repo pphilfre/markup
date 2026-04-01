@@ -7,6 +7,7 @@ import { useAuthState } from "@/components/convex-client-provider";
 import { signIn } from "@/lib/tauri";
 import { useEditorStore, type ViewMode } from "@/lib/store";
 import { isTauri } from "@/lib/tauri";
+import { writeClipboardText } from "@/lib/clipboard";
 import {
   Dialog,
   DialogContent,
@@ -156,9 +157,13 @@ export function ShareDialog({ open, onOpenChange, tabId }: ShareDialogProps) {
     await unshareNote({ ownerUserId: userId, tabId: targetTabId });
   }, [userId, targetTabId, unshareNote]);
 
-  const handleCopyLink = useCallback(() => {
+  const handleCopyLink = useCallback(async () => {
     if (!shareUrl) return;
-    navigator.clipboard.writeText(shareUrl);
+    try {
+      await writeClipboardText(shareUrl);
+    } catch {
+      return;
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [shareUrl]);
@@ -208,6 +213,27 @@ export function ShareDialog({ open, onOpenChange, tabId }: ShareDialogProps) {
 
   if (!tab) return null;
 
+  if (tab.noteType === "pdf") {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Share2 className="h-5 w-5" />
+              Share Note
+            </DialogTitle>
+            <DialogDescription>
+              PDF sharing is not supported in this dialog yet.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Use Export PDF from the PDF editor toolbar to distribute your annotated file.
+          </p>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   const isAlreadyShared = !!existingShare;
 
   return (
@@ -220,8 +246,8 @@ export function ShareDialog({ open, onOpenChange, tabId }: ShareDialogProps) {
           </DialogTitle>
           <DialogDescription>
             {isAlreadyShared
-              ? `"${tab.title.replace(/\.md$/, "")}" is currently shared`
-              : `Share "${tab.title.replace(/\.md$/, "")}" with others`}
+              ? `"${tab.title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/i, "")}" is currently shared`
+              : `Share "${tab.title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/i, "")}" with others`}
           </DialogDescription>
         </DialogHeader>
 

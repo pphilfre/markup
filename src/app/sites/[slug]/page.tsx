@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { useAuthState } from "@/components/convex-client-provider";
+import { PublicThemeMenu } from "@/components/shell/public-theme-menu";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -14,6 +15,8 @@ import "katex/dist/katex.min.css";
 import type { Components } from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Copy, ExternalLink, Pencil } from "lucide-react";
+import type { CustomThemeColors, ThemeMode } from "@/lib/store";
+import { writeClipboardText } from "@/lib/clipboard";
 
 const ADMONITION_TYPES: Record<string, { color: string; icon: string; label: string }> = {
   NOTE: { color: "#3b82f6", icon: "ℹ️", label: "Note" },
@@ -93,13 +96,24 @@ function PublishedSitePageInner() {
     );
   }
 
-  return <PublishedSiteContent key={slug} slug={slug} userId={user?.id ?? null} />;
+  return <PublishedSiteContent key={slug} slug={slug} userId={user?.id ?? null} loggedIn={!!user} />;
 }
 
-function PublishedSiteContent({ slug, userId }: { slug: string; userId: string | null }) {
+function PublishedSiteContent({ slug, userId, loggedIn }: { slug: string; userId: string | null; loggedIn: boolean }) {
   const site = useQuery(api.sites.getBySlug, { slug });
+  const workspace = useQuery(api.workspace.get, userId ? { userId } : "skip");
   const [timedOut, setTimedOut] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [renderContent, setRenderContent] = useState("");
+
+  const workspaceSettings = (workspace as { settings?: { themeMode?: ThemeMode; customThemeColors?: CustomThemeColors } } | null)?.settings;
+  const workspaceThemeMode = workspaceSettings?.themeMode;
+  const workspaceCustomThemeColors = workspaceSettings?.customThemeColors;
+
+  useEffect(() => {
+    if (!site) return;
+    setRenderContent(site.content);
+  }, [site]);
 
   useEffect(() => {
     const t = setTimeout(() => setTimedOut(true), 8000);
@@ -109,7 +123,11 @@ function PublishedSiteContent({ slug, userId }: { slug: string; userId: string |
   const isOwner = !!(site && userId && site.ownerUserId === userId);
 
   const handleCopyLink = useCallback(async () => {
-    await navigator.clipboard.writeText(window.location.href);
+    try {
+      await writeClipboardText(window.location.href);
+    } catch {
+      return;
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, []);
@@ -119,34 +137,71 @@ function PublishedSiteContent({ slug, userId }: { slug: string; userId: string |
     window.location.href = `/?tab=${encodeURIComponent(site.tabId)}`;
   }, [site]);
 
-  const components = useMemo<Components>(() => ({
-    a: ({ href, children, ...props }) => (
-      <a href={href} {...props} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
-        {children}
-      </a>
-    ),
-    blockquote: ({ children, ...props }) => {
-      const admonition = parseAdmonition(children);
-      if (admonition) {
-        const config = ADMONITION_TYPES[admonition.type];
-        if (config) {
-          return (
-            <div
-              className="my-4 rounded-lg border-l-4 p-4"
-              style={{ borderLeftColor: config.color, background: `${config.color}10` }}
-            >
-              <div className="mb-1 flex items-center gap-1.5 font-semibold text-sm" style={{ color: config.color }}>
-                <span>{config.icon}</span>
-                <span>{config.label}</span>
-              </div>
-              <div className="text-sm leading-relaxed">{admonition.content}</div>
-            </div>
-          );
+  const handleCheckboxToggle = useCallback((checkboxIndex: number, checked: boolean) => {
+    setRenderContent((prev) => {
+      const lines = prev.split("\n");
+      let currentCheckbox = 0;
+      for (let i = 0; i < lines.length; i++) {
+        if (/^(\s*[-*+]|\s*\d+\.) \[[ x]\]/.test(lines[i])) {
+          if (currentCheckbox === checkboxIndex) {
+            lines[i] = lines[i].replace(/\[[ x]\]/, checked ? "[x]" : "[ ]");
+            return lines.join("\n");
+          }
+          currentCheckbox += 1;
         }
       }
-      return <blockquote {...props}>{children}</blockquote>;
-    },
-  }), []);
+      return prev;
+    });
+  }, []);
+
+  const components = useMemo<Components>(() => {
+    let checkboxIdx = 0;
+
+    return {
+      a: ({ href, children, ...props }) => (
+        <a href={href} {...props} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
+          {children}
+        </a>
+      ),
+      blockquote: ({ children, ...props }) => {
+        const admonition = parseAdmonition(children);
+        if (admonition) {
+          const config = ADMONITION_TYPES[admonition.type];
+          if (config) {
+            return (
+              <div
+                className="my-4 rounded-lg border-l-4 p-4"
+                style={{ borderLeftColor: config.color, background: `${config.color}10` }}
+              >
+                <div className="mb-1 flex items-center gap-1.5 font-semibold text-sm" style={{ color: config.color }}>
+                  <span>{config.icon}</span>
+                  <span>{config.label}</span>
+                </div>
+                <div className="text-sm leading-relaxed">{admonition.content}</div>
+              </div>
+            );
+          }
+        }
+        return <blockquote {...props}>{children}</blockquote>;
+      },
+      input: ({ type, checked, disabled, ...props }) => {
+        if (type === "checkbox") {
+          void disabled;
+          const idx = checkboxIdx++;
+          return (
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={(e) => handleCheckboxToggle(idx, e.target.checked)}
+              className="cursor-pointer"
+              {...props}
+            />
+          );
+        }
+        return <input type={type} {...props} />;
+      },
+    };
+  }, [handleCheckboxToggle]);
 
   if (site === undefined) {
     return (
@@ -191,9 +246,14 @@ function PublishedSiteContent({ slug, userId }: { slug: string; userId: string |
             <div className="text-xs text-muted-foreground truncate">
               Published with <a className="underline underline-offset-2" href="/" target="_blank" rel="noopener noreferrer">Markup</a>
             </div>
-            <div className="text-sm font-semibold truncate">{site.title.replace(/\.(md|canvas|mindmap)$/, "")}</div>
+            <div className="text-sm font-semibold truncate">{site.title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/, "")}</div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <PublicThemeMenu
+              loggedIn={loggedIn}
+              workspaceThemeMode={workspaceThemeMode ?? null}
+              workspaceCustomThemeColors={workspaceCustomThemeColors ?? null}
+            />
             <Button variant="outline" size="sm" className="gap-1.5" onClick={handleCopyLink}>
               <Copy className="h-3.5 w-3.5" /> Copy link
             </Button>
@@ -224,7 +284,7 @@ function PublishedSiteContent({ slug, userId }: { slug: string; userId: string |
             rehypePlugins={[rehypeHighlight, rehypeKatex]}
             components={components}
           >
-            {site.content}
+            {renderContent}
           </ReactMarkdown>
         </article>
       </main>

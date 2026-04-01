@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { Plus, X, PenLine, Eye, Columns2, Network, Share2, FileOutput, PenTool, GitBranch, ZoomIn, ZoomOut, Layers, Globe } from "lucide-react";
+import { useState, useRef, useEffect, useCallback, type WheelEvent } from "react";
+import { Plus, X, PenLine, Eye, Columns2, Network, Share2, FileOutput, PenTool, GitBranch, KanbanSquare, ZoomIn, ZoomOut, Layers, Globe, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
@@ -22,12 +22,12 @@ function TabItem({ id, title, isActive }: { id: string; title: string; isActive:
   const hideMd = useEditorStore((s) => s.settings.hideMdExtensions);
   const noteType = useEditorStore((s) => s.tabs.find((t) => t.id === id)?.noteType ?? "note");
 
-  const EXT_MAP = { note: ".md", whiteboard: ".canvas", mindmap: ".mindmap" } as const;
+  const EXT_MAP = { note: ".md", whiteboard: ".canvas", mindmap: ".mindmap", kanban: ".kanban", pdf: ".pdf" } as const;
   const ext = EXT_MAP[noteType];
 
   // Strip all known extensions for display
-  const stripExt = (t: string) => t.replace(/\.(md|canvas|mindmap)$/, "");
-  const displayName = hideMd && noteType === "note" ? stripExt(title) : title.replace(/\.(canvas|mindmap)$/, "");
+  const stripExt = (t: string) => t.replace(/\.(md|canvas|mindmap|kanban|pdf)$/, "");
+  const displayName = hideMd && noteType === "note" ? stripExt(title) : title.replace(/\.(canvas|mindmap|kanban|pdf)$/, "");
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(stripExt(title));
@@ -44,7 +44,7 @@ function TabItem({ id, title, isActive }: { id: string; title: string; isActive:
     const trimmed = draft.trim();
     if (trimmed) {
       // Always preserve the correct extension for the file type
-      const base = trimmed.replace(/\.(md|canvas|mindmap)$/, "");
+      const base = trimmed.replace(/\.(md|canvas|mindmap|kanban|pdf)$/, "");
       renameTab(id, base + ext);
     }
     setEditing(false);
@@ -101,7 +101,7 @@ export function TabBar() {
   const tabs = useEditorStore((s) => s.tabs);
   const openTabIds = useEditorStore((s) => s.openTabIds);
   const activeTabId = useEditorStore((s) => s.activeTabId);
-  const createTab = useEditorStore((s) => s.createTab);
+  const requestCreateTab = useEditorStore((s) => s.requestCreateTab);
   const zoomLevel = useEditorStore((s) => s.zoomLevel);
   const setZoomLevel = useEditorStore((s) => s.setZoomLevel);
   const viewMode = useEditorStore((s) => s.viewMode);
@@ -109,6 +109,7 @@ export function TabBar() {
   const [shareOpen, setShareOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
+  const tabsScrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Listen for custom events to open share / export dialogs
   useEffect(() => {
@@ -127,21 +128,38 @@ export function TabBar() {
 
   const openTabs = openTabIds.map((id) => tabs.find((t) => t.id === id)).filter(Boolean) as typeof tabs;
 
+  const handleTabsWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
+    const container = tabsScrollContainerRef.current;
+    if (!container) return;
+
+    const viewport = container.querySelector<HTMLElement>("[data-slot='scroll-area-viewport']");
+    if (!viewport) return;
+    if (viewport.scrollWidth <= viewport.clientWidth) return;
+
+    const delta = Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+    if (delta === 0) return;
+
+    viewport.scrollLeft += delta;
+    event.preventDefault();
+  }, []);
+
   return (
     <div className="flex h-8 items-center border-b border-border bg-card overflow-hidden">
-      <ScrollArea className="flex-1 min-w-0">
-        <div className="flex items-center">
-          {openTabs.map((tab) => (
-            <TabItem
-              key={tab.id}
-              id={tab.id}
-              title={tab.title}
-              isActive={tab.id === activeTabId}
-            />
-          ))}
-        </div>
-        <ScrollBar orientation="horizontal" />
-      </ScrollArea>
+      <div ref={tabsScrollContainerRef} className="flex-1 min-w-0" onWheel={handleTabsWheel}>
+        <ScrollArea className="h-full w-full">
+          <div className="flex items-center">
+            {openTabs.map((tab) => (
+              <TabItem
+                key={tab.id}
+                id={tab.id}
+                title={tab.title}
+                isActive={tab.id === activeTabId}
+              />
+            ))}
+          </div>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
+      </div>
 
       <div className="flex items-center gap-0.5 px-1 shrink-0">
         <Tooltip>
@@ -149,7 +167,7 @@ export function TabBar() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => createTab()}
+              onClick={() => requestCreateTab()}
               className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -239,13 +257,13 @@ export function TabBar() {
         </div>
 
         <div className="relative flex items-center rounded-md border border-border bg-muted/50 p-px">
-          {(viewMode === "graph" || viewMode === "whiteboard" || viewMode === "mindmap") && (
+          {(viewMode === "graph" || viewMode === "whiteboard" || viewMode === "mindmap" || viewMode === "kanban" || viewMode === "pdf") && (
             <div
               className="absolute top-px bottom-px rounded-sm bg-background shadow-sm transition-transform duration-200 ease-out"
               style={{
-                width: "calc(33.333% - 1px)",
+                width: "calc(20% - 1px)",
                 transform: `translateX(${
-                  viewMode === "graph" ? "0%" : viewMode === "whiteboard" ? "100%" : "200%"
+                  viewMode === "graph" ? "0%" : viewMode === "whiteboard" ? "100%" : viewMode === "mindmap" ? "200%" : viewMode === "kanban" ? "300%" : "400%"
                 })`,
               }}
             />
@@ -254,6 +272,8 @@ export function TabBar() {
             { mode: "graph" as ViewMode, icon: Network, label: "Graph" },
             { mode: "whiteboard" as ViewMode, icon: PenTool, label: "Whiteboard" },
             { mode: "mindmap" as ViewMode, icon: GitBranch, label: "Mindmap" },
+            { mode: "kanban" as ViewMode, icon: KanbanSquare, label: "Kanban" },
+            { mode: "pdf" as ViewMode, icon: FileText, label: "PDF" },
           ] as const).map(({ mode, icon: Icon, label }) => (
             <Tooltip key={mode}>
               <TooltipTrigger asChild>

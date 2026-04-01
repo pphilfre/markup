@@ -3,9 +3,10 @@
 import { useEffect } from "react";
 import { useEditorStore } from "@/lib/store";
 import { isTauri } from "@/lib/tauri";
+import type { CustomThemeColors, ThemeMode } from "@/lib/store";
 
 // CSS variable sets for each built-in theme
-const THEME_VARS: Record<string, Record<string, string>> = {
+export const THEME_VARS: Record<string, Record<string, string>> = {
   light: {
     "--background": "oklch(1 0 0)",
     "--foreground": "oklch(0.145 0 0)",
@@ -257,7 +258,7 @@ const THEME_VARS: Record<string, Record<string, string>> = {
 };
 
 // Which base class (dark/light) each theme uses
-const THEME_BASE: Record<string, "dark" | "light"> = {
+export const THEME_BASE: Record<string, "dark" | "light"> = {
   light: "light",
   dark: "dark",
   system: "dark", // resolved dynamically
@@ -271,6 +272,45 @@ const THEME_BASE: Record<string, "dark" | "light"> = {
   "everforest-light": "light",
   uwu: "light",
 };
+
+export function applyThemeModeToDocument(
+  themeMode: ThemeMode,
+  customThemeColors?: CustomThemeColors
+) {
+  const root = document.documentElement;
+  const base = themeMode === "system"
+    ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+    : THEME_BASE[themeMode] ?? "dark";
+
+  root.classList.toggle("dark", base === "dark");
+  root.classList.toggle("light", base === "light");
+
+  const vars = THEME_VARS[themeMode === "system" ? base : themeMode] ?? THEME_VARS[base];
+  if (vars) {
+    const allVarKeys = new Set(Object.values(THEME_VARS).flatMap(Object.keys));
+    allVarKeys.forEach((k) => root.style.removeProperty(k));
+    Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  }
+
+  const colorKeyMap: Record<string, string> = {
+    background: "--background",
+    foreground: "--foreground",
+    sidebar: "--sidebar",
+    sidebarForeground: "--sidebar-foreground",
+    popover: "--popover",
+    popoverForeground: "--popover-foreground",
+    border: "--border",
+    muted: "--muted",
+    mutedForeground: "--muted-foreground",
+    accent: "--accent",
+    accentForeground: "--accent-foreground",
+    primary: "--primary",
+    primaryForeground: "--primary-foreground",
+  };
+  Object.entries(customThemeColors ?? {}).forEach(([key, val]) => {
+    if (val && colorKeyMap[key]) root.style.setProperty(colorKeyMap[key], val);
+  });
+}
 
 /**
  * Syncs the zustand theme state to the <html> element's class list and CSS vars.
@@ -303,15 +343,10 @@ export function ThemeSync() {
   // Apply theme class + CSS vars
   useEffect(() => {
     if (!hydrated) return;
-    const root = document.documentElement;
 
-    // Determine base dark/light class
     const base = themeMode === "system"
       ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
       : THEME_BASE[themeMode] ?? (theme === "dark" ? "dark" : "light");
-
-    root.classList.toggle("dark", base === "dark");
-    root.classList.toggle("light", base === "light");
 
     if (isTauri()) {
       (async () => {
@@ -324,34 +359,7 @@ export function ThemeSync() {
       })();
     }
 
-    // Apply built-in theme vars
-    const vars = THEME_VARS[themeMode === "system" ? base : themeMode] ?? THEME_VARS[base];
-    if (vars) {
-      // Clear any previously set custom vars first so light themes don't inherit dark ones
-      const allVarKeys = new Set(Object.values(THEME_VARS).flatMap(Object.keys));
-      allVarKeys.forEach((k) => root.style.removeProperty(k));
-      Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
-    }
-
-    // Apply custom overrides on top
-    const colorKeyMap: Record<string, string> = {
-      background: "--background",
-      foreground: "--foreground",
-      sidebar: "--sidebar",
-      sidebarForeground: "--sidebar-foreground",
-      popover: "--popover",
-      popoverForeground: "--popover-foreground",
-      border: "--border",
-      muted: "--muted",
-      mutedForeground: "--muted-foreground",
-      accent: "--accent",
-      accentForeground: "--accent-foreground",
-      primary: "--primary",
-      primaryForeground: "--primary-foreground",
-    };
-    Object.entries(customThemeColors ?? {}).forEach(([key, val]) => {
-      if (val && colorKeyMap[key]) root.style.setProperty(colorKeyMap[key], val);
-    });
+    applyThemeModeToDocument(themeMode, customThemeColors);
   }, [hydrated, theme, themeMode, customThemeColors]);
 
   // Sync accent colour to CSS custom property

@@ -48,6 +48,22 @@ export function triggerManualSync() {
   _triggerManualSync?.();
 }
 
+const ALLOWED_SETTINGS_KEYS: Array<keyof Settings> = [
+  "fontFamily", "fontSize", "lineHeight", "tabSize", "editorMargin", "accentColor", "hideMdExtensions",
+  "letterSpacing", "maxLineWidth", "showInvisibleCharacters", "autoCloseBrackets", "autoCloseMarkdownFormatting",
+  "autoFormatLists", "continueListOnEnter", "spellCheck", "autoPunctuation", "suggestCorrectionsOnDoubleTap", "smartQuotes", "smartDashes", "convertTabsToSpaces", "wordWrap",
+  "highlightCurrentLine", "highlightMatchingBrackets", "cursorAnimation", "multiCursorSupport", "themeMode",
+  "customThemeColors", "sidebarPosition", "sidebarWidth", "compactMode", "showIconsInSidebar", "showFileExtensions", "iconTheme",
+  "codeBlockTheme", "headingStyle", "linkStyle", "checkboxStyle", "customFontFamily",
+  "fileTreeWidth", "splitRatio",
+];
+
+function sanitizeSettings(settings: Settings): Partial<Settings> {
+  return Object.fromEntries(
+    Object.entries(settings).filter(([key]) => ALLOWED_SETTINGS_KEYS.includes(key as keyof Settings))
+  ) as Partial<Settings>;
+}
+
 /**
  * Bidirectional sync between the Zustand store and Convex.
  *
@@ -127,16 +143,29 @@ export function ConvexSync() {
     const nextTabsKey = JSON.stringify(
       tabsPayload.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: t.noteType ?? "note" }))
     );
+
+    const sanitizedSettings = sanitizeSettings(slice.settings);
     // Only allow 'dark' or 'light' for theme
     const themeStr = String(slice.theme);
     const safeTheme = themeStr === "dark" || themeStr === "light" ? themeStr : (themeStr.toLowerCase().includes("dark") ? "dark" : "light");
-    const nextWorkspaceKey = JSON.stringify({
+    const workspacePayload = {
       activeTabId: slice.activeTabId && onlineTabIdSet.has(slice.activeTabId) ? slice.activeTabId : null,
       openTabIds: slice.openTabIds.filter((id) => onlineTabIdSet.has(id)),
+      folders: slice.folders.map((f) => ({
+        id: f.id,
+        name: f.name,
+        color: f.color,
+        parentId: f.parentId,
+        sortOrder: f.sortOrder,
+      })),
       viewMode: slice.viewMode,
       theme: safeTheme,
       fileTreeOpen: slice.fileTreeOpen,
-    });
+      settings: sanitizedSettings,
+      profiles: slice.profiles.map((p) => ({ id: p.id, name: p.name })),
+      activeProfileId: slice.activeProfileId,
+    };
+    const nextWorkspaceKey = JSON.stringify(workspacePayload);
 
     if (nextTabsKey === lastPushedTabs.current && nextWorkspaceKey === lastPushedWorkspace.current) {
       return;
@@ -164,42 +193,9 @@ export function ConvexSync() {
           }
         }
       }
-
-
-      // Only send allowed fields to Convex (must match settingsValidator)
-      const allowedSettingsKeys = [
-        "fontFamily", "fontSize", "lineHeight", "tabSize", "editorMargin", "accentColor", "hideMdExtensions",
-        "letterSpacing", "maxLineWidth", "showInvisibleCharacters", "autoCloseBrackets", "autoCloseMarkdownFormatting",
-        "autoFormatLists", "continueListOnEnter", "smartQuotes", "smartDashes", "convertTabsToSpaces", "wordWrap",
-        "highlightCurrentLine", "highlightMatchingBrackets", "cursorAnimation", "multiCursorSupport", "themeMode",
-        "customThemeColors", "sidebarPosition", "sidebarWidth", "compactMode", "showIconsInSidebar", "showFileExtensions", "iconTheme",
-        "codeBlockTheme", "headingStyle", "linkStyle", "checkboxStyle", "customFontFamily",
-        "fileTreeWidth", "splitRatio"
-      ];
-      const sanitizedSettings = Object.fromEntries(
-        Object.entries(slice.settings).filter(([k]) => allowedSettingsKeys.includes(k))
-      );
-
-
-      // Ensure all required settings fields are present and valid, but do not specify them twice
-      const mergedSettings = { ...DEFAULT_SETTINGS, ...sanitizedSettings };
       await saveWorkspace({
         userId,
-        activeTabId: slice.activeTabId && onlineTabIdSet.has(slice.activeTabId) ? slice.activeTabId : null,
-        openTabIds: slice.openTabIds.filter((id) => onlineTabIdSet.has(id)),
-        folders: slice.folders.map((f) => ({
-          id: f.id,
-          name: f.name,
-          color: f.color,
-          parentId: f.parentId,
-          sortOrder: f.sortOrder,
-        })),
-        viewMode: slice.viewMode,
-        theme: safeTheme,
-        fileTreeOpen: slice.fileTreeOpen,
-        settings: mergedSettings,
-        profiles: slice.profiles.map((p) => ({ id: p.id, name: p.name })),
-        activeProfileId: slice.activeProfileId,
+        ...workspacePayload,
       });
 
       setSyncState({ status: "synced", lastSyncedAt: Date.now(), error: null });
@@ -255,7 +251,7 @@ export function ConvexSync() {
           ...f,
           parentId: f.parentId ?? null,
         })),
-        viewMode: (workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap") ?? "editor",
+        viewMode: (workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap" | "kanban" | "pdf") ?? "editor",
         theme: (workspace.theme === "dark" || workspace.theme === "light") ? workspace.theme : (workspace.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: workspace.fileTreeOpen ?? true,
         settings: { ...DEFAULT_SETTINGS, ...workspace.settings } as Settings,
@@ -268,12 +264,25 @@ export function ConvexSync() {
       lastPushedTabs.current = JSON.stringify(
         remoteTabs.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: ((t as Record<string, unknown>).noteType as string) ?? "note" }))
       );
+      const mergedRemoteSettings = sanitizeSettings({ ...DEFAULT_SETTINGS, ...workspace.settings } as Settings);
       lastPushedWorkspace.current = JSON.stringify({
         activeTabId: workspace.activeTabId,
         openTabIds: remoteOpenTabIds,
+        folders: (workspace.folders ?? []).map((f) => ({
+          id: f.id,
+          name: f.name,
+          color: f.color,
+          parentId: f.parentId ?? null,
+          sortOrder: f.sortOrder,
+        })),
         viewMode: workspace.viewMode,
         theme: (workspace.theme === "dark" || workspace.theme === "light") ? workspace.theme : (workspace.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: workspace.fileTreeOpen,
+        settings: mergedRemoteSettings,
+        profiles: workspace.profiles?.length
+          ? workspace.profiles.map((p) => ({ id: p.id, name: p.name }))
+          : [{ id: "default", name: "Personal" }],
+        activeProfileId: workspace.activeProfileId ?? "default",
       });
 
       setSyncState({ status: "synced", lastSyncedAt: Date.now(), error: null });
@@ -384,7 +393,7 @@ export function ConvexSync() {
           ...f,
           parentId: f.parentId ?? null,
         })),
-        viewMode: (workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap") ?? "editor",
+        viewMode: (workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap" | "kanban" | "pdf") ?? "editor",
         theme: (workspace.theme === "dark" || workspace.theme === "light") ? workspace.theme : (workspace.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: workspace.fileTreeOpen ?? true,
         settings: { ...DEFAULT_SETTINGS, ...workspace.settings } as Settings,
@@ -399,12 +408,25 @@ export function ConvexSync() {
       lastPushedTabs.current = JSON.stringify(
         remoteTabs.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: ((t as Record<string, unknown>).noteType as string) ?? "note" }))
       );
+      const mergedRemoteSettings = sanitizeSettings({ ...DEFAULT_SETTINGS, ...workspace.settings } as Settings);
       lastPushedWorkspace.current = JSON.stringify({
         activeTabId: workspace.activeTabId,
         openTabIds: remoteOpenTabIds,
+        folders: (workspace.folders ?? []).map((f) => ({
+          id: f.id,
+          name: f.name,
+          color: f.color,
+          parentId: f.parentId ?? null,
+          sortOrder: f.sortOrder,
+        })),
         viewMode: workspace.viewMode,
         theme: (workspace.theme === "dark" || workspace.theme === "light") ? workspace.theme : (workspace.theme?.toString().toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: workspace.fileTreeOpen,
+        settings: mergedRemoteSettings,
+        profiles: workspace.profiles?.length
+          ? workspace.profiles.map((p) => ({ id: p.id, name: p.name }))
+          : [{ id: "default", name: "Personal" }],
+        activeProfileId: workspace.activeProfileId ?? "default",
       });
 
       setSyncState({ status: "synced", lastSyncedAt: Date.now(), error: null });
@@ -434,19 +456,7 @@ export function ConvexSync() {
 
       setSyncState({ status: "syncing", error: null });
 
-      // Only send allowed fields to Convex (must match settingsValidator)
-      const allowedSettingsKeys = [
-        "fontFamily", "fontSize", "lineHeight", "tabSize", "editorMargin", "accentColor", "hideMdExtensions",
-        "letterSpacing", "maxLineWidth", "showInvisibleCharacters", "autoCloseBrackets", "autoCloseMarkdownFormatting",
-        "autoFormatLists", "continueListOnEnter", "smartQuotes", "smartDashes", "convertTabsToSpaces", "wordWrap",
-        "highlightCurrentLine", "highlightMatchingBrackets", "cursorAnimation", "multiCursorSupport", "themeMode",
-        "sidebarPosition", "sidebarWidth", "compactMode", "showIconsInSidebar", "showFileExtensions", "iconTheme",
-        "codeBlockTheme", "headingStyle", "linkStyle", "checkboxStyle", "customFontFamily",
-        "fileTreeWidth", "splitRatio"
-      ];
-      const sanitizedSettings = Object.fromEntries(
-        Object.entries(s.settings).filter(([k]) => allowedSettingsKeys.includes(k))
-      );
+      const sanitizedSettings = sanitizeSettings(s.settings);
       saveWorkspace({
         userId,
         activeTabId: s.activeTabId ?? null,
@@ -461,7 +471,7 @@ export function ConvexSync() {
         viewMode: s.viewMode,
         theme: (s.theme === "dark" || s.theme === "light") ? s.theme : (String(s.theme).toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: s.fileTreeOpen,
-        settings: { ...DEFAULT_SETTINGS, ...sanitizedSettings } as Settings,
+        settings: sanitizedSettings as Settings,
         profiles: s.profiles.map((p) => ({ id: p.id, name: p.name })),
         activeProfileId: s.activeProfileId,
       }).then(() => {
@@ -511,7 +521,27 @@ export function ConvexSync() {
       remoteTabs.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: ((t as Record<string, unknown>).noteType as string) ?? "note" }))
     );
 
-    if (incomingTabsKey !== lastPushedTabs.current) {
+    const incomingWorkspaceKey = JSON.stringify({
+      activeTabId: workspace.activeTabId ?? null,
+      openTabIds: workspace.openTabIds ?? [],
+      folders: (workspace.folders ?? []).map((f) => ({
+        id: f.id,
+        name: f.name,
+        color: f.color,
+        parentId: f.parentId ?? null,
+        sortOrder: f.sortOrder,
+      })),
+      viewMode: workspace.viewMode,
+      theme: (workspace.theme === "dark" || workspace.theme === "light") ? workspace.theme : (String(workspace.theme).toLowerCase().includes("dark") ? "dark" : "light"),
+      fileTreeOpen: workspace.fileTreeOpen ?? true,
+      settings: sanitizeSettings({ ...DEFAULT_SETTINGS, ...workspace.settings } as Settings),
+      profiles: workspace.profiles?.length
+        ? workspace.profiles.map((p) => ({ id: p.id, name: p.name }))
+        : [{ id: "default", name: "Personal" }],
+      activeProfileId: workspace.activeProfileId ?? "default",
+    });
+
+    if (incomingTabsKey !== lastPushedTabs.current || incomingWorkspaceKey !== lastPushedWorkspace.current) {
       // External change detected — apply to store
       isHydrating.current = true;
 
@@ -559,7 +589,7 @@ export function ConvexSync() {
           ...f,
           parentId: f.parentId ?? null,
         })),
-        viewMode: (workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap") ?? "editor",
+        viewMode: (workspace.viewMode as "editor" | "split" | "preview" | "graph" | "whiteboard" | "mindmap" | "kanban" | "pdf") ?? "editor",
         theme: (workspace.theme === "dark" || workspace.theme === "light") ? workspace.theme : (String(workspace.theme).toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: workspace.fileTreeOpen ?? true,
         ...(settingsChanged ? { settings: newSettings } : {}),
@@ -570,6 +600,7 @@ export function ConvexSync() {
       });
 
       lastPushedTabs.current = incomingTabsKey;
+      lastPushedWorkspace.current = incomingWorkspaceKey;
 
       setSyncState({ status: "synced", lastSyncedAt: Date.now(), error: null });
 
@@ -644,16 +675,7 @@ export function ConvexSync() {
         theme: (s.theme === "dark" || s.theme === "light") ? s.theme : (String(s.theme).toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: s.fileTreeOpen,
         // Only send allowed fields to Convex (must match settingsValidator)
-        settings: Object.fromEntries(
-          Object.entries(s.settings).filter(([k]) => [
-            "fontFamily", "fontSize", "lineHeight", "tabSize", "editorMargin", "accentColor", "hideMdExtensions",
-            "letterSpacing", "maxLineWidth", "showInvisibleCharacters", "autoCloseBrackets", "autoCloseMarkdownFormatting",
-            "autoFormatLists", "continueListOnEnter", "smartQuotes", "smartDashes", "convertTabsToSpaces", "wordWrap",
-            "highlightCurrentLine", "highlightMatchingBrackets", "cursorAnimation", "multiCursorSupport", "themeMode",
-            "sidebarPosition", "sidebarWidth", "compactMode", "showIconsInSidebar", "showFileExtensions", "iconTheme",
-            "codeBlockTheme", "headingStyle", "linkStyle", "checkboxStyle", "customFontFamily"
-          ].includes(k))
-        ),
+        settings: sanitizeSettings(s.settings),
         profiles: s.profiles,
         activeProfileId: s.activeProfileId,
       }),

@@ -22,6 +22,7 @@ import {
   Timer,
   Info,
   ExternalLink,
+  BookOpenText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -29,6 +30,8 @@ import { cn } from "@/lib/utils";
 import { apiBase, getClientAuthToken, openExternal, signOut, isTauri } from "@/lib/tauri";
 import { useEditorStore, DEFAULT_SETTINGS, type Settings as SettingsType } from "@/lib/store";
 import { useIsMobile } from "@/lib/use-mobile";
+import { EditorGuideContent } from "@/components/shell/editor-guide-content";
+import { REPLAY_TUTORIAL_EVENT } from "@/components/shell/first-run-dialog";
 import { WorkOsWidgets, UserProfile, UserSessions, UserSecurity } from "@workos-inc/widgets";
 import { getUpdateState, subscribeToUpdateState, downloadUpdate, installUpdate } from "@/lib/tauri-updater";
 import packageJson from "../../../package.json";
@@ -37,7 +40,7 @@ import packageJson from "../../../package.json";
 // Sidebar sections
 // ---------------------------------------------------------------------------
 
-type SectionId = "general" | "user" | "appearance" | "typography" | "markdown" | "editing" | "privacy" | "data" | "about" | "updates";
+type SectionId = "general" | "user" | "appearance" | "typography" | "markdown" | "editing" | "guide" | "privacy" | "data" | "about" | "updates";
 
 const SECTIONS: { id: SectionId; label: string; icon: typeof Settings; group?: string }[] = [
   { id: "general", label: "General", icon: Palette },
@@ -46,6 +49,7 @@ const SECTIONS: { id: SectionId; label: string; icon: typeof Settings; group?: s
   { id: "typography", label: "Typography", icon: Type, group: "Editor" },
   { id: "markdown", label: "Markdown", icon: FileText, group: "Editor" },
   { id: "editing", label: "Editing", icon: PenTool, group: "Editor" },
+  { id: "guide", label: "Guide & Keybinds", icon: BookOpenText, group: "Editor" },
   { id: "privacy", label: "Privacy & Security", icon: Lock, group: "Account" },
   { id: "data", label: "Data", icon: Database, group: "Account" },
   { id: "updates", label: "Updates", icon: Timer, group: "Account" },
@@ -66,17 +70,44 @@ const FONT_OPTIONS = [
   { label: "Custom…", value: "__custom__" },
 ];
 
+const SYSTEM_FONT_CACHE_KEY = "markup-system-font-cache-v1";
+const CUSTOM_FONT_CACHE_KEY = "markup-custom-font-cache-v1";
+
+function readCachedSystemFonts(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(SYSTEM_FONT_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((font): font is string => typeof font === "string");
+  } catch {
+    return [];
+  }
+}
+
+function writeCachedSystemFonts(fonts: string[]) {
+  if (typeof window === "undefined" || fonts.length === 0) return;
+  try {
+    window.localStorage.setItem(SYSTEM_FONT_CACHE_KEY, JSON.stringify(fonts));
+  } catch {
+    // localStorage quota or privacy mode restrictions
+  }
+}
+
 /** Load available fonts from the browser's Local Font Access API (if available) */
 async function loadSystemFonts(): Promise<string[]> {
+  const cached = readCachedSystemFonts();
   try {
     // @ts-expect-error - queryLocalFonts is not in TS types yet
-    if (typeof window.queryLocalFonts !== "function") return [];
+    if (typeof window.queryLocalFonts !== "function") return cached;
     // @ts-expect-error - queryLocalFonts is not in TS types yet
     const fonts: { family: string }[] = await window.queryLocalFonts();
     const families = Array.from(new Set(fonts.map((f) => f.family))).sort();
+    writeCachedSystemFonts(families);
     return families;
   } catch {
-    return [];
+    return cached;
   }
 }
 
@@ -252,6 +283,13 @@ function GeneralSection({
         description="Hide markdown file extensions in the sidebar"
         checked={settings.hideMdExtensions}
         onChange={(v) => update({ hideMdExtensions: v })}
+      />
+
+      <ToggleRow
+        label="Prompt for templates on new file"
+        description="Show a template picker whenever you create a new note"
+        checked={settings.promptForTemplateOnNewFile}
+        onChange={(v) => update({ promptForTemplateOnNewFile: v })}
       />
 
       <Separator />
@@ -433,7 +471,15 @@ function TypographySection({
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
   const [fontSearchQuery, setFontSearchQuery] = useState("");
   const isCustom = !FONT_OPTIONS.some((o) => o.value === settings.fontFamily);
-  const [fontPreset, setFontPreset] = useState<string>(() => (isCustom ? "__custom__" : settings.fontFamily));
+  const [customPickerOpen, setCustomPickerOpen] = useState(false);
+  const fontPreset = isCustom || customPickerOpen ? "__custom__" : settings.fontFamily;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (settings.customFontFamily) {
+      window.localStorage.setItem(CUSTOM_FONT_CACHE_KEY, settings.customFontFamily);
+    }
+  }, [settings.customFontFamily]);
 
   // Load system fonts when "Custom…" is selected
   useEffect(() => {
@@ -457,16 +503,16 @@ function TypographySection({
       </div>
 
       <SelectRow
-        label="Font Family"
+        label="Code Editor Font"
         value={fontPreset}
         options={FONT_OPTIONS}
         onChange={(v) => {
           if (v === "__custom__") {
-            setFontPreset("__custom__");
+            setCustomPickerOpen(true);
             setFontSearchQuery("");
             loadSystemFonts().then(setSystemFonts);
           } else {
-            setFontPreset(v);
+            setCustomPickerOpen(false);
             update({ fontFamily: v, customFontFamily: null });
           }
         }}
@@ -496,7 +542,10 @@ function TypographySection({
                     return (
                       <button
                         key={font}
-                        onClick={() => update({ fontFamily: val, customFontFamily: val })}
+                        onClick={() => {
+                          window.localStorage.setItem(CUSTOM_FONT_CACHE_KEY, val);
+                          update({ fontFamily: val, customFontFamily: val });
+                        }}
                         className={cn(
                           "w-full text-left px-3 py-1.5 text-xs transition-colors hover:bg-muted",
                           active && "bg-accent text-accent-foreground"
@@ -524,10 +573,16 @@ function TypographySection({
             type="text"
             value={settings.customFontFamily ?? (isCustom ? settings.fontFamily : "")}
             onChange={(e) =>
-              update({
-                customFontFamily: e.target.value || null,
-                fontFamily: e.target.value || DEFAULT_SETTINGS.fontFamily,
-              })
+              {
+                const next = e.target.value;
+                if (next) {
+                  window.localStorage.setItem(CUSTOM_FONT_CACHE_KEY, next);
+                }
+                update({
+                  customFontFamily: next || null,
+                  fontFamily: next || DEFAULT_SETTINGS.fontFamily,
+                });
+              }
             }
             placeholder={`e.g. "Fira Code", ui-monospace, monospace`}
             className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-ring"
@@ -653,6 +708,24 @@ function MarkdownSection({
           onChange={(v) => update({ continueListOnEnter: v })}
         />
         <ToggleRow
+          label="Spell check"
+          description="Highlight misspelled words while typing"
+          checked={settings.spellCheck}
+          onChange={(v) => update({ spellCheck: v })}
+        />
+        <ToggleRow
+          label="Auto punctuation"
+          description="Convert a double-space after a word into a sentence period"
+          checked={settings.autoPunctuation}
+          onChange={(v) => update({ autoPunctuation: v })}
+        />
+        <ToggleRow
+          label="Double-tap correction suggestions"
+          description="Show keyboard correction suggestions when double-tapping words"
+          checked={settings.suggestCorrectionsOnDoubleTap}
+          onChange={(v) => update({ suggestCorrectionsOnDoubleTap: v })}
+        />
+        <ToggleRow
           label="Smart quotes"
           description='Convert straight quotes to "curly" quotes'
           checked={settings.smartQuotes}
@@ -730,6 +803,29 @@ function EditingSection({
         ]}
         onChange={(v) => update({ cursorAnimation: v as SettingsType["cursorAnimation"] })}
       />
+    </div>
+  );
+}
+
+function GuideSection() {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-md border border-border bg-card/50 p-3">
+        <h3 className="text-sm font-semibold">Tutorial</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Replay the first-run setup walkthrough at any time.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-3 gap-1.5 text-xs"
+          onClick={() => document.dispatchEvent(new CustomEvent(REPLAY_TUTORIAL_EVENT))}
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          Replay tutorial
+        </Button>
+      </div>
+      <EditorGuideContent />
     </div>
   );
 }
@@ -838,17 +934,24 @@ function PrivacySecuritySection() {
 // ---------------------------------------------------------------------------
 
 function DataSection({
-  settings,
-  update,
   reset,
 }: {
-  settings: SettingsType;
-  update: (p: Partial<SettingsType>) => void;
   reset: () => void;
 }) {
   const tabs = useEditorStore((s) => s.tabs);
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const arrayBufferToBase64 = useCallback((data: ArrayBuffer) => {
+    const bytes = new Uint8Array(data);
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode(...chunk);
+    }
+    return btoa(binary);
+  }, []);
 
   const handleExportNotes = useCallback(async () => {
     if (tabs.length === 0) return;
@@ -898,7 +1001,7 @@ function DataSection({
     URL.revokeObjectURL(url);
   }, []);
 
-  /** Import .md, .canvas, .mindmap files — multiple at once */
+  /** Import .md, .canvas, .mindmap, .kanban, .pdf files — multiple at once */
   const handleImportFiles = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
@@ -911,6 +1014,8 @@ function DataSection({
         ".txt": "note",
         ".canvas": "whiteboard",
         ".mindmap": "mindmap",
+        ".kanban": "kanban",
+        ".pdf": "pdf",
       };
 
       const readPromises = Array.from(files).map(
@@ -918,18 +1023,35 @@ function DataSection({
           new Promise<void>((resolve) => {
             const reader = new FileReader();
             reader.onload = () => {
-              const content = reader.result as string;
               const dotIdx = file.name.lastIndexOf(".");
               const ext = dotIdx !== -1 ? file.name.slice(dotIdx).toLowerCase() : ".md";
               const noteType: import("@/lib/store").NoteType = EXT_TYPE[ext] ?? "note";
+
+              let content: string;
+              if (noteType === "pdf") {
+                const buffer = reader.result as ArrayBuffer;
+                const base64 = arrayBufferToBase64(buffer);
+                content = JSON.stringify({
+                  version: 1,
+                  fileName: file.name,
+                  source: "local",
+                  dataBase64: base64,
+                  storageId: null,
+                  annotations: [],
+                });
+              } else {
+                content = reader.result as string;
+              }
 
               // Normalise title: ensure correct extension on disk
               const EXT_NORM: Record<import("@/lib/store").NoteType, string> = {
                 note: ".md",
                 whiteboard: ".canvas",
                 mindmap: ".mindmap",
+                kanban: ".kanban",
+                pdf: ".pdf",
               };
-              const baseName = file.name.replace(/\.(md|markdown|txt|canvas|mindmap)$/i, "");
+              const baseName = file.name.replace(/\.(md|markdown|txt|canvas|mindmap|kanban|pdf)$/i, "");
               const title = baseName + EXT_NORM[noteType];
 
               const newTab: import("@/lib/store").Tab = {
@@ -940,6 +1062,7 @@ function DataSection({
                 tags: [],
                 pinned: false,
                 noteType,
+                origin: noteType === "pdf" ? "local" : "online",
               };
 
               const state = useEditorStore.getState();
@@ -950,7 +1073,11 @@ function DataSection({
               });
               resolve();
             };
-            reader.readAsText(file);
+            if (file.name.toLowerCase().endsWith(".pdf")) {
+              reader.readAsArrayBuffer(file);
+            } else {
+              reader.readAsText(file);
+            }
           })
       );
 
@@ -959,7 +1086,7 @@ function DataSection({
         if (fileInputRef.current) fileInputRef.current.value = "";
       });
     },
-    []
+    [arrayBufferToBase64]
   );
 
   const handleRebuildSearchIndex = useCallback(() => {
@@ -1081,13 +1208,13 @@ function DataSection({
       <div className="flex items-center justify-between">
         <div>
           <span className="text-xs text-foreground">Import Files</span>
-          <p className="text-[11px] text-muted-foreground">Import .md, .canvas, .mindmap files</p>
+          <p className="text-[11px] text-muted-foreground">Import .md, .canvas, .mindmap, .kanban, .pdf files</p>
         </div>
         <div>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".md,.markdown,.txt,.canvas,.mindmap"
+            accept=".md,.markdown,.txt,.canvas,.mindmap,.kanban,.pdf,application/pdf"
             multiple
             onChange={handleImportFiles}
             className="hidden"
@@ -1901,9 +2028,10 @@ export function SettingsPanel() {
       {activeSection === "editing" && (
         <EditingSection settings={settings} update={updateSettings} />
       )}
+      {activeSection === "guide" && <GuideSection />}
       {activeSection === "privacy" && <PrivacySecuritySection />}
       {activeSection === "data" && (
-        <DataSection settings={settings} update={updateSettings} reset={reset} />
+        <DataSection reset={reset} />
       )}
       {activeSection === "about" && <AboutSection />}
       {activeSection === "updates" && <UpdatesSection />}

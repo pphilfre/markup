@@ -25,7 +25,7 @@ export function useGlobalKeybinds() {
       // New tab
       "Alt+KeyT": (e: KeyboardEvent) => {
         e.preventDefault();
-        useEditorStore.getState().createTab();
+        useEditorStore.getState().requestCreateTab();
       },
 
       // Close tab

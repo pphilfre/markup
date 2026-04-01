@@ -160,6 +160,13 @@ Workspace settings include typography/editor behavior, markdown behavior, appear
 
 ---
 
+## Updating for contributers
+
+Edit the `version.json` to the next latest verison and run
+```
+npm run sync-changes
+```
+
 ## Deployment
 
 ### Web

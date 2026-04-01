@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState, useEffect, isValidElement, cloneElement } from "react";
+import React, { useMemo, useRef, useState, useEffect, useCallback, isValidElement, cloneElement } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -8,6 +8,7 @@ import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import type { Components } from "react-markdown";
+import { isTauri, openExternal } from "@/lib/tauri";
 
 // ── Admonition types ──────────────────────────────────────────────────────
 
@@ -122,15 +123,69 @@ function MermaidBlock({ chart }: { chart: string }) {
 
 // ── Standalone Preview Component ──────────────────────────────────────────
 
-export function MarkdownPreviewStandalone({ content }: { content: string }) {
-  const processedContent = useMemo(() => {
-    return content.replace(/\[\[([^\]]+)\]\]/g, (_, title) => {
-      return `**${title}**`;
-    });
+export function MarkdownPreviewStandalone({
+  content,
+  onContentChange,
+}: {
+  content: string;
+  onContentChange?: (nextContent: string) => void;
+}) {
+  const [renderContent, setRenderContent] = useState(content);
+
+  useEffect(() => {
+    setRenderContent(content);
   }, [content]);
 
+  const handleCheckboxToggle = useCallback(
+    (checkboxIndex: number, checked: boolean) => {
+      const lines = renderContent.split("\n");
+      let currentCheckbox = 0;
+
+      for (let i = 0; i < lines.length; i++) {
+        if (/^(\s*[-*+]|\s*\d+\.) \[[ x]\]/.test(lines[i])) {
+          if (currentCheckbox === checkboxIndex) {
+            lines[i] = lines[i].replace(/\[[ x]\]/, checked ? "[x]" : "[ ]");
+            const next = lines.join("\n");
+            setRenderContent(next);
+            onContentChange?.(next);
+            break;
+          }
+          currentCheckbox += 1;
+        }
+      }
+    },
+    [onContentChange, renderContent]
+  );
+
+  const processedContent = useMemo(() => {
+    return renderContent.replace(/\[\[([^\]]+)\]\]/g, (_, title) => {
+      return `**${title}**`;
+    });
+  }, [renderContent]);
+
+  const handleExternalLinkClick = useCallback(
+    async (event: React.MouseEvent<HTMLAnchorElement>, href?: string) => {
+      if (!href) return;
+
+      if (isTauri()) {
+        event.preventDefault();
+        await openExternal(href);
+        return;
+      }
+
+      if (event.metaKey || event.ctrlKey) {
+        event.preventDefault();
+        window.open(href, "_blank", "noopener,noreferrer");
+      }
+    },
+    []
+  );
+
   const components = useMemo<Components>(
-    () => ({
+    () => {
+      let checkboxIdx = 0;
+
+      return {
       code: ({ className, children, ...props }) => {
         const match = /language-(\w+)/.exec(className || "");
         if (match && match[1] === "mermaid") {
@@ -149,7 +204,15 @@ export function MarkdownPreviewStandalone({ content }: { content: string }) {
       },
       a: ({ href, children, ...props }) => {
         return (
-          <a href={href} {...props} target="_blank" rel="noopener noreferrer">
+          <a
+            href={href}
+            {...props}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => {
+              void handleExternalLinkClick(e, href);
+            }}
+          >
             {children}
           </a>
         );
@@ -178,11 +241,28 @@ export function MarkdownPreviewStandalone({ content }: { content: string }) {
         }
         return <blockquote {...props}>{children}</blockquote>;
       },
-    }),
-    []
+      input: ({ type, checked, disabled, ...props }) => {
+        if (type === "checkbox") {
+          void disabled;
+          const idx = checkboxIdx++;
+          return (
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={(e) => handleCheckboxToggle(idx, e.target.checked)}
+              className="cursor-pointer"
+              {...props}
+            />
+          );
+        }
+        return <input type={type} {...props} />;
+      },
+    };
+    },
+    [handleCheckboxToggle, handleExternalLinkClick]
   );
 
-  if (!content.trim()) {
+  if (!renderContent.trim()) {
     return (
       <div className="flex flex-1 items-center justify-center text-muted-foreground">
         <p className="text-sm">Nothing to preview</p>

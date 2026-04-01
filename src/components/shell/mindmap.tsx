@@ -121,7 +121,12 @@ function hitTestNode(node: MindmapNode, cx: number, cy: number): boolean {
   );
 }
 
-const HANDLE_SIZE = 8;
+function getResizeHandleMetrics() {
+  if (typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches) {
+    return { size: 16, tolerance: 8 };
+  }
+  return { size: 10, tolerance: 4 };
+}
 
 function getResizeHandles(node: MindmapNode): { id: string; x: number; y: number }[] {
   const w = node.width;
@@ -140,7 +145,8 @@ function getResizeHandles(node: MindmapNode): { id: string; x: number; y: number
 
 function hitTestResizeHandle(node: MindmapNode, cx: number, cy: number): string | null {
   const handles = getResizeHandles(node);
-  const hs = HANDLE_SIZE / 2 + 2; // tolerance
+  const { size, tolerance } = getResizeHandleMetrics();
+  const hs = size / 2 + tolerance;
   for (const h of handles) {
     if (cx >= h.x - hs && cx <= h.x + hs && cy >= h.y - hs && cy <= h.y + hs) {
       return h.id;
@@ -151,13 +157,14 @@ function hitTestResizeHandle(node: MindmapNode, cx: number, cy: number): string 
 
 function drawResizeHandles(ctx: CanvasRenderingContext2D, node: MindmapNode) {
   const handles = getResizeHandles(node);
-  const hs = HANDLE_SIZE / 2;
+  const { size } = getResizeHandleMetrics();
+  const hs = size / 2;
   ctx.fillStyle = "#ffffff";
   ctx.strokeStyle = "#3b82f6";
   ctx.lineWidth = 1.5;
   for (const h of handles) {
     ctx.beginPath();
-    ctx.rect(h.x - hs, h.y - hs, HANDLE_SIZE, HANDLE_SIZE);
+    ctx.rect(h.x - hs, h.y - hs, size, size);
     ctx.fill();
     ctx.stroke();
   }
@@ -1529,7 +1536,7 @@ export function MindmapView() {
       )}
 
       {/* Top-left: Toolbar */}
-      <div className="absolute left-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-popover/95 backdrop-blur-sm p-1 shadow-lg mobile-canvas-toolbar">
+      <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-popover/95 backdrop-blur-sm p-1 shadow-lg md:bottom-auto md:right-auto md:top-2 mobile-canvas-toolbar">
         {tools.map(({ tool, icon: Icon, label, shortcut }) => (
           <Tooltip key={tool}>
             <TooltipTrigger asChild>
@@ -1553,7 +1560,7 @@ export function MindmapView() {
       </div>
 
       {/* Top-right: Actions */}
-      <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-popover/95 backdrop-blur-sm p-1 shadow-lg mobile-canvas-actions">
+      <div className="absolute bottom-14 left-2 right-2 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-popover/95 backdrop-blur-sm p-1 shadow-lg md:bottom-auto md:left-auto md:right-2 md:top-2 mobile-canvas-actions">
         <Tooltip>
           <TooltipTrigger asChild>
             <button

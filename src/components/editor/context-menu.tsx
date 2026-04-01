@@ -9,34 +9,51 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { useEditorStore } from "@/lib/store";
+import { readClipboardText, writeClipboardText } from "@/lib/clipboard";
 import { Share2, FileOutput } from "lucide-react";
 
 export function EditorContextMenu({ children }: { children: React.ReactNode }) {
   const wrapSelection = useEditorStore((s) => s.wrapSelection);
   const editorView = useEditorStore((s) => s.editorView);
+  const spellCheckEnabled = useEditorStore((s) => s.settings.spellCheck);
 
-  const handleCut = () => {
+  const handleCut = async () => {
     if (!editorView) return;
     const { from, to } = editorView.state.selection.main;
     const text = editorView.state.sliceDoc(from, to);
     if (text) {
-      navigator.clipboard.writeText(text);
+      try {
+        await writeClipboardText(text);
+      } catch {
+        return;
+      }
       editorView.dispatch({ changes: { from, to, insert: "" } });
     }
     editorView.focus();
   };
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!editorView) return;
     const { from, to } = editorView.state.selection.main;
     const text = editorView.state.sliceDoc(from, to);
-    if (text) navigator.clipboard.writeText(text);
+    if (text) {
+      try {
+        await writeClipboardText(text);
+      } catch {
+        return;
+      }
+    }
     editorView.focus();
   };
 
   const handlePaste = async () => {
     if (!editorView) return;
-    const text = await navigator.clipboard.readText();
+    let text = "";
+    try {
+      text = await readClipboardText();
+    } catch {
+      return;
+    }
     const { from, to } = editorView.state.selection.main;
     editorView.dispatch({
       changes: { from, to, insert: text },
@@ -49,6 +66,14 @@ export function EditorContextMenu({ children }: { children: React.ReactNode }) {
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent className="w-52">
+        {spellCheckEnabled && (
+          <>
+            <ContextMenuItem disabled>
+              Spell suggestions: Shift + Right Click
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
         <ContextMenuItem onClick={handleCut}>
           Cut
           <ContextMenuShortcut>Ctrl+X</ContextMenuShortcut>

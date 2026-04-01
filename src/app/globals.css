@@ -513,39 +513,15 @@
   /* File tree: increase touch targets */
   .mobile-file-tree button,
   .mobile-file-tree [role="button"] {
-    min-height: 36px;
+    min-height: 42px;
   }
 
-  /* Canvas views (whiteboard, mindmap, graph): reposition toolbars */
-  .mobile-canvas-view [class*="absolute left-2 top-2"] {
-    overflow-x: auto;
-    max-width: calc(100vw - 16px);
+  .mobile-file-tree {
+    font-size: 13px;
   }
 
-  /* Whiteboard / Mindmap floating toolbars: make scrollable */
-  .mobile-canvas-view > div > .absolute {
-    max-width: calc(100vw - 16px);
-  }
-
-  /* Make floating toolbars in canvas views scrollable on narrow screens */
-  .mobile-canvas-view .absolute.left-2.top-2 {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    max-width: 60vw;
-    scrollbar-width: none;
-  }
-  .mobile-canvas-view .absolute.left-2.top-2::-webkit-scrollbar {
-    display: none;
-  }
-
-  .mobile-canvas-view .absolute.right-2.top-2 {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    max-width: 40vw;
-    scrollbar-width: none;
-  }
-  .mobile-canvas-view .absolute.right-2.top-2::-webkit-scrollbar {
-    display: none;
+  .mobile-canvas-view {
+    padding-bottom: 128px;
   }
 
   /* Settings panel on mobile: widen range slider labels */
@@ -558,8 +534,9 @@
   .mobile-canvas-toolbar {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-    max-width: calc(100vw - 80px);
+    max-width: calc(100vw - 16px);
     scrollbar-width: none;
+    flex-wrap: nowrap;
   }
   .mobile-canvas-toolbar::-webkit-scrollbar {
     display: none;
@@ -568,6 +545,7 @@
   .mobile-canvas-actions {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    max-width: calc(100vw - 16px);
     scrollbar-width: none;
     flex-wrap: nowrap;
   }
@@ -575,18 +553,26 @@
     display: none;
   }
 
+  .mobile-canvas-toolbar button,
+  .mobile-canvas-actions button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .mobile-canvas-toolbar button svg,
+  .mobile-canvas-actions button svg {
+    width: 18px;
+    height: 18px;
+  }
+
   /* Stacked toolbar layout on very narrow screens */
   @media (max-width: 400px) {
     .mobile-canvas-toolbar {
       max-width: calc(100vw - 16px);
-      flex-wrap: wrap;
-      max-height: 80px;
-      overflow-y: auto;
+      max-height: 88px;
     }
     .mobile-canvas-actions {
-      top: auto !important;
-      bottom: 8px !important;
-      right: 8px !important;
+      max-height: 88px;
     }
   }
 }

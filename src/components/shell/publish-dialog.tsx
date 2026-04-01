@@ -7,6 +7,7 @@ import { useAuthState } from "@/components/convex-client-provider";
 import { signIn } from "@/lib/tauri";
 import { useEditorStore } from "@/lib/store";
 import { isTauri } from "@/lib/tauri";
+import { writeClipboardText } from "@/lib/clipboard";
 import {
   Dialog,
   DialogContent,
@@ -68,7 +69,7 @@ export function PublishDialog({ open, onOpenChange, tabId }: PublishDialogProps)
 
   useEffect(() => {
     if (!open) return;
-    const initial = existingSite?.slug ?? (tab ? normalizeSlug(tab.title.replace(/\.(md|canvas|mindmap)$/, "")) : "");
+    const initial = existingSite?.slug ?? (tab ? normalizeSlug(tab.title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/, "")) : "");
     queueMicrotask(() => {
       setSlugInput(initial);
       setError(null);
@@ -112,7 +113,11 @@ export function PublishDialog({ open, onOpenChange, tabId }: PublishDialogProps)
 
   const handleCopyLink = useCallback(async () => {
     if (!siteUrl) return;
-    await navigator.clipboard.writeText(siteUrl);
+    try {
+      await writeClipboardText(siteUrl);
+    } catch {
+      return;
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }, [siteUrl]);

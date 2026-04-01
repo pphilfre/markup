@@ -58,12 +58,12 @@ const FORMAT_EXT: Record<ExportFormat, string> = {
 
 /** Strip known note extensions from a title */
 function stripNoteExt(title: string): string {
-  return title.replace(/\.(md|canvas|mindmap)$/, "");
+  return title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/, "");
 }
 
 /** Ensure the filename has the correct extension for the chosen format */
 function withFormatExt(name: string, format: ExportFormat): string {
-  const base = name.replace(/\.(md|json|html|pdf|canvas|mindmap)$/, "");
+  const base = name.replace(/\.(md|json|html|pdf|canvas|mindmap|kanban)$/, "");
   return base + FORMAT_EXT[format];
 }
 

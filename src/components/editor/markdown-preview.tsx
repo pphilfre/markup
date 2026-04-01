@@ -12,6 +12,7 @@ import rehypeRaw from "rehype-raw";
 import "katex/dist/katex.min.css";
 import { emojify } from "node-emoji";
 import { useEditorStore } from "@/lib/store";
+import { isTauri, openExternal } from "@/lib/tauri";
 import type { Components } from "react-markdown";
 
 // ── Backlink helpers ──────────────────────────────────────────────────────
@@ -204,8 +205,24 @@ export function MarkdownPreview({
     [activeTab, updateContent]
   );
 
-  // Track checkbox index for toggling
-  const checkboxIndexRef = useRef(0);
+  const handleExternalLinkClick = useCallback(
+    async (event: React.MouseEvent<HTMLAnchorElement>, href?: string) => {
+      if (!href) return;
+
+      if (isTauri()) {
+        event.preventDefault();
+        await openExternal(href);
+        return;
+      }
+
+      // Preserve explicit modifier behavior for web clients.
+      if (event.metaKey || event.ctrlKey) {
+        event.preventDefault();
+        window.open(href, "_blank", "noopener,noreferrer");
+      }
+    },
+    []
+  );
 
   // Custom components
   const components = useMemo<Components>(
@@ -258,7 +275,19 @@ export function MarkdownPreview({
               </a>
             );
           }
-          return <a href={href} {...props} target="_blank" rel="noopener noreferrer">{children}</a>;
+          return (
+            <a
+              href={href}
+              {...props}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => {
+                void handleExternalLinkClick(e, href);
+              }}
+            >
+              {children}
+            </a>
+          );
         },
 
         // Admonitions via blockquotes
@@ -282,8 +311,9 @@ export function MarkdownPreview({
         },
 
         // Clickable checkboxes in preview
-        input: ({ type, checked, ...props }) => {
+        input: ({ type, checked, disabled, ...props }) => {
           if (type === "checkbox") {
+            void disabled;
             const idx = checkboxIdx++;
             return (
               <input
@@ -295,7 +325,7 @@ export function MarkdownPreview({
               />
             );
           }
-          return <input type={type} checked={checked} {...props} />;
+          return <input type={type} {...props} />;
         },
 
         // Definition list support
@@ -311,11 +341,8 @@ export function MarkdownPreview({
         dd: ({ children, ...props }) => <dd className="ml-4 text-muted-foreground text-sm mt-0.5" {...props}>{children}</dd>,
       };
     },
-    [handleBacklinkClick, handleCheckboxToggle]
+    [handleBacklinkClick, handleCheckboxToggle, handleExternalLinkClick]
   );
-
-  // Reset checkbox index ref on each render
-  checkboxIndexRef.current = 0;
 
   if (!standalone && !activeTab) {
     return (

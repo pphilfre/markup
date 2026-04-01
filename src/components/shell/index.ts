@@ -6,5 +6,7 @@ export { FileTree } from "./file-tree";
 export { GraphView } from "./graph-view";
 export { WhiteboardView } from "./whiteboard";
 export { MindmapView } from "./mindmap";
+export { KanbanView } from "./kanban";
+export { PdfEditorView } from "./pdf-editor";
 export { OrgPanel } from "./org-panel";
 export { UpdateBanner } from "./update-banner";
