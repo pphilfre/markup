@@ -16,6 +16,9 @@
     "tauri:dev:only": "tauri dev",
     "tauri:build": "tauri build"
   },
+  "overrides": {
+    "exceljs": "file:vendor/exceljs"
+  },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.1",
     "@codemirror/commands": "^6.10.2",
