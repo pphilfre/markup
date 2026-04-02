@@ -4,8 +4,6 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   ChevronRight,
   ChevronDown,
-  FolderOpen,
-  FolderClosed,
   FileText,
   Plus,
   FolderPlus,
@@ -36,6 +34,9 @@ import {
   MoreHorizontal,
   CloudUpload,
   HardDrive,
+  Briefcase,
+  GraduationCap,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,11 +61,15 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { isTauri } from "@/lib/tauri";
-import { useEditorStore, Folder, Tab, NoteType } from "@/lib/store";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { getTabWorkspaceId, useEditorStore, Folder, Tab, WORKSPACE_PRESETS, type WorkspacePresetId, type Settings as WorkspaceSettings } from "@/lib/store";
 
 const TAG_PALETTE = [
   "#7c3aed", "#6366f1", "#ec4899", "#f43f5e",
@@ -81,6 +86,23 @@ const ICON_COLOR_PALETTE = [
   "#7c3aed", "#6366f1", "#3b82f6", "#06b6d4",
   "#22c55e", "#eab308", "#f97316", "#f43f5e",
   "#ec4899", "#a1a1aa",
+];
+
+const WORKSPACE_COLOR_PALETTE = [
+  "#7c3aed", "#0f766e", "#2563eb", "#f97316", "#ec4899", "#06b6d4", "#16a34a", "#dc2626",
+];
+
+const PRESET_ICON_BY_ID: Record<WorkspacePresetId, typeof User> = {
+  personal: User,
+  work: Briefcase,
+  school: GraduationCap,
+  custom: SlidersHorizontal,
+};
+
+const PRESET_THEME_OPTIONS: Array<{ label: string; value: WorkspaceSettings["themeMode"]; swatch: string }> = [
+  { label: "Dark", value: "dark", swatch: "#1f2937" },
+  { label: "Light", value: "light", swatch: "#f3f4f6" },
+  { label: "System", value: "system", swatch: "#9ca3af" },
 ];
 
 // Curated icons for the icon picker
@@ -590,6 +612,8 @@ function FileItem({
   const addTag = useEditorStore((s) => s.addTag);
   const removeTag = useEditorStore((s) => s.removeTag);
   const getAllTags = useEditorStore((s) => s.getAllTags);
+  const profiles = useEditorStore((s) => s.profiles);
+  const moveTabToWorkspace = useEditorStore((s) => s.moveTabToWorkspace);
   const togglePin = useEditorStore((s) => s.togglePin);
   const tagColors = useEditorStore((s) => s.tagColors);
   const setTagColor = useEditorStore((s) => s.setTagColor);
@@ -610,6 +634,7 @@ function FileItem({
     : tab.title;
 
   const expectedExt = tab.noteType === "whiteboard" ? ".canvas" : tab.noteType === "mindmap" ? ".mindmap" : tab.noteType === "kanban" ? ".kanban" : tab.noteType === "pdf" ? ".pdf" : ".md";
+  const currentWorkspaceId = getTabWorkspaceId(tab);
 
   const exportFile = async () => {
     if (isTauri()) {
@@ -815,6 +840,23 @@ function FileItem({
                   }}>
                     <FileOutput className="mr-2 h-3.5 w-3.5" /> Export As…
                   </DropdownMenuItem>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      <User className="mr-2 h-3.5 w-3.5" /> Move to Workspace
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                      {profiles.map((profile) => (
+                        <DropdownMenuItem
+                          key={profile.id}
+                          onClick={() => moveTabToWorkspace(tab.id, profile.id)}
+                          className={cn(profile.id === currentWorkspaceId && "bg-accent")}
+                        >
+                          <span className="h-2.5 w-2.5 rounded-full" style={{ background: profile.color }} />
+                          <span>{profile.name}</span>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={onClose}
@@ -878,6 +920,30 @@ function FileItem({
         }}>
           <FileOutput className="mr-2 h-3.5 w-3.5" /> Export As…
         </ContextMenuItem>
+        <ContextMenuSeparator />
+        <div className="px-2 py-1.5">
+          <p className="mb-1 text-xs font-medium text-muted-foreground">Move to Workspace</p>
+          <div className="space-y-1">
+            {profiles.map((profile) => (
+              <button
+                key={profile.id}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  moveTabToWorkspace(tab.id, profile.id);
+                }}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-sm px-1.5 py-1 text-left text-xs transition-colors",
+                  profile.id === currentWorkspaceId
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: profile.color }} />
+                <span className="truncate">{profile.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
         <ContextMenuSeparator />
         {/* Tag management */}
         <div className="px-2 py-1.5" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
@@ -982,92 +1048,477 @@ function FileItem({
 }
 
 // ── Profile selector ──────────────────────────────────────────────────────
+interface WorkspaceDraft {
+  name: string;
+  color: string;
+  preset: WorkspacePresetId;
+  copyFromProfileId: string;
+  themeMode: WorkspaceSettings["themeMode"];
+  fontSize: number;
+  lineHeight: number;
+  accentColor: string;
+  compactMode: boolean;
+  spellCheck: boolean;
+}
+
+function toWorkspaceSettingsPartial(draft: WorkspaceDraft): Partial<WorkspaceSettings> {
+  return {
+    themeMode: draft.themeMode,
+    fontSize: draft.fontSize,
+    lineHeight: draft.lineHeight,
+    accentColor: draft.accentColor,
+    compactMode: draft.compactMode,
+    spellCheck: draft.spellCheck,
+  };
+}
+
+function WorkspaceSettingsForm({
+  draft,
+  profiles,
+  onChange,
+  allowCopy,
+}: {
+  draft: WorkspaceDraft;
+  profiles: { id: string; name: string }[];
+  onChange: (next: WorkspaceDraft) => void;
+  allowCopy: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <label className="text-xs text-muted-foreground">Workspace Name</label>
+        <input
+          value={draft.name}
+          onChange={(event) => onChange({ ...draft, name: event.target.value })}
+          className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-ring"
+          placeholder="Workspace name"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-xs text-muted-foreground">Color</label>
+        <div className="flex flex-wrap gap-1.5">
+          {WORKSPACE_COLOR_PALETTE.map((color) => (
+            <button
+              key={color}
+              type="button"
+              onClick={() => onChange({ ...draft, color })}
+              className={cn(
+                "h-6 w-6 rounded-full border-2 transition-transform hover:scale-110",
+                draft.color === color ? "border-foreground" : "border-transparent"
+              )}
+              style={{ background: color }}
+            />
+          ))}
+        </div>
+      </div>
+
+      {allowCopy && (
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground">Duplicate Settings From</label>
+          <select
+            value={draft.copyFromProfileId}
+            onChange={(event) => onChange({ ...draft, copyFromProfileId: event.target.value })}
+            className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-ring"
+          >
+            {profiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>{profile.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <label className="text-xs text-muted-foreground">Theme</label>
+        <div className="grid grid-cols-3 gap-2">
+          {PRESET_THEME_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange({ ...draft, themeMode: option.value })}
+              className={cn(
+                "rounded-md border px-2 py-2 text-[11px] font-medium transition-colors",
+                draft.themeMode === option.value
+                  ? "border-primary bg-primary/10 text-foreground"
+                  : "border-input text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span className="mx-auto mb-1 block h-2.5 w-2.5 rounded-full" style={{ background: option.swatch }} />
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs text-muted-foreground">Font Size ({draft.fontSize}px)</label>
+        <input
+          type="range"
+          min={12}
+          max={22}
+          step={1}
+          value={draft.fontSize}
+          onChange={(event) => onChange({ ...draft, fontSize: Number(event.target.value) })}
+          className="h-1.5 w-full cursor-pointer accent-primary"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs text-muted-foreground">Line Height ({draft.lineHeight.toFixed(1)})</label>
+        <input
+          type="range"
+          min={1.2}
+          max={2.2}
+          step={0.1}
+          value={draft.lineHeight}
+          onChange={(event) => onChange({ ...draft, lineHeight: Number(event.target.value) })}
+          className="h-1.5 w-full cursor-pointer accent-primary"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-xs text-muted-foreground">Accent Color</label>
+        <div className="flex flex-wrap gap-1.5">
+          {TAG_PALETTE.map((color) => (
+            <button
+              key={color}
+              type="button"
+              onClick={() => onChange({ ...draft, accentColor: color })}
+              className={cn(
+                "h-6 w-6 rounded-full border-2 transition-transform hover:scale-110",
+                draft.accentColor === color ? "border-foreground" : "border-transparent"
+              )}
+              style={{ background: color }}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => onChange({ ...draft, compactMode: !draft.compactMode })}
+          className={cn(
+            "rounded-md border px-2 py-1.5 text-xs transition-colors",
+            draft.compactMode ? "border-primary bg-primary/10" : "border-input"
+          )}
+        >
+          Compact Mode
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange({ ...draft, spellCheck: !draft.spellCheck })}
+          className={cn(
+            "rounded-md border px-2 py-1.5 text-xs transition-colors",
+            draft.spellCheck ? "border-primary bg-primary/10" : "border-input"
+          )}
+        >
+          Spell Check
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ProfileSelector() {
   const profiles = useEditorStore((s) => s.profiles);
   const activeProfileId = useEditorStore((s) => s.activeProfileId);
+  const workspaceSettings = useEditorStore((s) => s.workspaceSettings);
   const createProfile = useEditorStore((s) => s.createProfile);
-  const renameProfile = useEditorStore((s) => s.renameProfile);
+  const updateProfile = useEditorStore((s) => s.updateProfile);
+  const duplicateProfileSettings = useEditorStore((s) => s.duplicateProfileSettings);
+  const updateWorkspaceSettings = useEditorStore((s) => s.updateWorkspaceSettings);
   const deleteProfile = useEditorStore((s) => s.deleteProfile);
   const switchProfile = useEditorStore((s) => s.switchProfile);
 
   const active = profiles.find((p) => p.id === activeProfileId);
-  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createStep, setCreateStep] = useState(0);
+  const [editWorkspaceId, setEditWorkspaceId] = useState<string | null>(null);
+
+  const buildDraft = useCallback((profileId: string, fallbackName: string, preset: WorkspacePresetId): WorkspaceDraft => {
+    const sourceSettings = workspaceSettings[profileId];
+    const presetDefaults = WORKSPACE_PRESETS.find((workspacePreset) => workspacePreset.id === preset);
+    return {
+      name: fallbackName,
+      color: presetDefaults?.color ?? "#7c3aed",
+      preset,
+      copyFromProfileId: profileId,
+      themeMode: sourceSettings?.themeMode ?? "dark",
+      fontSize: sourceSettings?.fontSize ?? 14,
+      lineHeight: sourceSettings?.lineHeight ?? 1.7,
+      accentColor: sourceSettings?.accentColor ?? "#7c3aed",
+      compactMode: sourceSettings?.compactMode ?? false,
+      spellCheck: sourceSettings?.spellCheck ?? true,
+    };
+  }, [workspaceSettings]);
+
+  const [createDraft, setCreateDraft] = useState<WorkspaceDraft>(() =>
+    buildDraft(activeProfileId, "New Workspace", "personal")
+  );
+  const [editDraft, setEditDraft] = useState<WorkspaceDraft | null>(null);
+
+  const openCreateDialog = useCallback(() => {
+    setCreateStep(0);
+    setCreateDraft(buildDraft(activeProfileId, "New Workspace", "personal"));
+    setCreateOpen(true);
+  }, [activeProfileId, buildDraft]);
+
+  const openEditDialog = useCallback((workspaceId: string) => {
+    const profile = profiles.find((item) => item.id === workspaceId);
+    if (!profile) return;
+    const settings = workspaceSettings[workspaceId];
+    setEditWorkspaceId(workspaceId);
+    setEditDraft({
+      name: profile.name,
+      color: profile.color,
+      preset: profile.preset,
+      copyFromProfileId: workspaceId,
+      themeMode: settings?.themeMode ?? "dark",
+      fontSize: settings?.fontSize ?? 14,
+      lineHeight: settings?.lineHeight ?? 1.7,
+      accentColor: settings?.accentColor ?? "#7c3aed",
+      compactMode: settings?.compactMode ?? false,
+      spellCheck: settings?.spellCheck ?? true,
+    });
+  }, [profiles, workspaceSettings]);
+
+  const submitCreate = useCallback(() => {
+    const workspaceId = createProfile({
+      name: createDraft.name.trim() || "New Workspace",
+      color: createDraft.color,
+      preset: createDraft.preset,
+      copyFromProfileId: createDraft.copyFromProfileId || undefined,
+      settings: toWorkspaceSettingsPartial(createDraft),
+    });
+    switchProfile(workspaceId);
+    setCreateOpen(false);
+  }, [createDraft, createProfile, switchProfile]);
+
+  const submitEdit = useCallback(() => {
+    if (!editWorkspaceId || !editDraft) return;
+    updateProfile(editWorkspaceId, {
+      name: editDraft.name.trim() || "Workspace",
+      color: editDraft.color,
+      preset: editDraft.preset,
+    });
+    if (editDraft.copyFromProfileId && editDraft.copyFromProfileId !== editWorkspaceId) {
+      duplicateProfileSettings(editDraft.copyFromProfileId, editWorkspaceId);
+    }
+    updateWorkspaceSettings(editWorkspaceId, toWorkspaceSettingsPartial(editDraft));
+    setEditWorkspaceId(null);
+    setEditDraft(null);
+  }, [duplicateProfileSettings, editDraft, editWorkspaceId, updateProfile, updateWorkspaceSettings]);
 
   return (
-    <DropdownMenu>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 gap-1 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
-            >
-              <User className="h-3 w-3" />
-              <span className="max-w-[60px] truncate">{active?.name ?? "Profile"}</span>
-            </Button>
-          </DropdownMenuTrigger>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">Switch Profile</TooltipContent>
-      </Tooltip>
-      <DropdownMenuContent align="start" className="min-w-[140px]">
-        {profiles.map((p) => (
-          <DropdownMenuItem
-            key={p.id}
-            onClick={() => {
-              if (renamingId === p.id) return;
-              switchProfile(p.id);
-            }}
-            className={cn(
-              "gap-2 text-xs",
-              p.id === activeProfileId && "bg-accent"
-            )}
-          >
-            {renamingId === p.id ? (
-              <InlineRename
-                initial={p.name}
-                onCommit={(v) => {
-                  renameProfile(p.id, v);
-                  setRenamingId(null);
-                }}
-                onCancel={() => setRenamingId(null)}
-              />
-            ) : (
-              <>
-                <span className="flex-1 truncate">{p.name}</span>
+    <>
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 gap-1 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+              >
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: active?.color ?? "#7c3aed" }} />
+                <span className="max-w-[90px] truncate">{active?.name ?? "Workspace"}</span>
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Switch Workspace</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent align="start" className="min-w-[220px]">
+          {profiles.map((profile) => {
+            return (
+              <DropdownMenuItem
+                key={profile.id}
+                onClick={() => switchProfile(profile.id)}
+                className={cn("flex items-center gap-2 text-xs", profile.id === activeProfileId && "bg-accent")}
+              >
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: profile.color }} />
+                <span className="flex-1 truncate">{profile.name}</span>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setRenamingId(p.id);
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openEditDialog(profile.id);
                   }}
                   className="text-muted-foreground hover:text-foreground"
+                  title="Edit workspace"
                 >
                   <Pencil className="h-3 w-3" />
                 </button>
                 {profiles.length > 1 && (
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteProfile(p.id);
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      deleteProfile(profile.id);
                     }}
                     className="text-muted-foreground hover:text-destructive"
+                    title="Delete workspace"
                   >
                     <Trash2 className="h-3 w-3" />
                   </button>
                 )}
-              </>
-            )}
+              </DropdownMenuItem>
+            );
+          })}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={openCreateDialog} className="text-xs">
+            <Plus className="mr-2 h-3 w-3" /> New Workspace
           </DropdownMenuItem>
-        ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => createProfile("New Profile")}
-          className="text-xs"
-        >
-          <Plus className="mr-2 h-3 w-3" /> New Profile
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Create Workspace</DialogTitle>
+            <DialogDescription>
+              Build a workspace with a preset and settings, similar to first-run setup.
+            </DialogDescription>
+          </DialogHeader>
+
+          {createStep === 0 ? (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">Choose a preset</p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+                {WORKSPACE_PRESETS.map((preset) => {
+                  const Icon = PRESET_ICON_BY_ID[preset.id];
+                  const selected = createDraft.preset === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => setCreateDraft({
+                        ...createDraft,
+                        preset: preset.id,
+                        color: preset.color,
+                        themeMode: (preset.settings.themeMode as WorkspaceSettings["themeMode"]) ?? createDraft.themeMode,
+                        fontSize: preset.settings.fontSize ?? createDraft.fontSize,
+                        lineHeight: preset.settings.lineHeight ?? createDraft.lineHeight,
+                        accentColor: preset.settings.accentColor ?? createDraft.accentColor,
+                        compactMode: preset.settings.compactMode ?? createDraft.compactMode,
+                        spellCheck: preset.settings.spellCheck ?? createDraft.spellCheck,
+                      })}
+                      className={cn(
+                        "rounded-md border p-3 text-left transition-colors",
+                        selected ? "border-primary bg-primary/10" : "border-input hover:border-muted-foreground/40"
+                      )}
+                    >
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 rounded-full" style={{ background: preset.color }} />
+                        <Icon className="h-3.5 w-3.5" />
+                        <span className="text-xs font-medium">{preset.label}</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">{preset.description}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <WorkspaceSettingsForm
+              draft={createDraft}
+              profiles={profiles}
+              onChange={setCreateDraft}
+              allowCopy
+            />
+          )}
+
+          <DialogFooter>
+            {createStep > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setCreateStep(0)}>Back</Button>
+            )}
+            {createStep === 0 ? (
+              <Button size="sm" onClick={() => setCreateStep(1)}>Next</Button>
+            ) : (
+              <Button size="sm" onClick={submitCreate}>Create Workspace</Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(editWorkspaceId && editDraft)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setEditWorkspaceId(null);
+            setEditDraft(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Workspace Settings</DialogTitle>
+            <DialogDescription>
+              Edit preset, color, and writing preferences for this workspace.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editDraft && (
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground">Preset</label>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {WORKSPACE_PRESETS.map((preset) => {
+                    const selected = editDraft.preset === preset.id;
+                    const Icon = PRESET_ICON_BY_ID[preset.id];
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => setEditDraft({
+                          ...editDraft,
+                          preset: preset.id,
+                          color: preset.color,
+                          themeMode: (preset.settings.themeMode as WorkspaceSettings["themeMode"]) ?? editDraft.themeMode,
+                          fontSize: preset.settings.fontSize ?? editDraft.fontSize,
+                          lineHeight: preset.settings.lineHeight ?? editDraft.lineHeight,
+                          accentColor: preset.settings.accentColor ?? editDraft.accentColor,
+                          compactMode: preset.settings.compactMode ?? editDraft.compactMode,
+                          spellCheck: preset.settings.spellCheck ?? editDraft.spellCheck,
+                        })}
+                        className={cn(
+                          "rounded-md border px-2 py-2 text-xs transition-colors",
+                          selected ? "border-primary bg-primary/10" : "border-input"
+                        )}
+                      >
+                        <Icon className="mx-auto mb-1 h-3.5 w-3.5" />
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <WorkspaceSettingsForm
+                draft={editDraft}
+                profiles={profiles.filter((profile) => profile.id !== editWorkspaceId)}
+                onChange={setEditDraft}
+                allowCopy={profiles.some((profile) => profile.id !== editWorkspaceId)}
+              />
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setEditWorkspaceId(null);
+                setEditDraft(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button size="sm" onClick={submitEdit}>
+              Save Workspace
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -1078,6 +1529,7 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
   const fileTreeWidth = useEditorStore((s) => s.settings.fileTreeWidth);
   const updateSettings = useEditorStore((s) => s.updateSettings);
   const tabs = useEditorStore((s) => s.tabs);
+  const activeProfileId = useEditorStore((s) => s.activeProfileId);
   const folders = useEditorStore((s) => s.folders);
   const createFolder = useEditorStore((s) => s.createFolder);
   const requestCreateTab = useEditorStore((s) => s.requestCreateTab);
@@ -1089,15 +1541,22 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
   const deleteTab = useEditorStore((s) => s.deleteTab);
   const syncLocalTabToOnline = useEditorStore((s) => s.syncLocalTabToOnline);
   const moveTabToFolder = useEditorStore((s) => s.moveTabToFolder);
+  const moveTabToWorkspace = useEditorStore((s) => s.moveTabToWorkspace);
   const moveFolderToParent = useEditorStore((s) => s.moveFolderToParent);
   const activeTabId = useEditorStore((s) => s.activeTabId);
+  const profiles = useEditorStore((s) => s.profiles);
   const hideMd = useEditorStore((s) => s.settings.hideMdExtensions || !s.settings.showFileExtensions);
   const getAllTags = useEditorStore((s) => s.getAllTags);
   const tagColors = useEditorStore((s) => s.tagColors);
-  const setTagColor = useEditorStore((s) => s.setTagColor);
 
-  const onlineTabs = useMemo(() => tabs.filter((t) => t.origin !== "local"), [tabs]);
-  const localTabs = useMemo(() => tabs.filter((t) => t.origin === "local"), [tabs]);
+  const onlineTabs = useMemo(
+    () => tabs.filter((t) => t.origin !== "local" && getTabWorkspaceId(t) === activeProfileId),
+    [tabs, activeProfileId]
+  );
+  const localTabs = useMemo(
+    () => tabs.filter((t) => t.origin === "local" && getTabWorkspaceId(t) === activeProfileId),
+    [tabs, activeProfileId]
+  );
 
   /** Get the color for a tag, falling back to the default palette color */
   const getTagColor = useCallback(
@@ -1176,7 +1635,7 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
   }, []);
 
   const collapseAll = () => setExpandedFolders(new Set());
-  const expandAll = () => setExpandedFolders(new Set(folders.map((f) => f.id)));
+  const expandAll = () => setExpandedFolders(new Set(Array.from(visibleFolderIds)));
 
   const folderIdSet = useMemo(() => new Set(folders.map((f) => f.id)), [folders]);
   const foldersByParent = useMemo(() => {
@@ -1194,13 +1653,36 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
     return map;
   }, [folders, folderIdSet]);
 
+  const parentByFolderId = new Map<string, string | null>();
+  folders.forEach((folder) => {
+    parentByFolderId.set(folder.id, folder.parentId && folderIdSet.has(folder.parentId) ? folder.parentId : null);
+  });
+
+  const visibleFolderIds = new Set<string>();
+  onlineTabs.forEach((tab) => {
+    let current = tab.folderId;
+    while (current && folderIdSet.has(current)) {
+      if (visibleFolderIds.has(current)) break;
+      visibleFolderIds.add(current);
+      current = parentByFolderId.get(current) ?? null;
+    }
+  });
+
+  const visibleFoldersByParent = new Map<string | null, Folder[]>();
+  for (const [parentId, children] of foldersByParent.entries()) {
+    const visibleChildren = children.filter((folder) => visibleFolderIds.has(folder.id));
+    if (visibleChildren.length > 0) {
+      visibleFoldersByParent.set(parentId, visibleChildren);
+    }
+  }
+
   function renderFolder(folder: Folder, depth: number) {
     return (
       <FolderItem
         key={folder.id}
         folder={folder}
         tabs={onlineTabs}
-        childFolders={foldersByParent.get(folder.id) ?? []}
+        childFolders={visibleFoldersByParent.get(folder.id) ?? []}
         expandedFolders={expandedFolders}
         toggleExpand={toggleExpand}
         hideMd={hideMd}
@@ -1224,7 +1706,6 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
   else if (sortAsc === false) rootTabs = [...rootTabs].sort((a, b) => b.title.localeCompare(a.title));
 
   // Separate pinned and unpinned root tabs
-  const pinnedRootTabs = rootTabs.filter((t) => t.pinned);
   const unpinnedRootTabs = rootTabs.filter((t) => !t.pinned);
 
   // Drop on root area — move file out of folder
@@ -1612,10 +2093,10 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
             )}
 
             {/* Folders */}
-            {(foldersByParent.get(null) ?? []).map((folder) => renderFolder(folder, 0))}
+            {(visibleFoldersByParent.get(null) ?? []).map((folder) => renderFolder(folder, 0))}
 
             {/* Root files (no folder) */}
-            {folders.length > 0 && unpinnedRootTabs.length > 0 && (
+            {visibleFolderIds.size > 0 && unpinnedRootTabs.length > 0 && (
               <div className="mt-1 pt-1 border-t border-border/50">
                 <p className="px-2 py-0.5 text-[10px] text-muted-foreground/50 uppercase tracking-wider">
                   Unsorted
@@ -1732,6 +2213,30 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
                           </TooltipTrigger>
                           <TooltipContent side="left">Sync to Online</TooltipContent>
                         </Tooltip>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <MoreHorizontal className="h-3.5 w-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="min-w-[170px]">
+                            {profiles.map((profile) => (
+                              <DropdownMenuItem
+                                key={profile.id}
+                                onClick={() => moveTabToWorkspace(tab.id, profile.id)}
+                                className={cn(profile.id === getTabWorkspaceId(tab) && "bg-accent")}
+                              >
+                                <span className="h-2.5 w-2.5 rounded-full" style={{ background: profile.color }} />
+                                <span className="truncate">Move to {profile.name}</span>
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     );
                   })

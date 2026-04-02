@@ -134,6 +134,7 @@ function PublishedSiteContent({ slug, userId, loggedIn }: { slug: string; userId
 
   const handleEdit = useCallback(() => {
     if (!site?.tabId) return;
+    window.sessionStorage.setItem("markup-requested-tab-id", site.tabId);
     window.location.href = `/?tab=${encodeURIComponent(site.tabId)}`;
   }, [site]);
 

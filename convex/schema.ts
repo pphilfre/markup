@@ -64,6 +64,7 @@ const settingsValidator = v.object({
   showIconsInSidebar: v.optional(v.boolean()),
   showFileExtensions: v.optional(v.boolean()),
   iconTheme: v.optional(v.string()),
+  promptForTemplateOnNewFile: v.optional(v.boolean()),
   // Appearance - Editor Look
   codeBlockTheme: v.optional(v.string()),
   headingStyle: v.optional(v.string()),
@@ -97,6 +98,7 @@ export default defineSchema({
     tabId: v.string(),        // client-generated UUID
     title: v.string(),
     content: v.string(),
+    workspaceId: v.optional(v.string()),
     folderId: v.union(v.string(), v.null()),
     tags: v.optional(v.array(v.string())),
     pinned: v.optional(v.boolean()),

@@ -3,7 +3,8 @@
 import { useEffect } from "react";
 // @ts-expect-error tinykeys types don't resolve via package.json exports
 import { tinykeys } from "tinykeys";
-import { useEditorStore } from "@/lib/store";
+import { getTabWorkspaceId, useEditorStore } from "@/lib/store";
+import { isTauri } from "@/lib/tauri";
 
 /**
  * Global keyboard shortcuts using Alt-based combos to avoid
@@ -127,6 +128,7 @@ export function useGlobalKeybinds() {
 
       // Zoom in — Ctrl+=
       "Control+Equal": (e: KeyboardEvent) => {
+        if (!isTauri()) return;
         e.preventDefault();
         const { zoomLevel, setZoomLevel } = useEditorStore.getState();
         setZoomLevel(zoomLevel + 10);
@@ -134,6 +136,7 @@ export function useGlobalKeybinds() {
 
       // Zoom out — Ctrl+-
       "Control+Minus": (e: KeyboardEvent) => {
+        if (!isTauri()) return;
         e.preventDefault();
         const { zoomLevel, setZoomLevel } = useEditorStore.getState();
         setZoomLevel(zoomLevel - 10);
@@ -141,6 +144,7 @@ export function useGlobalKeybinds() {
 
       // Reset zoom — Ctrl+0
       "Control+Digit0": (e: KeyboardEvent) => {
+        if (!isTauri()) return;
         e.preventDefault();
         useEditorStore.getState().setZoomLevel(100);
       },
@@ -156,9 +160,13 @@ export function useGlobalKeybinds() {
       "Alt+Digit8": (e: KeyboardEvent) => { e.preventDefault(); switchToTabIndex(7); },
       "Alt+Digit9": (e: KeyboardEvent) => {
         e.preventDefault();
-        const tabs = useEditorStore.getState().tabs;
-        if (tabs.length > 0) {
-          useEditorStore.getState().switchTab(tabs[tabs.length - 1].id);
+        const { tabs, openTabIds, activeProfileId, switchTab } = useEditorStore.getState();
+        const visibleOpenTabs = openTabIds
+          .map((id) => tabs.find((tab) => tab.id === id))
+          .filter((tab): tab is NonNullable<typeof tab> => Boolean(tab))
+          .filter((tab) => getTabWorkspaceId(tab) === activeProfileId);
+        if (visibleOpenTabs.length > 0) {
+          switchTab(visibleOpenTabs[visibleOpenTabs.length - 1].id);
         }
       },
     });
@@ -168,8 +176,12 @@ export function useGlobalKeybinds() {
 }
 
 function switchToTabIndex(index: number) {
-  const { tabs, switchTab } = useEditorStore.getState();
-  if (index < tabs.length) {
-    switchTab(tabs[index].id);
+  const { tabs, openTabIds, activeProfileId, switchTab } = useEditorStore.getState();
+  const visibleOpenTabs = openTabIds
+    .map((id) => tabs.find((tab) => tab.id === id))
+    .filter((tab): tab is NonNullable<typeof tab> => Boolean(tab))
+    .filter((tab) => getTabWorkspaceId(tab) === activeProfileId);
+  if (index < visibleOpenTabs.length) {
+    switchTab(visibleOpenTabs[index].id);
   }
 }

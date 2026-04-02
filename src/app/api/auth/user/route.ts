@@ -28,14 +28,10 @@ export async function GET() {
         lastName: user.lastName,
         profilePictureUrl: user.profilePictureUrl,
         emailVerified: user.emailVerified,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
       },
       authFactors: factors.map((f) => ({
         id: f.id,
         type: f.type,
-        createdAt: f.createdAt,
-        updatedAt: f.updatedAt,
       })),
     });
   } catch (err) {

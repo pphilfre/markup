@@ -10,7 +10,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { useEditorStore, ViewMode } from "@/lib/store";
+import { getTabWorkspaceId, useEditorStore, ViewMode } from "@/lib/store";
 import { ShareDialog } from "./share-dialog";
 import { ExportDialog } from "./export-dialog";
 import { PublishDialog } from "./publish-dialog";
@@ -101,6 +101,7 @@ export function TabBar() {
   const tabs = useEditorStore((s) => s.tabs);
   const openTabIds = useEditorStore((s) => s.openTabIds);
   const activeTabId = useEditorStore((s) => s.activeTabId);
+  const activeProfileId = useEditorStore((s) => s.activeProfileId);
   const requestCreateTab = useEditorStore((s) => s.requestCreateTab);
   const zoomLevel = useEditorStore((s) => s.zoomLevel);
   const setZoomLevel = useEditorStore((s) => s.setZoomLevel);
@@ -126,7 +127,10 @@ export function TabBar() {
     };
   }, []);
 
-  const openTabs = openTabIds.map((id) => tabs.find((t) => t.id === id)).filter(Boolean) as typeof tabs;
+  const openTabs = openTabIds
+    .map((id) => tabs.find((t) => t.id === id))
+    .filter((tab): tab is (typeof tabs)[number] => tab !== undefined)
+    .filter((tab) => getTabWorkspaceId(tab) === activeProfileId);
 
   const handleTabsWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
     const container = tabsScrollContainerRef.current;

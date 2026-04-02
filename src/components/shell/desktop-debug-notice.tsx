@@ -18,12 +18,6 @@ interface Notice {
   message: string;
 }
 
-function timeoutSignal(ms: number): AbortSignal {
-  const controller = new AbortController();
-  setTimeout(() => controller.abort(), ms);
-  return controller.signal;
-}
-
 function uniqId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -47,17 +41,6 @@ export function DesktopDebugNotice() {
       const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
       if (!convexUrl) {
         addNotice("error", "Convex", "NEXT_PUBLIC_CONVEX_URL is missing in this build.");
-      } else {
-        try {
-          // We only care about network reachability here. Some Convex endpoints
-          // may respond with non-200 statuses depending on deployment config.
-          await fetch(convexUrl, {
-            method: "GET",
-            signal: timeoutSignal(6000),
-          });
-        } catch {
-          addNotice("error", "Convex", "Unable to reach Convex from desktop app.");
-        }
       }
 
       try {

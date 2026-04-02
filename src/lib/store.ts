@@ -116,6 +116,7 @@ export interface Tab {
   id: string;
   title: string;
   content: string;
+  workspaceId?: string;
   folderId: string | null; // null = root
   tags: string[]; // user-defined tags
   pinned: boolean;
@@ -178,9 +179,13 @@ function isFolderAncestor(
   return false;
 }
 
+export type WorkspacePresetId = "personal" | "work" | "school" | "custom";
+
 export interface Profile {
   id: string;
   name: string;
+  color: string;
+  preset: WorkspacePresetId;
 }
 
 export interface Settings {
@@ -286,6 +291,66 @@ export const DEFAULT_SETTINGS: Settings = {
   splitRatio: 0.5,
 };
 
+export const WORKSPACE_PRESETS: Array<{
+  id: WorkspacePresetId;
+  label: string;
+  description: string;
+  color: string;
+  settings: Partial<Settings>;
+}> = [
+  {
+    id: "personal",
+    label: "Personal",
+    description: "Balanced defaults for journaling, notes, and ideas.",
+    color: "#7c3aed",
+    settings: {
+      themeMode: "dark",
+      accentColor: "#7c3aed",
+      fontSize: 14,
+      lineHeight: 1.7,
+      compactMode: false,
+      spellCheck: true,
+    },
+  },
+  {
+    id: "work",
+    label: "Work",
+    description: "Focused and compact setup for productivity.",
+    color: "#0f766e",
+    settings: {
+      themeMode: "dark",
+      accentColor: "#0f766e",
+      fontSize: 13,
+      lineHeight: 1.6,
+      compactMode: true,
+      spellCheck: true,
+      showInvisibleCharacters: false,
+    },
+  },
+  {
+    id: "school",
+    label: "School",
+    description: "Readable defaults for lectures and study notes.",
+    color: "#2563eb",
+    settings: {
+      themeMode: "light",
+      accentColor: "#2563eb",
+      fontSize: 15,
+      lineHeight: 1.8,
+      compactMode: false,
+      spellCheck: true,
+      autoFormatLists: true,
+    },
+  },
+  {
+    id: "custom",
+    label: "Custom",
+    description: "Fully customized workspace setup.",
+    color: "#f97316",
+    settings: {},
+  },
+];
+
 interface EditorState {
   tabs: Tab[];
   openTabIds: string[]; // IDs of tabs visible in the tab bar
@@ -303,16 +368,27 @@ interface EditorState {
   reorderFolder: (folderId: string, targetFolderId: string) => void;
   moveFolderToParent: (folderId: string, parentId: string | null) => void;
   moveTabToFolder: (tabId: string, folderId: string | null) => void;
+  moveTabToWorkspace: (tabId: string, workspaceId: string) => void;
 
   // Settings
   settings: Settings;
+  workspaceSettings: Record<string, Settings>;
   updateSettings: (partial: Partial<Settings>) => void;
+  updateWorkspaceSettings: (profileId: string, partial: Partial<Settings>) => void;
 
   // Profiles
   profiles: Profile[];
   activeProfileId: string;
-  createProfile: (name: string) => string;
+  createProfile: (input: string | {
+    name: string;
+    color?: string;
+    preset?: WorkspacePresetId;
+    copyFromProfileId?: string;
+    settings?: Partial<Settings>;
+  }) => string;
   renameProfile: (id: string, name: string) => void;
+  updateProfile: (id: string, partial: Partial<Pick<Profile, "name" | "color" | "preset">>) => void;
+  duplicateProfileSettings: (sourceId: string, targetId: string) => void;
   deleteProfile: (id: string) => void;
   switchProfile: (id: string) => void;
 
@@ -396,7 +472,8 @@ let tabCounter = 0;
 function newTab(
   folderId: string | null = null,
   noteType: NoteType = "note",
-  templateId: NoteTemplateId = "blank"
+  templateId: NoteTemplateId = "blank",
+  workspaceId: string = DEFAULT_PROFILE_ID
 ): Tab {
   tabCounter += 1;
   const template = getTemplate(templateId);
@@ -463,6 +540,7 @@ function newTab(
               }
             : { version: 1, fileName: null, source: "local", dataBase64: null, storageId: null, annotations: [] }
         ),
+      workspaceId,
     folderId,
     tags: [],
     pinned: false,
@@ -486,12 +564,62 @@ const FOLDER_COLORS = [
   "#06b6d4", "#3b82f6",
 ];
 
-const DEFAULT_PROFILE_ID = "default";
+export const DEFAULT_PROFILE_ID = "default";
 const CUSTOM_FONT_CACHE_KEY = "markup-custom-font-cache-v1";
 
+const PROFILE_COLOR_FALLBACKS = ["#7c3aed", "#0f766e", "#2563eb", "#f97316", "#ec4899", "#06b6d4"];
+
 const DEFAULT_PROFILES: Profile[] = [
-  { id: DEFAULT_PROFILE_ID, name: "Personal" },
+  { id: DEFAULT_PROFILE_ID, name: "Personal", color: "#7c3aed", preset: "personal" },
 ];
+
+function getWorkspacePreset(id: WorkspacePresetId): (typeof WORKSPACE_PRESETS)[number] {
+  return WORKSPACE_PRESETS.find((preset) => preset.id === id) ?? WORKSPACE_PRESETS[0];
+}
+
+function resolveWorkspaceSettings(
+  presetId: WorkspacePresetId,
+  baseSettings: Settings,
+  extra?: Partial<Settings>
+): Settings {
+  const preset = getWorkspacePreset(presetId);
+  return {
+    ...DEFAULT_SETTINGS,
+    ...baseSettings,
+    ...preset.settings,
+    ...(extra ?? {}),
+  };
+}
+
+function normalizeProfile(profile: Profile | { id: string; name: string; color?: string; preset?: WorkspacePresetId }, index: number): Profile {
+  const preset = profile.preset ?? "custom";
+  return {
+    id: profile.id,
+    name: profile.name,
+    color: profile.color ?? getWorkspacePreset(preset).color ?? PROFILE_COLOR_FALLBACKS[index % PROFILE_COLOR_FALLBACKS.length],
+    preset,
+  };
+}
+
+function normalizeWorkspaceSettings(
+  workspaceSettings: Record<string, Settings> | undefined,
+  profiles: Profile[],
+  fallback: Settings
+): Record<string, Settings> {
+  const next: Record<string, Settings> = {};
+  profiles.forEach((profile) => {
+    const current = workspaceSettings?.[profile.id];
+    next[profile.id] = {
+      ...DEFAULT_SETTINGS,
+      ...(current ?? fallback),
+    };
+  });
+  return next;
+}
+
+export function getTabWorkspaceId(tab: Pick<Tab, "workspaceId">): string {
+  return tab.workspaceId ?? DEFAULT_PROFILE_ID;
+}
 
 // ---------------------------------------------------------------------------
 // Persistence helpers (IndexedDB via idb-keyval)
@@ -505,6 +633,7 @@ interface PersistedState {
   theme: Theme;
   folders: Folder[];
   settings: Settings;
+  workspaceSettings: Record<string, Settings>;
   fileTreeOpen: boolean;
   profiles: Profile[];
   activeProfileId: string;
@@ -541,6 +670,9 @@ export const useEditorStore = create<EditorState>()(
     _hydrated: false,
     folders: [],
     settings: { ...DEFAULT_SETTINGS },
+    workspaceSettings: {
+      [DEFAULT_PROFILE_ID]: { ...DEFAULT_SETTINGS },
+    },
     fileTreeOpen: true,
     newTabTemplateDialogOpen: false,
     newTabTemplateFolderId: null,
@@ -652,18 +784,93 @@ export const useEditorStore = create<EditorState>()(
         ),
       })),
 
+    moveTabToWorkspace: (tabId, workspaceId) =>
+      set((s) => {
+        const targetWorkspaceExists = s.profiles.some((profile) => profile.id === workspaceId);
+        if (!targetWorkspaceExists) return {};
+
+        const tab = s.tabs.find((item) => item.id === tabId);
+        if (!tab) return {};
+        if (getTabWorkspaceId(tab) === workspaceId) return {};
+
+        const nextTabs = s.tabs.map((item) =>
+          item.id === tabId ? { ...item, workspaceId } : item
+        );
+
+        const tabVisibleInCurrentWorkspace = workspaceId === s.activeProfileId;
+        const nextOpenTabIds = tabVisibleInCurrentWorkspace
+          ? (s.openTabIds.includes(tabId) ? s.openTabIds : [...s.openTabIds, tabId])
+          : s.openTabIds.filter((id) => id !== tabId);
+        const nextActiveTabId = s.activeTabId === tabId && !tabVisibleInCurrentWorkspace
+          ? (nextOpenTabIds[0] ?? null)
+          : s.activeTabId;
+
+        return {
+          tabs: nextTabs,
+          openTabIds: nextOpenTabIds,
+          activeTabId: nextActiveTabId,
+        };
+      }),
+
     // ── Settings ───────────────────────────────────────────────────────
     updateSettings: (partial) =>
-      set((s) => ({
-        settings: { ...s.settings, ...partial },
-      })),
+      set((s) => {
+        const nextSettings = { ...s.settings, ...partial };
+        return {
+          settings: nextSettings,
+          workspaceSettings: {
+            ...s.workspaceSettings,
+            [s.activeProfileId]: nextSettings,
+          },
+        };
+      }),
+
+    updateWorkspaceSettings: (profileId, partial) =>
+      set((s) => {
+        const nextForProfile: Settings = {
+          ...DEFAULT_SETTINGS,
+          ...(s.workspaceSettings[profileId] ?? s.settings),
+          ...partial,
+        };
+        return {
+          workspaceSettings: {
+            ...s.workspaceSettings,
+            [profileId]: nextForProfile,
+          },
+          ...(profileId === s.activeProfileId ? { settings: nextForProfile } : {}),
+        };
+      }),
 
     // ── Profiles ───────────────────────────────────────────────────────
-    createProfile: (name) => {
+    createProfile: (input) => {
       const id = crypto.randomUUID();
-      set((s) => ({
-        profiles: [...s.profiles, { id, name }],
-      }));
+      set((s) => {
+        const base = typeof input === "string" ? { name: input } : input;
+        const preset = base.preset ?? "personal";
+        const settingsFromProfile = base.copyFromProfileId
+          ? s.workspaceSettings[base.copyFromProfileId]
+          : null;
+        const nextSettings = resolveWorkspaceSettings(
+          preset,
+          settingsFromProfile ?? s.workspaceSettings[s.activeProfileId] ?? s.settings,
+          base.settings
+        );
+
+        const profile: Profile = {
+          id,
+          name: (base.name || "New Workspace").trim() || "New Workspace",
+          color: base.color ?? getWorkspacePreset(preset).color,
+          preset,
+        };
+
+        return {
+          profiles: [...s.profiles, profile],
+          workspaceSettings: {
+            ...s.workspaceSettings,
+            [id]: nextSettings,
+          },
+        };
+      });
       return id;
     },
 
@@ -672,17 +879,109 @@ export const useEditorStore = create<EditorState>()(
         profiles: s.profiles.map((p) => (p.id === id ? { ...p, name } : p)),
       })),
 
+    updateProfile: (id, partial) =>
+      set((s) => {
+        const updatedProfiles = s.profiles.map((profile) => {
+          if (profile.id !== id) return profile;
+          const nextPreset = partial.preset ?? profile.preset;
+          const nextColor = partial.color ?? profile.color;
+          return {
+            ...profile,
+            ...partial,
+            preset: nextPreset,
+            color: nextColor,
+          };
+        });
+
+        let workspaceSettings = s.workspaceSettings;
+        const currentProfile = s.profiles.find((profile) => profile.id === id);
+        if (currentProfile && partial.preset && partial.preset !== currentProfile.preset) {
+          workspaceSettings = {
+            ...workspaceSettings,
+            [id]: resolveWorkspaceSettings(partial.preset, workspaceSettings[id] ?? s.settings),
+          };
+        }
+
+        const result: Partial<EditorState> = {
+          profiles: updatedProfiles,
+          workspaceSettings,
+        };
+
+        if (id === s.activeProfileId && workspaceSettings[id]) {
+          result.settings = workspaceSettings[id];
+        }
+
+        return result;
+      }),
+
+    duplicateProfileSettings: (sourceId, targetId) =>
+      set((s) => {
+        const source = s.workspaceSettings[sourceId];
+        if (!source) return {};
+        const nextSettings = {
+          ...DEFAULT_SETTINGS,
+          ...source,
+        };
+        return {
+          workspaceSettings: {
+            ...s.workspaceSettings,
+            [targetId]: nextSettings,
+          },
+          ...(targetId === s.activeProfileId ? { settings: nextSettings } : {}),
+        };
+      }),
+
     deleteProfile: (id) => {
-      const { profiles, activeProfileId } = get();
+      const { profiles, activeProfileId, workspaceSettings } = get();
       if (profiles.length <= 1) return; // can't delete last
       const next = profiles.filter((p) => p.id !== id);
+      const fallbackId = activeProfileId === id ? next[0].id : activeProfileId;
+
+      const nextWorkspaceSettings = { ...workspaceSettings };
+      delete nextWorkspaceSettings[id];
+      if (!nextWorkspaceSettings[fallbackId]) {
+        nextWorkspaceSettings[fallbackId] = { ...DEFAULT_SETTINGS };
+      }
+
       set({
         profiles: next,
-        activeProfileId: activeProfileId === id ? next[0].id : activeProfileId,
+        tabs: get().tabs.map((tab) => (getTabWorkspaceId(tab) === id ? { ...tab, workspaceId: fallbackId } : tab)),
+        activeProfileId: fallbackId,
+        workspaceSettings: nextWorkspaceSettings,
+        settings: nextWorkspaceSettings[fallbackId],
       });
     },
 
-    switchProfile: (id) => set({ activeProfileId: id }),
+    switchProfile: (id) =>
+      set((s) => {
+        if (!s.profiles.some((profile) => profile.id === id)) return {};
+        const workspaceTabIds = new Set(
+          s.tabs
+            .filter((tab) => getTabWorkspaceId(tab) === id)
+            .map((tab) => tab.id)
+        );
+        const nextOpenTabIds = s.openTabIds.filter((tabId) => workspaceTabIds.has(tabId));
+        const nextActiveTabId = s.activeTabId && workspaceTabIds.has(s.activeTabId)
+          ? s.activeTabId
+          : (nextOpenTabIds[0] ?? (Array.from(workspaceTabIds)[0] ?? null));
+
+        const nextSettings = {
+          ...DEFAULT_SETTINGS,
+          ...(s.workspaceSettings[id] ?? s.settings),
+        };
+
+        return {
+          activeProfileId: id,
+          settings: nextSettings,
+          workspaceSettings: {
+            ...s.workspaceSettings,
+            [id]: nextSettings,
+          },
+          openTabIds: nextOpenTabIds,
+          activeTabId: nextActiveTabId,
+          viewMode: nextActiveTabId ? s.viewMode : "editor",
+        };
+      }),
 
     // ── File tree ──────────────────────────────────────────────────────
     toggleFileTree: () => set((s) => ({ fileTreeOpen: !s.fileTreeOpen })),
@@ -697,7 +996,7 @@ export const useEditorStore = create<EditorState>()(
           };
         }
 
-        const tab = newTab(folderId, "note", "blank");
+        const tab = newTab(folderId, "note", "blank", s.activeProfileId);
         const vm =
           s.viewMode === "preview" || s.viewMode === "whiteboard" || s.viewMode === "mindmap" || s.viewMode === "kanban" || s.viewMode === "pdf"
             ? "editor"
@@ -714,7 +1013,7 @@ export const useEditorStore = create<EditorState>()(
     createTabFromTemplate: (templateId) =>
       set((s) => {
         const folderId = s.newTabTemplateFolderId ?? null;
-        const tab = newTab(folderId, "note", templateId);
+        const tab = newTab(folderId, "note", templateId, s.activeProfileId);
         const vm =
           s.viewMode === "preview" || s.viewMode === "whiteboard" || s.viewMode === "mindmap" || s.viewMode === "kanban" || s.viewMode === "pdf"
             ? "editor"
@@ -759,17 +1058,46 @@ export const useEditorStore = create<EditorState>()(
           }
         }
 
+        const hydratedProfiles = (saved.profiles?.length ? saved.profiles : [...DEFAULT_PROFILES]).map((profile, index) =>
+          normalizeProfile(profile, index)
+        );
+        const hydratedActiveProfileId = hydratedProfiles.some((profile) => profile.id === saved.activeProfileId)
+          ? (saved.activeProfileId as string)
+          : hydratedProfiles[0].id;
+        const hydratedWorkspaceSettings = normalizeWorkspaceSettings(saved.workspaceSettings, hydratedProfiles, mergedSettings);
+        const activeWorkspaceSettings = hydratedWorkspaceSettings[hydratedActiveProfileId] ?? mergedSettings;
+
+        const normalizedTabs = saved.tabs.map((t) => ({
+          ...t,
+          workspaceId: getTabWorkspaceId(t) || hydratedActiveProfileId,
+          folderId: t.folderId ?? null,
+          tags: t.tags ?? [],
+          pinned: t.pinned ?? false,
+          noteType: (t as Tab & { noteType?: NoteType }).noteType ?? "note",
+        }));
+
+        const workspaceTabIds = new Set(
+          normalizedTabs
+            .filter((tab) => getTabWorkspaceId(tab) === hydratedActiveProfileId)
+            .map((tab) => tab.id)
+        );
+        const normalizedOpenTabIds = (saved.openTabIds ?? normalizedTabs.map((t) => t.id)).filter((tabId) => workspaceTabIds.has(tabId));
+        const normalizedActiveTabId = saved.activeTabId && workspaceTabIds.has(saved.activeTabId)
+          ? saved.activeTabId
+          : (normalizedOpenTabIds[0] ?? null);
+
         set({
-          tabs: saved.tabs.map((t) => ({ ...t, folderId: t.folderId ?? null, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: (t as Tab & { noteType?: NoteType }).noteType ?? "note" })),
-          openTabIds: saved.openTabIds ?? saved.tabs.map((t) => t.id),
-          activeTabId: saved.activeTabId,
+          tabs: normalizedTabs,
+          openTabIds: normalizedOpenTabIds,
+          activeTabId: normalizedActiveTabId,
           viewMode: saved.viewMode,
           theme: saved.theme ?? "dark",
           folders: saved.folders ?? [],
-          settings: mergedSettings,
+          settings: activeWorkspaceSettings,
+          workspaceSettings: hydratedWorkspaceSettings,
           fileTreeOpen: saved.fileTreeOpen ?? true,
-          profiles: saved.profiles?.length ? saved.profiles : [...DEFAULT_PROFILES],
-          activeProfileId: saved.activeProfileId ?? DEFAULT_PROFILE_ID,
+          profiles: hydratedProfiles,
+          activeProfileId: hydratedActiveProfileId,
           tagColors: saved.tagColors ?? {},
           zoomLevel: saved.zoomLevel ?? 100,
           localSyncFolder: saved.localSyncFolder ?? null,
@@ -787,7 +1115,7 @@ export const useEditorStore = create<EditorState>()(
     },
 
     createTab: (folderId = null) => {
-      const tab = newTab(folderId);
+      const tab = newTab(folderId, "note", "blank", get().activeProfileId);
       set((s) => {
         // Reset viewMode to editor for note-type tabs
         const vm = (s.viewMode === "preview" || s.viewMode === "whiteboard" || s.viewMode === "mindmap" || s.viewMode === "kanban" || s.viewMode === "pdf") ? "editor" : s.viewMode;
@@ -801,7 +1129,7 @@ export const useEditorStore = create<EditorState>()(
     },
 
     createWhiteboard: (folderId = null) => {
-      const tab = newTab(folderId, "whiteboard");
+      const tab = newTab(folderId, "whiteboard", "blank", get().activeProfileId);
       set((s) => ({
         tabs: [...s.tabs, tab],
         openTabIds: [...s.openTabIds, tab.id],
@@ -811,7 +1139,7 @@ export const useEditorStore = create<EditorState>()(
     },
 
     createMindmap: (folderId = null) => {
-      const tab = newTab(folderId, "mindmap");
+      const tab = newTab(folderId, "mindmap", "blank", get().activeProfileId);
       set((s) => ({
         tabs: [...s.tabs, tab],
         openTabIds: [...s.openTabIds, tab.id],
@@ -821,7 +1149,7 @@ export const useEditorStore = create<EditorState>()(
     },
 
     createKanban: (folderId = null) => {
-      const tab = newTab(folderId, "kanban");
+      const tab = newTab(folderId, "kanban", "blank", get().activeProfileId);
       set((s) => ({
         tabs: [...s.tabs, tab],
         openTabIds: [...s.openTabIds, tab.id],
@@ -831,7 +1159,7 @@ export const useEditorStore = create<EditorState>()(
     },
 
     createPdf: (folderId = null) => {
-      const tab = newTab(folderId, "pdf");
+      const tab = newTab(folderId, "pdf", "blank", get().activeProfileId);
       set((s) => ({
         tabs: [...s.tabs, tab],
         openTabIds: [...s.openTabIds, tab.id],
@@ -881,7 +1209,18 @@ export const useEditorStore = create<EditorState>()(
 
     openTab: (id) => {
       set((s) => {
-        const tab = s.tabs.find(t => t.id === id);
+        const tab = s.tabs.find((t) => t.id === id);
+        if (!tab) return {};
+
+        const tabWorkspaceId = getTabWorkspaceId(tab);
+        const workspaceExists = s.profiles.some((profile) => profile.id === tabWorkspaceId);
+        const nextActiveProfileId = workspaceExists ? tabWorkspaceId : s.activeProfileId;
+        const workspaceTabIds = new Set(
+          s.tabs
+            .filter((candidate) => getTabWorkspaceId(candidate) === nextActiveProfileId)
+            .map((candidate) => candidate.id)
+        );
+
         const nt = tab?.noteType ?? "note";
         let vm = s.viewMode;
         if (nt === "whiteboard") vm = "whiteboard";
@@ -889,8 +1228,14 @@ export const useEditorStore = create<EditorState>()(
         else if (nt === "kanban") vm = "kanban";
         else if (nt === "pdf") vm = "pdf";
         else if (vm === "whiteboard" || vm === "mindmap" || vm === "kanban" || vm === "pdf") vm = "editor";
+
+        const baseOpenTabs = s.openTabIds.filter((tabId) => workspaceTabIds.has(tabId));
+        const nextOpenTabIds = baseOpenTabs.includes(id) ? baseOpenTabs : [...baseOpenTabs, id];
+
         return {
-          openTabIds: s.openTabIds.includes(id) ? s.openTabIds : [...s.openTabIds, id],
+          activeProfileId: nextActiveProfileId,
+          settings: s.workspaceSettings[nextActiveProfileId] ?? s.settings,
+          openTabIds: nextOpenTabIds,
           activeTabId: id,
           viewMode: vm,
         };
@@ -898,7 +1243,18 @@ export const useEditorStore = create<EditorState>()(
     },
 
     switchTab: (id) => set((s) => {
-      const tab = s.tabs.find(t => t.id === id);
+      const tab = s.tabs.find((t) => t.id === id);
+      if (!tab) return {};
+
+      const tabWorkspaceId = getTabWorkspaceId(tab);
+      const workspaceExists = s.profiles.some((profile) => profile.id === tabWorkspaceId);
+      const nextActiveProfileId = workspaceExists ? tabWorkspaceId : s.activeProfileId;
+      const workspaceTabIds = new Set(
+        s.tabs
+          .filter((candidate) => getTabWorkspaceId(candidate) === nextActiveProfileId)
+          .map((candidate) => candidate.id)
+      );
+
       const nt = tab?.noteType ?? "note";
       let vm = s.viewMode;
       if (nt === "whiteboard") vm = "whiteboard";
@@ -906,9 +1262,15 @@ export const useEditorStore = create<EditorState>()(
       else if (nt === "kanban") vm = "kanban";
       else if (nt === "pdf") vm = "pdf";
       else if (vm === "whiteboard" || vm === "mindmap" || vm === "kanban" || vm === "pdf") vm = "editor";
+
+      const baseOpenTabs = s.openTabIds.filter((tabId) => workspaceTabIds.has(tabId));
+      const nextOpenTabIds = baseOpenTabs.includes(id) ? baseOpenTabs : [...baseOpenTabs, id];
+
       return {
+        activeProfileId: nextActiveProfileId,
+        settings: s.workspaceSettings[nextActiveProfileId] ?? s.settings,
         activeTabId: id,
-        openTabIds: s.openTabIds.includes(id) ? s.openTabIds : [...s.openTabIds, id],
+        openTabIds: nextOpenTabIds,
         viewMode: vm,
       };
     }),
@@ -921,6 +1283,7 @@ export const useEditorStore = create<EditorState>()(
         const tab: Tab = {
           ...local,
           id: crypto.randomUUID(),
+          workspaceId: getTabWorkspaceId(local),
           folderId: null,
           tags: [],
           pinned: false,
@@ -993,9 +1356,11 @@ export const useEditorStore = create<EditorState>()(
       })),
 
     getAllTags: () => {
-      const { tabs } = get();
+      const { tabs, activeProfileId } = get();
       const tagSet = new Set<string>();
-      tabs.filter((t) => t.origin !== "local").forEach((t) => t.tags.forEach((tag) => tagSet.add(tag)));
+      tabs
+        .filter((t) => t.origin !== "local" && getTabWorkspaceId(t) === activeProfileId)
+        .forEach((t) => t.tags.forEach((tag) => tagSet.add(tag)));
       return Array.from(tagSet).sort();
     },
 
@@ -1027,7 +1392,7 @@ export const useEditorStore = create<EditorState>()(
       // Note-oriented modes should never try to render non-note content.
       // If a canvas/mindmap/etc. tab is active, create a fresh note tab first.
       if ((mode === "editor" || mode === "split" || mode === "preview" || mode === "inline") && activeTab && activeTab.noteType !== "note") {
-        const tab = newTab(activeTab.folderId ?? null, "note", "blank");
+        const tab = newTab(activeTab.folderId ?? null, "note", "blank", getTabWorkspaceId(activeTab));
         set((s) => ({
           tabs: [...s.tabs, tab],
           openTabIds: [...s.openTabIds, tab.id],
@@ -1041,7 +1406,7 @@ export const useEditorStore = create<EditorState>()(
       // is not already that type — never overwrite an existing file.
       if (mode === "whiteboard") {
         if (!activeTab || activeTab.noteType !== "whiteboard") {
-          const tab = newTab(activeTab?.folderId ?? null, "whiteboard");
+          const tab = newTab(activeTab?.folderId ?? null, "whiteboard", "blank", activeTab ? getTabWorkspaceId(activeTab) : useEditorStore.getState().activeProfileId);
           set((s) => ({
             tabs: [...s.tabs, tab],
             openTabIds: [...s.openTabIds, tab.id],
@@ -1053,7 +1418,7 @@ export const useEditorStore = create<EditorState>()(
       }
       if (mode === "mindmap") {
         if (!activeTab || activeTab.noteType !== "mindmap") {
-          const tab = newTab(activeTab?.folderId ?? null, "mindmap");
+          const tab = newTab(activeTab?.folderId ?? null, "mindmap", "blank", activeTab ? getTabWorkspaceId(activeTab) : useEditorStore.getState().activeProfileId);
           set((s) => ({
             tabs: [...s.tabs, tab],
             openTabIds: [...s.openTabIds, tab.id],
@@ -1065,7 +1430,7 @@ export const useEditorStore = create<EditorState>()(
       }
       if (mode === "kanban") {
         if (!activeTab || activeTab.noteType !== "kanban") {
-          const tab = newTab(activeTab?.folderId ?? null, "kanban");
+          const tab = newTab(activeTab?.folderId ?? null, "kanban", "blank", activeTab ? getTabWorkspaceId(activeTab) : useEditorStore.getState().activeProfileId);
           set((s) => ({
             tabs: [...s.tabs, tab],
             openTabIds: [...s.openTabIds, tab.id],
@@ -1077,7 +1442,7 @@ export const useEditorStore = create<EditorState>()(
       }
       if (mode === "pdf") {
         if (!activeTab || activeTab.noteType !== "pdf") {
-          const tab = newTab(activeTab?.folderId ?? null, "pdf");
+          const tab = newTab(activeTab?.folderId ?? null, "pdf", "blank", activeTab ? getTabWorkspaceId(activeTab) : useEditorStore.getState().activeProfileId);
           set((s) => ({
             tabs: [...s.tabs, tab],
             openTabIds: [...s.openTabIds, tab.id],
@@ -1299,6 +1664,7 @@ useEditorStore.subscribe(
     theme: s.theme,
     folders: s.folders,
     settings: s.settings,
+    workspaceSettings: s.workspaceSettings,
     fileTreeOpen: s.fileTreeOpen,
     profiles: s.profiles,
     activeProfileId: s.activeProfileId,

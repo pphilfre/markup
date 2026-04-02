@@ -11,7 +11,7 @@ import { SharedNoteViewer } from "@/components/shell/shared-note-viewer";
 import { FirstRunDialog } from "@/components/shell/first-run-dialog";
 import { DesktopDebugNotice } from "@/components/shell/desktop-debug-notice";
 import { NewFileTemplateDialog } from "@/components/shell/new-file-template-dialog";
-import { useEditorStore } from "@/lib/store";
+import { getTabWorkspaceId, useEditorStore } from "@/lib/store";
 import { useGlobalKeybinds } from "@/lib/keybinds";
 import { useIsMobile } from "@/lib/use-mobile";
 import { useEffect, useState, useCallback, useRef } from "react";
@@ -22,11 +22,28 @@ export default function Home() {
   const openTab = useEditorStore((s) => s.openTab);
   const tabs = useEditorStore((s) => s.tabs);
   const activeTabId = useEditorStore((s) => s.activeTabId);
+  const activeProfileId = useEditorStore((s) => s.activeProfileId);
+  const zoomLevel = useEditorStore((s) => s.zoomLevel);
   const isMobile = useIsMobile();
   const sidebarPosition = useEditorStore((s) => s.settings.sidebarPosition);
   const compactMode = useEditorStore((s) => s.settings.compactMode);
 
-  // Removed custom zoom logic to match website behavior in Tauri
+  useEffect(() => {
+    const appRoot = document.getElementById("markup-app-root");
+    if (!appRoot) return;
+    if (zoomLevel === 100) {
+      appRoot.style.removeProperty("zoom");
+      appRoot.style.removeProperty("width");
+      appRoot.style.removeProperty("height");
+      return;
+    }
+    const zoomFactor = zoomLevel / 100;
+    appRoot.style.zoom = `${zoomLevel}%`;
+    // Compensate layout size for CSS zoom so fixed-height regions (like sidebar tools)
+    // remain fully visible instead of getting clipped at the viewport edge.
+    appRoot.style.width = `${100 / zoomFactor}vw`;
+    appRoot.style.height = `${100 / zoomFactor}vh`;
+  }, [zoomLevel]);
 
   // Check for shared note URL parameter
   const [shareId, setShareId] = useState<string | null>(null);
@@ -41,7 +58,11 @@ export default function Home() {
 
     const tab = params.get("tab");
     if (tab?.trim()) {
-      pendingTabIdRef.current = tab.trim();
+      const requestedTabId = tab.trim();
+      pendingTabIdRef.current = requestedTabId;
+      // Keep a short-lived override so Convex hydration doesn't switch away
+      // from the explicitly requested tab.
+      window.sessionStorage.setItem("markup-requested-tab-id", requestedTabId);
     }
 
     // Desktop OAuth relay: after browser sign-in, redirect to the Tauri
@@ -75,10 +96,13 @@ export default function Home() {
     if (!hydrated) return;
     const tabId = pendingTabIdRef.current;
     if (!tabId) return;
-    const exists = tabs.some((t) => t.id === tabId);
-    if (!exists) return;
+    const requestedTab = tabs.find((t) => t.id === tabId);
+    if (!requestedTab) return;
 
-    if (activeTabId !== tabId) {
+    const requestedWorkspaceId = getTabWorkspaceId(requestedTab);
+    const workspaceMismatch = requestedWorkspaceId !== activeProfileId;
+
+    if (activeTabId !== tabId || workspaceMismatch) {
       openTab(tabId);
       return;
     }
@@ -87,7 +111,7 @@ export default function Home() {
     const url = new URL(window.location.href);
     url.searchParams.delete("tab");
     window.history.replaceState({}, "", url.toString());
-  }, [activeTabId, hydrated, openTab, tabs]);
+  }, [activeProfileId, activeTabId, hydrated, openTab, tabs]);
 
   const handleBackFromShared = useCallback(() => {
     setShareId(null);
@@ -130,7 +154,7 @@ export default function Home() {
   );
 
   return (
-    <div className={`flex h-screen overflow-hidden${compactMode ? " compact-mode" : ""}`}>
+    <div id="markup-app-root" className={`flex h-screen overflow-hidden${compactMode ? " compact-mode" : ""}`}>
       <ThemeSync />
       <ConvexSync />
       <TauriFileSync />

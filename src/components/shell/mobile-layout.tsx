@@ -38,7 +38,7 @@ import {
   Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useEditorStore, ViewMode } from "@/lib/store";
+import { getTabWorkspaceId, useEditorStore, ViewMode } from "@/lib/store";
 import { InlineMarkdownEditor, MarkdownEditor, MarkdownPreview } from "@/components/editor";
 import { FileTree } from "@/components/shell/file-tree";
 import { SpotlightSearch } from "@/components/shell/spotlight-search";
@@ -73,12 +73,13 @@ function MobileNavBar({
 }) {
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const tabs = useEditorStore((s) => s.tabs);
+  const activeProfileId = useEditorStore((s) => s.activeProfileId);
   const viewMode = useEditorStore((s) => s.viewMode);
   const setViewMode = useEditorStore((s) => s.setViewMode);
   const hideMd = useEditorStore((s) => s.settings.hideMdExtensions);
   const { isAuthenticated, isLoading: authLoading } = useAuthState();
 
-  const activeTab = tabs.find((t) => t.id === activeTabId);
+  const activeTab = tabs.find((t) => t.id === activeTabId && getTabWorkspaceId(t) === activeProfileId);
   const renameTab = useEditorStore((s) => s.renameTab);
   const displayName = activeTab
     ? hideMd
@@ -269,6 +270,7 @@ function MobileMoreMenu() {
 function MobileTabStrip() {
   const tabs = useEditorStore((s) => s.tabs);
   const activeTabId = useEditorStore((s) => s.activeTabId);
+  const activeProfileId = useEditorStore((s) => s.activeProfileId);
   const switchTab = useEditorStore((s) => s.switchTab);
   const closeTab = useEditorStore((s) => s.closeTab);
   const requestCreateTab = useEditorStore((s) => s.requestCreateTab);
@@ -287,7 +289,8 @@ function MobileTabStrip() {
 
   const openTabs = openTabIds
     .map((id) => tabs.find((t) => t.id === id))
-    .filter(Boolean) as typeof tabs;
+    .filter((tab): tab is (typeof tabs)[number] => tab !== undefined)
+    .filter((tab) => getTabWorkspaceId(tab) === activeProfileId);
 
   if (openTabs.length === 0) return null;
 
@@ -543,7 +546,8 @@ function MobileFileTreeContent({ onClose }: { onClose: () => void }) {
 function MobileContent() {
   const viewMode = useEditorStore((s) => s.viewMode);
   const activeTabId = useEditorStore((s) => s.activeTabId);
-  const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
+  const activeProfileId = useEditorStore((s) => s.activeProfileId);
+  const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId && getTabWorkspaceId(t) === activeProfileId));
   const settings = useEditorStore((s) => s.settings);
 
   const scrollingRef = useRef<"editor" | "preview" | null>(null);
@@ -586,7 +590,7 @@ function MobileContent() {
     lineHeight: settings.lineHeight,
   };
 
-  if (!activeTabId) {
+  if (!activeTabId || !activeTab) {
     return (
       <main className="flex flex-1 items-center justify-center bg-background px-6">
         <div className="flex flex-col items-center gap-4 text-muted-foreground text-center">

@@ -1,10 +1,14 @@
 "use client";
 
+import { useCallback, useRef } from "react";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuShortcut,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
@@ -16,6 +20,26 @@ export function EditorContextMenu({ children }: { children: React.ReactNode }) {
   const wrapSelection = useEditorStore((s) => s.wrapSelection);
   const editorView = useEditorStore((s) => s.editorView);
   const spellCheckEnabled = useEditorStore((s) => s.settings.spellCheck);
+  const updateSettings = useEditorStore((s) => s.updateSettings);
+  const lastContextTargetRef = useRef<EventTarget | null>(null);
+
+  const handleContextCapture = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      lastContextTargetRef.current = event.target;
+      // Keep the browser spell suggestions on regular right-click when spell check is enabled.
+      // Alt + right-click still opens the app context menu.
+      if (
+        spellCheckEnabled &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey
+      ) {
+        event.stopPropagation();
+      }
+    },
+    [spellCheckEnabled]
+  );
 
   const handleCut = async () => {
     if (!editorView) return;
@@ -64,13 +88,29 @@ export function EditorContextMenu({ children }: { children: React.ReactNode }) {
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuTrigger asChild>
+        <div className="contents" onContextMenuCapture={handleContextCapture}>
+          {children}
+        </div>
+      </ContextMenuTrigger>
       <ContextMenuContent className="w-52">
         {spellCheckEnabled && (
           <>
-            <ContextMenuItem disabled>
-              Spell suggestions: Shift + Right Click
-            </ContextMenuItem>
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>Spelling</ContextMenuSubTrigger>
+              <ContextMenuSubContent className="w-64">
+                <ContextMenuItem disabled>
+                  Spell suggestions open on right-click
+                </ContextMenuItem>
+                <ContextMenuSeparator />
+                <ContextMenuItem onClick={() => updateSettings({ spellCheck: false })}>
+                  Disable spell check
+                </ContextMenuItem>
+                <ContextMenuItem disabled>
+                  Open this custom menu with Alt + Right Click
+                </ContextMenuItem>
+              </ContextMenuSubContent>
+            </ContextMenuSub>
             <ContextMenuSeparator />
           </>
         )}

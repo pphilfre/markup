@@ -27,6 +27,7 @@ export const upsert = mutation({
     tabId: v.string(),
     title: v.string(),
     content: v.string(),
+    workspaceId: v.optional(v.string()),
     folderId: v.union(v.string(), v.null()),
     tags: v.optional(v.array(v.string())),
     pinned: v.optional(v.boolean()),
@@ -61,6 +62,7 @@ export const syncAll = mutation({
         tabId: v.string(),
         title: v.string(),
         content: v.string(),
+        workspaceId: v.optional(v.string()),
         folderId: v.union(v.string(), v.null()),
         tags: v.optional(v.array(v.string())),
         pinned: v.optional(v.boolean()),
@@ -96,6 +98,7 @@ export const syncAll = mutation({
         await ctx.db.patch(doc._id, {
           title: tab.title,
           content: tab.content,
+          workspaceId: tab.workspaceId,
           folderId: tab.folderId,
           tags: tab.tags,
           pinned: tab.pinned,

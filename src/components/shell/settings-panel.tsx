@@ -230,11 +230,32 @@ function GeneralSection({
   settings,
   update,
   reset,
+  theme,
+  toggleTheme,
 }: {
   settings: SettingsType;
   update: (p: Partial<SettingsType>) => void;
   reset: () => void;
+  theme: string;
+  toggleTheme: () => void;
 }) {
+  const handleThemeModeChange = (mode: SettingsType["themeMode"]) => {
+    update({ themeMode: mode });
+    const lightModes: SettingsType["themeMode"][] = ["light", "solarized-light", "catppuccin-latte", "gruvbox-light", "everforest-light", "uwu"];
+    const darkModes: SettingsType["themeMode"][] = ["dark", "nord-dark", "catppuccin-mocha", "gruvbox-dark", "tokyo-night"];
+    if (lightModes.includes(mode) && theme === "dark") {
+      toggleTheme();
+    }
+    if (darkModes.includes(mode) && theme === "light") {
+      toggleTheme();
+    }
+    if (mode === "system") {
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (prefersDark && theme === "light") toggleTheme();
+      if (!prefersDark && theme === "dark") toggleTheme();
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div>
@@ -278,6 +299,92 @@ function GeneralSection({
 
       <Separator />
 
+      <div>
+        <h3 className="text-sm font-semibold mb-1">Quick Theme</h3>
+        <p className="text-xs text-muted-foreground mb-3">
+          Most-used theme controls without leaving General
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { id: "light", label: "Light", swatch: "#ffffff" },
+            { id: "dark", label: "Dark", swatch: "#1a1a1a" },
+            { id: "system", label: "System", swatch: "#d0d0d0" },
+          ].map((mode) => (
+            <button
+              key={mode.id}
+              onClick={() => handleThemeModeChange(mode.id as SettingsType["themeMode"])}
+              className={cn(
+                "rounded-md border px-2 py-2 text-[11px] font-medium transition-colors",
+                settings.themeMode === mode.id
+                  ? "border-primary bg-primary/10 text-foreground"
+                  : "border-input bg-background text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span className="mb-1 inline-block h-2.5 w-2.5 rounded-full border border-black/10" style={{ background: mode.swatch }} />
+              <span className="block">{mode.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <Separator />
+
+      <div>
+        <h3 className="text-sm font-semibold mb-1">Quick Editor Controls</h3>
+        <p className="text-xs text-muted-foreground mb-3">
+          Common writing and readability settings
+        </p>
+        <div className="space-y-3">
+          <RangeRow
+            label="Font Size"
+            value={settings.fontSize}
+            min={12}
+            max={22}
+            step={1}
+            unit="px"
+            onChange={(v) => update({ fontSize: v })}
+          />
+          <RangeRow
+            label="Line Height"
+            value={settings.lineHeight}
+            min={1.2}
+            max={2.2}
+            step={0.1}
+            unit=""
+            onChange={(v) => update({ lineHeight: Number(v.toFixed(1)) })}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <ToggleRow
+          label="Word wrap"
+          description="Wrap long lines to keep writing readable"
+          checked={settings.wordWrap}
+          onChange={(v) => update({ wordWrap: v })}
+        />
+        <ToggleRow
+          label="Spell check"
+          description="Highlight misspellings while you type"
+          checked={settings.spellCheck}
+          onChange={(v) => update({ spellCheck: v })}
+        />
+        <ToggleRow
+          label="Highlight current line"
+          description="Keep cursor context easy to track"
+          checked={settings.highlightCurrentLine}
+          onChange={(v) => update({ highlightCurrentLine: v })}
+        />
+        <ToggleRow
+          label="Compact mode"
+          description="Reduce spacing across the interface"
+          checked={settings.compactMode}
+          onChange={(v) => update({ compactMode: v })}
+        />
+      </div>
+
+      <Separator />
+
       <ToggleRow
         label="Hide .md extensions"
         description="Hide markdown file extensions in the sidebar"
@@ -290,6 +397,13 @@ function GeneralSection({
         description="Show a template picker whenever you create a new note"
         checked={settings.promptForTemplateOnNewFile}
         onChange={(v) => update({ promptForTemplateOnNewFile: v })}
+      />
+
+      <ToggleRow
+        label="Show file extensions"
+        description="Show full filenames in the file tree"
+        checked={settings.showFileExtensions}
+        onChange={(v) => update({ showFileExtensions: v })}
       />
 
       <Separator />
@@ -1058,6 +1172,7 @@ function DataSection({
                 id: crypto.randomUUID(),
                 title,
                 content,
+                workspaceId: useEditorStore.getState().activeProfileId,
                 folderId: null,
                 tags: [],
                 pinned: false,
@@ -1142,6 +1257,49 @@ function DataSection({
       // Dialog cancelled or not available
     }
   }, [setLocalSyncFolder]);
+
+  useEffect(() => {
+    const onExportNotes = () => {
+      void handleExportNotes();
+    };
+    const onExportWorkspace = () => {
+      void handleExportWorkspace();
+    };
+    const onImportFiles = () => {
+      fileInputRef.current?.click();
+    };
+    const onBackupWorkspace = () => {
+      void handleBackupWorkspace();
+    };
+    const onResetSettings = () => {
+      handleResetSettings();
+    };
+    const onChooseSyncFolder = () => {
+      void handleChooseSyncFolder();
+    };
+
+    document.addEventListener("settings-export-notes", onExportNotes);
+    document.addEventListener("settings-export-workspace", onExportWorkspace);
+    document.addEventListener("settings-import-files", onImportFiles);
+    document.addEventListener("settings-backup-workspace", onBackupWorkspace);
+    document.addEventListener("settings-reset-settings", onResetSettings);
+    document.addEventListener("settings-choose-sync-folder", onChooseSyncFolder);
+
+    return () => {
+      document.removeEventListener("settings-export-notes", onExportNotes);
+      document.removeEventListener("settings-export-workspace", onExportWorkspace);
+      document.removeEventListener("settings-import-files", onImportFiles);
+      document.removeEventListener("settings-backup-workspace", onBackupWorkspace);
+      document.removeEventListener("settings-reset-settings", onResetSettings);
+      document.removeEventListener("settings-choose-sync-folder", onChooseSyncFolder);
+    };
+  }, [
+    handleBackupWorkspace,
+    handleChooseSyncFolder,
+    handleExportNotes,
+    handleExportWorkspace,
+    handleResetSettings,
+  ]);
 
   return (
     <div className="space-y-5">
@@ -2003,7 +2161,13 @@ export function SettingsPanel() {
   const settingsContent = (
     <>
       {activeSection === "general" && (
-        <GeneralSection settings={settings} update={updateSettings} reset={reset} />
+        <GeneralSection
+          settings={settings}
+          update={updateSettings}
+          reset={reset}
+          theme={theme}
+          toggleTheme={toggleTheme}
+        />
       )}
       {activeSection === "user" && (
         <UserSection

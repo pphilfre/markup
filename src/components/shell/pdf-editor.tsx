@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import dynamic from "next/dynamic";
 import { useMutation, useQuery } from "convex/react";
 import { CloudUpload, FileDown, HardDrive, Loader2, Upload, X } from "lucide-react";
@@ -117,7 +117,7 @@ export function PdfEditorView() {
 
   const remotePdfUrl = useQuery(
     api.pdfFiles.getFileUrl,
-    userId && activeTabId && tabData.source === "convex" ? { userId, tabId: activeTabId } : "skip"
+    userId && activeTabId ? { userId, tabId: activeTabId } : "skip"
   );
 
   const writeTabData = useCallback(
@@ -134,6 +134,18 @@ export function PdfEditorView() {
       tabs: s.tabs.map((t) => (t.id === activeTabId ? { ...t, origin } : t)),
     }));
   }, [activeTabId]);
+
+  useEffect(() => {
+    if (!activeTabId || !remotePdfUrl) return;
+    if (tabData.source === "convex") return;
+    if (tabData.dataBase64) return;
+
+    writeTabData({
+      ...tabData,
+      source: "convex",
+    });
+    setTabOrigin("online");
+  }, [activeTabId, remotePdfUrl, setTabOrigin, tabData, writeTabData]);
 
   const uploadFileToConvex = useCallback(
     async (file: File): Promise<string> => {
@@ -272,7 +284,7 @@ export function PdfEditorView() {
   const saveLocal = useCallback(async () => {
     if (!activeTabId) return;
 
-    if (!tabData.dataBase64 && tabData.source === "convex" && !remotePdfUrl) {
+    if (!tabData.dataBase64 && !remotePdfUrl) {
       setStatus("Wait for the online PDF to load before saving locally.");
       return;
     }
@@ -358,7 +370,7 @@ export function PdfEditorView() {
           size="sm"
           className="h-8 gap-1.5 text-xs"
           onClick={saveLocal}
-          disabled={busy || (!tabData.dataBase64 && tabData.source !== "convex")}
+          disabled={busy || (!tabData.dataBase64 && !remotePdfUrl)}
         >
           <HardDrive className="h-3.5 w-3.5" />
           Save Local
@@ -399,9 +411,10 @@ export function PdfEditorView() {
 
     Actions.displayName = "PdfAnnotatorActions";
     return Actions;
-  }, [activeTab?.title, activeTabId, busy, closeTab, handleImportChange, isAuthenticated, saveLocal, saveOnline, tabData.dataBase64, tabData.source, tabData.storageId]);
+  }, [activeTab?.title, activeTabId, busy, closeTab, handleImportChange, isAuthenticated, remotePdfUrl, saveLocal, saveOnline, tabData.dataBase64, tabData.source, tabData.storageId]);
 
-  const pdfUrl = tabData.source === "convex" ? (remotePdfUrl ?? undefined) : undefined;
+  const shouldUseRemotePdf = Boolean(remotePdfUrl && (tabData.source === "convex" || !tabData.dataBase64));
+  const pdfUrl = shouldUseRemotePdf ? remotePdfUrl ?? undefined : undefined;
   const pdfData = useMemo(() => {
     if (tabData.source !== "local" || !tabData.dataBase64) return undefined;
     try {
@@ -411,7 +424,7 @@ export function PdfEditorView() {
       return undefined;
     }
   }, [tabData.dataBase64, tabData.source]);
-  const isLoadingRemotePdf = tabData.source === "convex" && remotePdfUrl === undefined;
+  const isLoadingRemotePdf = Boolean(userId && activeTabId && !tabData.dataBase64 && remotePdfUrl === undefined);
   const hasPdf = Boolean(pdfUrl || (pdfData && pdfData.length > 0));
 
   if (!activeTabId) {

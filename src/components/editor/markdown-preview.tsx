@@ -187,17 +187,30 @@ export function MarkdownPreview({
 
   // Checkbox toggle handler
   const handleCheckboxToggle = useCallback(
-    (lineIndex: number, checked: boolean) => {
+    (sourceLine: number | undefined, fallbackIndex: number, checked: boolean) => {
       if (!activeTab) return;
       const lines = activeTab.content.split("\n");
+
+      const taskRegex = /^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\]/;
+      const markerRegex = /\[[ xX]\]/;
+
+      if (typeof sourceLine === "number" && sourceLine > 0) {
+        const directIndex = sourceLine - 1;
+        if (directIndex >= 0 && directIndex < lines.length && taskRegex.test(lines[directIndex])) {
+          lines[directIndex] = lines[directIndex].replace(markerRegex, checked ? "[x]" : "[ ]");
+          updateContent(activeTab.id, lines.join("\n"));
+          return;
+        }
+      }
+
       let checkboxCount = 0;
       for (let i = 0; i < lines.length; i++) {
-        if (/^(\s*[-*+]|\s*\d+\.) \[[ x]\]/.test(lines[i])) {
-          if (checkboxCount === lineIndex) {
-            lines[i] = lines[i].replace(/\[[ x]\]/, checked ? "[x]" : "[ ]");
+        if (taskRegex.test(lines[i])) {
+          if (checkboxCount === fallbackIndex) {
+            lines[i] = lines[i].replace(markerRegex, checked ? "[x]" : "[ ]");
             break;
           }
-          checkboxCount++;
+          checkboxCount += 1;
         }
       }
       updateContent(activeTab.id, lines.join("\n"));
@@ -311,15 +324,19 @@ export function MarkdownPreview({
         },
 
         // Clickable checkboxes in preview
-        input: ({ type, checked, disabled, ...props }) => {
+        input: ({ type, checked, disabled, node, ...props }) => {
           if (type === "checkbox") {
             void disabled;
             const idx = checkboxIdx++;
+            const sourceLine =
+              typeof node?.position?.start?.line === "number"
+                ? node.position.start.line
+                : undefined;
             return (
               <input
                 type="checkbox"
                 checked={checked}
-                onChange={(e) => handleCheckboxToggle(idx, e.target.checked)}
+                onChange={(e) => handleCheckboxToggle(sourceLine, idx, e.target.checked)}
                 className="cursor-pointer"
                 {...props}
               />

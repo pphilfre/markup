@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useCallback, useState } from "react";
-import { useEditorStore } from "@/lib/store";
+import { getTabWorkspaceId, useEditorStore } from "@/lib/store";
 import { MarkdownEditor, MarkdownPreview, InlineMarkdownEditor } from "@/components/editor";
 import { GraphView } from "@/components/shell/graph-view";
 import { WhiteboardView } from "@/components/shell/whiteboard";
@@ -12,7 +12,8 @@ import { PdfEditorView } from "@/components/shell/pdf-editor";
 export function MainContent() {
   const viewMode = useEditorStore((s) => s.viewMode);
   const activeTabId = useEditorStore((s) => s.activeTabId);
-  const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
+  const activeProfileId = useEditorStore((s) => s.activeProfileId);
+  const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId && getTabWorkspaceId(t) === activeProfileId));
   const settings = useEditorStore((s) => s.settings);
   const updateSettings = useEditorStore((s) => s.updateSettings);
 
@@ -128,7 +129,7 @@ export function MainContent() {
     );
   }
 
-  if (!activeTabId) {
+  if (!activeTabId || !activeTab) {
     return (
       <main className="flex flex-1 items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3 text-muted-foreground">

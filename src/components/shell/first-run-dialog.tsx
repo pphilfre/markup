@@ -19,19 +19,23 @@ import { EditorGuideContent } from "@/components/shell/editor-guide-content";
 const FIRST_RUN_STORAGE_KEY = "markup-first-run-tutorial-complete";
 export const REPLAY_TUTORIAL_EVENT = "markup-replay-first-run-tutorial";
 
-const TUTORIAL_THEMES: { label: string; value: Settings["themeMode"] }[] = [
-  { label: "Dark", value: "dark" },
-  { label: "Light", value: "light" },
-  { label: "System", value: "system" },
-  { label: "Solarized Light", value: "solarized-light" },
-  { label: "Nord Dark", value: "nord-dark" },
-  { label: "Catppuccin Mocha", value: "catppuccin-mocha" },
-  { label: "Catppuccin Latte", value: "catppuccin-latte" },
-  { label: "Gruvbox Dark", value: "gruvbox-dark" },
-  { label: "Gruvbox Light", value: "gruvbox-light" },
-  { label: "Tokyo Night", value: "tokyo-night" },
-  { label: "Everforest Light", value: "everforest-light" },
-  { label: "uwu", value: "uwu" },
+const TUTORIAL_THEMES: {
+  label: string;
+  value: Settings["themeMode"];
+  preview: { bg: string; sidebar: string; text: string; accent: string };
+}[] = [
+  { label: "Dark", value: "dark", preview: { bg: "#1a1a1a", sidebar: "#242424", text: "#e5e5e5", accent: "#7c3aed" } },
+  { label: "Light", value: "light", preview: { bg: "#ffffff", sidebar: "#f5f5f5", text: "#1a1a1a", accent: "#7c3aed" } },
+  { label: "System", value: "system", preview: { bg: "#e8e8e8", sidebar: "#d0d0d0", text: "#333333", accent: "#7c3aed" } },
+  { label: "Solarized Light", value: "solarized-light", preview: { bg: "#fdf6e3", sidebar: "#eee8d5", text: "#657b83", accent: "#268bd2" } },
+  { label: "Nord Dark", value: "nord-dark", preview: { bg: "#2e3440", sidebar: "#3b4252", text: "#eceff4", accent: "#88c0d0" } },
+  { label: "Catppuccin Mocha", value: "catppuccin-mocha", preview: { bg: "#1e1e2e", sidebar: "#181825", text: "#cdd6f4", accent: "#cba6f7" } },
+  { label: "Catppuccin Latte", value: "catppuccin-latte", preview: { bg: "#eff1f5", sidebar: "#e6e9ef", text: "#4c4f69", accent: "#8839ef" } },
+  { label: "Gruvbox Dark", value: "gruvbox-dark", preview: { bg: "#282828", sidebar: "#3c3836", text: "#ebdbb2", accent: "#d79921" } },
+  { label: "Gruvbox Light", value: "gruvbox-light", preview: { bg: "#fbf1c7", sidebar: "#f2e5bc", text: "#3c3836", accent: "#b57614" } },
+  { label: "Tokyo Night", value: "tokyo-night", preview: { bg: "#1a1b26", sidebar: "#16161e", text: "#c0caf5", accent: "#7aa2f7" } },
+  { label: "Everforest Light", value: "everforest-light", preview: { bg: "#fdf6e3", sidebar: "#f4f0d9", text: "#5c6a72", accent: "#8da101" } },
+  { label: "uwu", value: "uwu", preview: { bg: "#fff1f8", sidebar: "#ffe4f2", text: "#3b0a2a", accent: "#ff4fa3" } },
 ];
 
 const QUICK_FONTS: { label: string; value: string }[] = [
@@ -189,13 +193,28 @@ export function FirstRunDialog() {
                       key={option.value}
                       onClick={() => handleThemeModeChange(option.value)}
                       className={cn(
-                        "rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition-colors",
+                        "rounded-md border p-2 text-left transition-all hover:scale-[1.01]",
                         settings.themeMode === option.value
-                          ? "border-primary bg-primary/10 text-foreground"
-                          : "border-input bg-background text-muted-foreground hover:text-foreground"
+                          ? "border-primary bg-primary/10"
+                          : "border-input bg-background hover:border-muted-foreground/40"
                       )}
                     >
-                      {option.label}
+                      <div
+                        className="mb-2 h-8 rounded overflow-hidden flex"
+                        style={{ background: option.preview.bg }}
+                      >
+                        <div className="w-1/4 h-full" style={{ background: option.preview.sidebar }} />
+                        <div className="flex-1 p-1 space-y-1">
+                          <div className="h-1 rounded-full w-3/4" style={{ background: option.preview.text, opacity: 0.75 }} />
+                          <div className="h-1 rounded-full w-1/2" style={{ background: option.preview.accent }} />
+                        </div>
+                      </div>
+                      <div className="text-[11px] font-medium leading-tight text-foreground">{option.label}</div>
+                      <div className="mt-1 flex items-center gap-1">
+                        <span className="h-2.5 w-2.5 rounded-full border border-black/10" style={{ background: option.preview.bg }} />
+                        <span className="h-2.5 w-2.5 rounded-full border border-black/10" style={{ background: option.preview.sidebar }} />
+                        <span className="h-2.5 w-2.5 rounded-full border border-black/10" style={{ background: option.preview.accent }} />
+                      </div>
                     </button>
                   ))}
                 </div>

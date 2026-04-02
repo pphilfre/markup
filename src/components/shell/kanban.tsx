@@ -1,8 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Check,
   Copy,
   GripVertical,
   Plus,
@@ -213,12 +212,44 @@ function formatDueDate(dueDate: string | null): string {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const normalized = hex.trim().replace("#", "");
+  const full =
+    normalized.length === 3
+      ? normalized
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : normalized;
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return null;
+  return {
+    r: Number.parseInt(full.slice(0, 2), 16),
+    g: Number.parseInt(full.slice(2, 4), 16),
+    b: Number.parseInt(full.slice(4, 6), 16),
+  };
+}
+
+function pastelFromHex(hex: string): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return "hsl(var(--card))";
+  const mix = (channel: number) => Math.round(channel * 0.22 + 255 * 0.78);
+  return `rgb(${mix(rgb.r)} ${mix(rgb.g)} ${mix(rgb.b)})`;
+}
+
+function displayTabName(title: string): string {
+  return title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/i, "");
+}
+
 export function KanbanView() {
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
   const updateContent = useEditorStore((s) => s.updateContent);
 
   const parsed = useMemo(() => parseBoard(activeTab?.content ?? ""), [activeTab?.content]);
+  const boardDisplayTitle = useMemo(
+    () => displayTabName(activeTab?.title ?? "Kanban"),
+    [activeTab?.title]
+  );
   const [board, setBoard] = useState<KanbanBoardData>(parsed);
   const [searchQuery, setSearchQuery] = useState("");
   const [newCardTextByColumn, setNewCardTextByColumn] = useState<Record<string, string>>({});
@@ -543,12 +574,7 @@ export function KanbanView() {
     <div className="flex h-full min-w-0 flex-col overflow-hidden bg-background">
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-2 py-2 sm:px-4">
         <div className="mr-auto min-w-[220px]">
-          <input
-            value={board.boardTitle}
-            onChange={(e) => commit({ ...board, boardTitle: e.target.value })}
-            className="w-full bg-transparent text-sm font-semibold text-foreground outline-none"
-            placeholder="Board title"
-          />
+          <h2 className="w-full truncate text-sm font-semibold text-foreground">{boardDisplayTitle}</h2>
           <p className="text-xs text-muted-foreground">
             {completedCards}/{totalCards} complete
           </p>
@@ -577,32 +603,33 @@ export function KanbanView() {
       </div>
 
       <div className="flex-1 overflow-auto px-2 py-3 sm:px-4 sm:py-4">
-        <div className="flex min-h-full w-max min-w-full items-start gap-3 sm:gap-4">
+        <div className="flex min-h-full w-max min-w-full items-start gap-0">
           {filteredColumns.map((column, columnIndex) => {
             const exceededWip = column.wipLimit !== null && column.cards.length > column.wipLimit;
             const doneCount = column.cards.filter((card) => card.completed).length;
             const progress = column.cards.length > 0 ? (doneCount / column.cards.length) * 100 : 0;
             return (
-            <section
-              key={column.id}
-              className={cn(
-                "flex h-full w-[min(340px,calc(100vw-1rem))] sm:w-[340px] flex-col rounded-lg border border-border bg-card/60 transition",
-                dropColumnIndex === columnIndex && dragColumnId && "ring-2 ring-primary/50"
-              )}
-              onDragOver={(e) => {
-                if (!dragColumnId) return;
-                e.preventDefault();
-                setDropColumnIndex(columnIndex);
-              }}
-              onDrop={(e) => {
-                if (!dragColumnId) return;
-                e.preventDefault();
-                moveColumnTo(dragColumnId, columnIndex);
-                setDragColumnId(null);
-                setDropColumnIndex(null);
-              }}
-            >
-              <div className="space-y-2 border-b border-border px-3 py-2">
+              <Fragment key={column.id}>
+                <section
+                  className={cn(
+                  "flex h-full w-[min(340px,calc(100vw-1rem))] sm:w-[340px] flex-col rounded-lg border border-border transition",
+                    dropColumnIndex === columnIndex && dragColumnId && "ring-2 ring-primary/50"
+                  )}
+                  style={{ backgroundColor: pastelFromHex(column.color) }}
+                  onDragOver={(e) => {
+                    if (!dragColumnId) return;
+                    e.preventDefault();
+                    setDropColumnIndex(columnIndex);
+                  }}
+                  onDrop={(e) => {
+                    if (!dragColumnId) return;
+                    e.preventDefault();
+                    moveColumnTo(dragColumnId, columnIndex);
+                    setDragColumnId(null);
+                    setDropColumnIndex(null);
+                  }}
+                >
+                  <div className="space-y-2 border-b border-border px-3 py-2">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -875,7 +902,7 @@ export function KanbanView() {
                 )}
               </div>
 
-              <div className="space-y-2 border-t border-border px-3 py-2">
+                  <div className="space-y-2 border-t border-border px-3 py-2">
                 <input
                   value={newCardTextByColumn[column.id] ?? ""}
                   onChange={(e) =>
@@ -898,9 +925,19 @@ export function KanbanView() {
                   <Plus className="h-3.5 w-3.5" />
                   Add Card
                 </Button>
-              </div>
-            </section>
-          );})}
+                  </div>
+                </section>
+
+                {columnIndex < filteredColumns.length - 1 && (
+                  <div
+                    className="mx-1.5 h-full w-2.5 shrink-0 rounded-full border border-border/40"
+                    style={{ backgroundColor: pastelFromHex(column.color) }}
+                    aria-hidden="true"
+                  />
+                )}
+              </Fragment>
+            );
+          })}
 
           <div
             className={cn(
@@ -921,21 +958,16 @@ export function KanbanView() {
             }}
           />
 
-          <section className="flex h-full w-[min(260px,calc(100vw-1rem))] sm:w-[260px] flex-col rounded-lg border border-dashed border-border bg-card/30 p-3">
-            <Button variant="outline" className="h-9 justify-start gap-2 text-sm" onClick={addColumn}>
-              <Plus className="h-4 w-4" />
-              Add another column
-            </Button>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Columns and cards are draggable. Completed cards are moved to the top of Done.
-            </p>
-            {board.columns.length <= 1 && (
-              <p className="mt-2 inline-flex items-center gap-1 rounded bg-muted px-2 py-1 text-[10px] text-muted-foreground">
-                <Check className="h-3 w-3" />
-                Boards keep at least one column.
-              </p>
-            )}
-          </section>
+          <div
+            className="ml-1.5 h-full w-2.5 shrink-0 rounded-full border border-border/40"
+            style={{
+              backgroundColor:
+                filteredColumns.length > 0
+                  ? pastelFromHex(filteredColumns[filteredColumns.length - 1].color)
+                  : "transparent",
+            }}
+            aria-hidden="true"
+          />
         </div>
       </div>
     </div>
