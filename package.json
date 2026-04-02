@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "npm-run-all --parallel dev:convex dev:next",
-    "dev:next": "next dev --webpack",
+    "dev:next": "node scripts/dev-next-supervisor.js",
     "dev:convex": "npx convex dev",
     "build": "npx convex deploy --cmd \"next build\"",
     "sync-version": "node scripts/sync-version.js",

@@ -13,6 +13,8 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import type { IAnnotationStore, PdfAnnotatorProps } from "pdfjs-annotation-extension-for-react";
 import "pdfjs-annotation-extension-for-react/style";
 
+const PDF_WORKER_SRC = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+
 const PdfAnnotator = dynamic<PdfAnnotatorProps>(
   async () => (await import("pdfjs-annotation-extension-for-react")).PdfAnnotator,
   { ssr: false }
@@ -111,9 +113,41 @@ export function PdfEditorView() {
 
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string>("");
+  const [pdfWorkerReady, setPdfWorkerReady] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const tabData = useMemo(() => parsePdfTabData(activeTab?.content ?? ""), [activeTab?.content]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const setupPdfWorker = async () => {
+      try {
+        await import("pdfjs-annotation-extension-for-react");
+        const pdfjsLib = (
+          globalThis as typeof globalThis & {
+            pdfjsLib?: {
+              GlobalWorkerOptions?: { workerSrc?: string };
+            };
+          }
+        ).pdfjsLib;
+
+        if (pdfjsLib?.GlobalWorkerOptions) {
+          pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER_SRC;
+        }
+      } finally {
+        if (!cancelled) {
+          setPdfWorkerReady(true);
+        }
+      }
+    };
+
+    void setupPdfWorker();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const remotePdfUrl = useQuery(
     api.pdfFiles.getFileUrl,
@@ -460,6 +494,11 @@ export function PdfEditorView() {
               {status && <p className="text-xs text-muted-foreground">{status}</p>}
             </>
           )}
+        </div>
+      ) : !pdfWorkerReady ? (
+        <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Preparing PDF viewer...
         </div>
       ) : (
         <>
