@@ -1653,20 +1653,8 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
     return map;
   }, [folders, folderIdSet]);
 
-  const parentByFolderId = new Map<string, string | null>();
-  folders.forEach((folder) => {
-    parentByFolderId.set(folder.id, folder.parentId && folderIdSet.has(folder.parentId) ? folder.parentId : null);
-  });
-
-  const visibleFolderIds = new Set<string>();
-  onlineTabs.forEach((tab) => {
-    let current = tab.folderId;
-    while (current && folderIdSet.has(current)) {
-      if (visibleFolderIds.has(current)) break;
-      visibleFolderIds.add(current);
-      current = parentByFolderId.get(current) ?? null;
-    }
-  });
+  // Render all folders, including empty ones, so newly created folders are immediately visible.
+  const visibleFolderIds = new Set<string>(folders.map((folder) => folder.id));
 
   const visibleFoldersByParent = new Map<string | null, Folder[]>();
   for (const [parentId, children] of foldersByParent.entries()) {
