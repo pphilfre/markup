@@ -1,6 +1,6 @@
 {
   "name": "markup",
-  "version": "1.0.9",
+  "version": "1.1.0",
   "private": true,
   "scripts": {
     "dev": "npm-run-all --parallel dev:convex dev:next",
@@ -46,7 +46,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "codemirror": "^6.0.2",
-    "convex": "^1.32.0",
+    "convex": "^1.35.1",
     "d3-force": "^3.0.0",
     "file-saver": "^2.0.5",
     "idb-keyval": "^6.2.2",

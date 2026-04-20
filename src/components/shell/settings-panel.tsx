@@ -306,22 +306,51 @@ function GeneralSection({
         </p>
         <div className="grid grid-cols-3 gap-2">
           {[
-            { id: "light", label: "Light", swatch: "#ffffff" },
-            { id: "dark", label: "Dark", swatch: "#1a1a1a" },
-            { id: "system", label: "System", swatch: "#d0d0d0" },
+            {
+              id: "light",
+              label: "Light",
+              description: "Clean white background",
+              preview: { bg: "#ffffff", sidebar: "#f5f5f5", text: "#1a1a1a", accent: "#7c3aed" },
+            },
+            {
+              id: "dark",
+              label: "Dark",
+              description: "Classic dark theme",
+              preview: { bg: "#1a1a1a", sidebar: "#242424", text: "#e5e5e5", accent: "#7c3aed" },
+            },
+            {
+              id: "system",
+              label: "System",
+              description: "Follows OS preference",
+              preview: { bg: "#e8e8e8", sidebar: "#d0d0d0", text: "#333", accent: "#7c3aed" },
+            },
           ].map((mode) => (
             <button
               key={mode.id}
               onClick={() => handleThemeModeChange(mode.id as SettingsType["themeMode"])}
               className={cn(
-                "rounded-md border px-2 py-2 text-[11px] font-medium transition-colors",
+                "relative rounded-lg border-2 p-2 text-left transition-all hover:scale-[1.02]",
                 settings.themeMode === mode.id
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-input bg-background text-muted-foreground hover:text-foreground"
+                  ? "border-primary shadow-sm"
+                  : "border-input hover:border-muted-foreground/40"
               )}
             >
-              <span className="mb-1 inline-block h-2.5 w-2.5 rounded-full border border-black/10" style={{ background: mode.swatch }} />
-              <span className="block">{mode.label}</span>
+              <div
+                className="mb-2 h-10 rounded overflow-hidden flex"
+                style={{ background: mode.preview.bg }}
+              >
+                <div className="w-1/4 h-full" style={{ background: mode.preview.sidebar }} />
+                <div className="flex-1 p-1 space-y-1">
+                  <div className="h-1.5 rounded-full w-3/4" style={{ background: mode.preview.text, opacity: 0.7 }} />
+                  <div className="h-1.5 rounded-full w-1/2" style={{ background: mode.preview.accent }} />
+                  <div className="h-1.5 rounded-full w-2/3" style={{ background: mode.preview.text, opacity: 0.4 }} />
+                </div>
+              </div>
+              <p className="text-xs font-medium leading-none">{mode.label}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{mode.description}</p>
+              {settings.themeMode === mode.id && (
+                <div className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary" />
+              )}
             </button>
           ))}
         </div>

@@ -33,12 +33,14 @@ import {
 
 type ExportFormat = "md" | "json" | "html" | "pdf";
 type ExportScope = "current" | "all";
+type PdfOrientation = "portrait" | "landscape";
 
 interface ExportOptions {
   format: ExportFormat;
   scope: ExportScope;
   fontSize: number;
   scale: number;
+  pdfOrientation: PdfOrientation;
   includeMetadata: boolean;
   customFilename: string;
 }
@@ -72,7 +74,12 @@ function withFormatExt(name: string, format: ExportFormat): string {
 // footnotes, math, and multi-page PDF support
 // ---------------------------------------------------------------------------
 
-function generateHtml(title: string, content: string, fontSize: number): string {
+function generateHtml(
+  title: string,
+  content: string,
+  fontSize: number,
+  pdfOrientation: PdfOrientation = "portrait"
+): string {
   const escapedTitle = title.replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return `<!DOCTYPE html>
 <html lang="en">
@@ -90,7 +97,7 @@ function generateHtml(title: string, content: string, fontSize: number): string 
     onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    @page { size: A4; margin: 2cm; }
+    @page { size: A4 ${pdfOrientation}; margin: 2cm; }
     @media print {
       html, body { margin: 0; padding: 0; }
       pre { page-break-inside: avoid; }
@@ -319,8 +326,14 @@ function generateJson(
 // Print helper — renders full markdown in a hidden iframe and calls print()
 // ---------------------------------------------------------------------------
 
-function printContent(title: string, content: string, fontSize: number, scale: number) {
-  const html = generateHtml(title, content, fontSize);
+function printContent(
+  title: string,
+  content: string,
+  fontSize: number,
+  scale: number,
+  pdfOrientation: PdfOrientation
+) {
+  const html = generateHtml(title, content, fontSize, pdfOrientation);
   const iframe = document.createElement("iframe");
   iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:none;";
   document.body.appendChild(iframe);
@@ -351,6 +364,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
     scope: "current",
     fontSize: 14,
     scale: 1,
+    pdfOrientation: "portrait",
     includeMetadata: false,
     customFilename: "",
   });
@@ -437,7 +451,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
           await saveFile(generateHtml(tab.title, tab.content, options.fontSize), filename, "text/html");
           break;
         case "pdf": {
-          printContent(tab.title, tab.content, options.fontSize, options.scale);
+          printContent(tab.title, tab.content, options.fontSize, options.scale, options.pdfOrientation);
           onOpenChange(false);
           return;
         }
@@ -459,7 +473,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
             zip.file(base + ".html", generateHtml(tab.title, tab.content, options.fontSize));
             break;
           case "pdf":
-            zip.file(base + ".html", generateHtml(tab.title, tab.content, options.fontSize));
+            zip.file(base + ".html", generateHtml(tab.title, tab.content, options.fontSize, options.pdfOrientation));
             break;
         }
       }
@@ -473,9 +487,9 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
 
   const handlePrint = useCallback(() => {
     if (!activeTab || activeTab.noteType !== "note") return;
-    printContent(activeTab.title, activeTab.content, options.fontSize, options.scale);
+    printContent(activeTab.title, activeTab.content, options.fontSize, options.scale, options.pdfOrientation);
     onOpenChange(false);
-  }, [activeTab, options.fontSize, options.scale, onOpenChange]);
+  }, [activeTab, options.fontSize, options.scale, options.pdfOrientation, onOpenChange]);
 
   const formatIcon = {
     md: <FileText className="h-3.5 w-3.5" />,
@@ -562,16 +576,35 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
                 />
               </div>
               {options.format === "pdf" && (
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Scale</Label>
-                  <Input
-                    type="number"
-                    value={options.scale}
-                    onChange={(e) => update({ scale: Math.max(0.5, Math.min(2, Number(e.target.value))) })}
-                    className="h-7 w-20 text-xs"
-                    min={0.5} max={2} step={0.1}
-                  />
-                </div>
+                <>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Orientation</Label>
+                    <div className="w-32">
+                      <Select
+                        value={options.pdfOrientation}
+                        onValueChange={(v: string) => update({ pdfOrientation: v as PdfOrientation })}
+                      >
+                        <SelectTrigger className="h-7 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="portrait">Portrait</SelectItem>
+                          <SelectItem value="landscape">Landscape</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Scale</Label>
+                    <Input
+                      type="number"
+                      value={options.scale}
+                      onChange={(e) => update({ scale: Math.max(0.5, Math.min(2, Number(e.target.value))) })}
+                      className="h-7 w-20 text-xs"
+                      min={0.5} max={2} step={0.1}
+                    />
+                  </div>
+                </>
               )}
             </div>
           )}

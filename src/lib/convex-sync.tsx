@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useQuery, useMutation, useConvex } from "convex/react";
+import { shallow } from "zustand/shallow";
 import { api } from "../../convex/_generated/api";
 import { getTabWorkspaceId, useEditorStore, DEFAULT_SETTINGS, WORKSPACE_PRESETS, type Settings, type NoteType, type Profile } from "@/lib/store";
 import { useAuthState } from "@/components/convex-client-provider";
@@ -117,12 +118,45 @@ function resolveProfileForRequestedTab(
   return requestedTab ? getTabWorkspaceId(requestedTab) : fallbackProfileId;
 }
 
+type SyncComparableTab = {
+  tabId: string;
+  title: string;
+  content: string;
+  workspaceId?: string;
+  folderId: string | null;
+  tags?: string[];
+  pinned?: boolean;
+  noteType?: string;
+  customIcon?: string;
+  iconColor?: string;
+};
+
+const SAVE_DEBOUNCE_MS = 1500;
+
+function getTabSyncKey(tab: SyncComparableTab): string {
+  return JSON.stringify([
+    tab.title,
+    tab.content,
+    tab.workspaceId ?? null,
+    tab.folderId,
+    tab.tags ?? [],
+    tab.pinned ?? false,
+    tab.noteType ?? "note",
+    tab.customIcon ?? null,
+    tab.iconColor ?? null,
+  ]);
+}
+
+function getSharedSyncKey(title: string, content: string): string {
+  return JSON.stringify([title, content]);
+}
+
 /**
  * Bidirectional sync between the Zustand store and Convex.
  *
  * Tables:
  *   users      – upserted on every login
- *   tabs       – one row per file, synced via tabs.syncAll
+ *   tabs       – one row per file, synced incrementally via tabs.upsert/remove
  *   workspaces – UI state + settings (no tabs)
  *
  * Live sync: after initial hydration, incoming Convex changes from
@@ -155,6 +189,8 @@ export function ConvexSync() {
   const convex = useConvex();
   const upsertUser = useMutation(api.users.upsert);
   const saveWorkspace = useMutation(api.workspace.save);
+  const upsertTab = useMutation(api.tabs.upsert);
+  const removeTab = useMutation(api.tabs.remove);
   const syncAllTabs = useMutation(api.tabs.syncAll);
   const updateSharedContent = useMutation(api.sharing.updateContent);
 
@@ -170,11 +206,14 @@ export function ConvexSync() {
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Track what we last pushed so we can distinguish our own echoes
   const lastPushedTabs = useRef<string>("");
+  const lastPushedTabById = useRef<Map<string, string>>(new Map());
   const lastPushedWorkspace = useRef<string>("");
   const lastRemoteTabs = useRef<string>("");
   const lastRemoteWorkspace = useRef<string>("");
   // Track shared note content to detect collaborator edits
   const lastSharedContent = useRef<Map<string, string>>(new Map());
+  const lastPushedSharedById = useRef<Map<string, string>>(new Map());
+  const upsertedUserId = useRef<string | null>(null);
 
   const getRequestedTabOverride = useCallback((onlineTabIdSet: Set<string>) => {
     if (typeof window === "undefined") return null;
@@ -214,8 +253,22 @@ export function ConvexSync() {
       iconColor: t.iconColor,
     }));
 
+    const nextTabStateById = new Map<string, string>();
+    const changedTabs: typeof tabsPayload = [];
+    for (const tab of tabsPayload) {
+      const nextTabKey = getTabSyncKey(tab);
+      nextTabStateById.set(tab.tabId, nextTabKey);
+      if (lastPushedTabById.current.get(tab.tabId) !== nextTabKey) {
+        changedTabs.push(tab);
+      }
+    }
+
+    const removedTabIds = Array.from(lastPushedTabById.current.keys()).filter(
+      (tabId) => !nextTabStateById.has(tabId)
+    );
+
     const nextTabsKey = JSON.stringify(
-      tabsPayload.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, workspaceId: t.workspaceId, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: t.noteType ?? "note" }))
+      tabsPayload.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, workspaceId: t.workspaceId, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: t.noteType ?? "note", customIcon: t.customIcon, iconColor: t.iconColor }))
     );
 
     const sanitizedSettings = sanitizeSettings(slice.settings);
@@ -241,43 +294,92 @@ export function ConvexSync() {
     };
     const nextWorkspaceKey = JSON.stringify(workspacePayload);
 
-    if (nextTabsKey === lastPushedTabs.current && nextWorkspaceKey === lastPushedWorkspace.current) {
+    const tabsChanged = changedTabs.length > 0 || removedTabIds.length > 0;
+    const workspaceChanged = nextWorkspaceKey !== lastPushedWorkspace.current;
+
+    if (!tabsChanged && !workspaceChanged) {
       return;
     }
-
-    lastPushedTabs.current = nextTabsKey;
-    lastPushedWorkspace.current = nextWorkspaceKey;
 
     setSyncState({ status: "syncing", error: null });
 
     try {
-      await syncAllTabs({ userId, tabs: tabsPayload });
+      if (tabsChanged) {
+        const tabWrites: Array<Promise<unknown>> = [];
 
-      // Sync shared note content in real-time
-      if (sharedTabs) {
-        const sharedTabIds = new Set(sharedTabs.map((s) => s.tabId));
-        for (const t of onlineTabs) {
-          if (sharedTabIds.has(t.id)) {
-            updateSharedContent({
-              ownerUserId: userId,
-              tabId: t.id,
-              title: t.title,
-              content: t.content,
-            }).catch(console.error);
-          }
+        for (const tab of changedTabs) {
+          tabWrites.push(
+            upsertTab({
+              userId,
+              tabId: tab.tabId,
+              title: tab.title,
+              content: tab.content,
+              workspaceId: tab.workspaceId,
+              folderId: tab.folderId,
+              tags: tab.tags,
+              pinned: tab.pinned,
+              noteType: tab.noteType,
+              customIcon: tab.customIcon,
+              iconColor: tab.iconColor,
+            })
+          );
+        }
+
+        for (const tabId of removedTabIds) {
+          tabWrites.push(removeTab({ userId, tabId }));
+        }
+
+        if (tabWrites.length > 0) {
+          await Promise.all(tabWrites);
         }
       }
-      await saveWorkspace({
-        userId,
-        ...workspacePayload,
-      });
+
+      // Sync shared note content in real-time
+      if (sharedTabs && changedTabs.length > 0) {
+        const sharedTabIds = new Set(sharedTabs.map((s) => s.tabId));
+        const sharedWrites: Array<Promise<unknown>> = [];
+        for (const t of changedTabs) {
+          if (sharedTabIds.has(t.tabId)) {
+            const sharedKey = getSharedSyncKey(t.title, t.content);
+            if (lastPushedSharedById.current.get(t.tabId) === sharedKey) {
+              continue;
+            }
+            lastPushedSharedById.current.set(t.tabId, sharedKey);
+            sharedWrites.push(
+              updateSharedContent({
+                ownerUserId: userId,
+                tabId: t.tabId,
+                title: t.title,
+                content: t.content,
+              })
+            );
+          }
+        }
+        if (sharedWrites.length > 0) {
+          await Promise.all(sharedWrites);
+        }
+      }
+
+      if (workspaceChanged) {
+        await saveWorkspace({
+          userId,
+          ...workspacePayload,
+        });
+      }
+
+      lastPushedTabs.current = nextTabsKey;
+      lastPushedTabById.current = nextTabStateById;
+      lastPushedWorkspace.current = nextWorkspaceKey;
+      for (const removedTabId of removedTabIds) {
+        lastPushedSharedById.current.delete(removedTabId);
+      }
 
       setSyncState({ status: "synced", lastSyncedAt: Date.now(), error: null });
     } catch (err) {
       console.error("[ConvexSync] push failed:", err);
       setSyncState({ status: "error", error: String(err) });
     }
-  }, [userId, syncAllTabs, saveWorkspace, sharedTabs, updateSharedContent]);
+  }, [userId, upsertTab, removeTab, saveWorkspace, sharedTabs, updateSharedContent]);
 
   // ── Manual sync: pull from Convex then push local state ────────────
   const manualSync = useCallback(async () => {
@@ -379,7 +481,24 @@ export function ConvexSync() {
       });
 
       lastPushedTabs.current = JSON.stringify(
-        latestRemoteTabs.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, workspaceId: (t as Record<string, unknown>).workspaceId as string | undefined, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: ((t as Record<string, unknown>).noteType as string) ?? "note" }))
+        latestRemoteTabs.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, workspaceId: (t as Record<string, unknown>).workspaceId as string | undefined, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: ((t as Record<string, unknown>).noteType as string) ?? "note", customIcon: (t as Record<string, unknown>).customIcon as string | undefined, iconColor: (t as Record<string, unknown>).iconColor as string | undefined }))
+      );
+      lastPushedTabById.current = new Map(
+        latestRemoteTabs.map((t) => {
+          const comparableTab: SyncComparableTab = {
+            tabId: t.tabId,
+            title: t.title,
+            content: t.content,
+            workspaceId: (t as Record<string, unknown>).workspaceId as string | undefined,
+            folderId: t.folderId,
+            tags: t.tags ?? [],
+            pinned: t.pinned ?? false,
+            noteType: ((t as Record<string, unknown>).noteType as string) ?? "note",
+            customIcon: (t as Record<string, unknown>).customIcon as string | undefined,
+            iconColor: (t as Record<string, unknown>).iconColor as string | undefined,
+          };
+          return [t.tabId, getTabSyncKey(comparableTab)] as const;
+        })
       );
       const sanitizedRemoteSettings = sanitizeSettings(mergedRemoteSettings);
       lastPushedWorkspace.current = JSON.stringify({
@@ -454,12 +573,16 @@ export function ConvexSync() {
   // ── Upsert user on login ────────────────────────────────────────────
   useEffect(() => {
     if (!isAuthenticated || !user) return;
+    if (upsertedUserId.current === user.id) return;
+
     upsertUser({
       workosId: user.id,
       email: user.email,
       firstName: user.firstName ?? undefined,
       lastName: user.lastName ?? undefined,
       profilePictureUrl: user.profilePictureUrl ?? undefined,
+    }).then(() => {
+      upsertedUserId.current = user.id;
     }).catch(console.error);
   }, [isAuthenticated, user, upsertUser]);
 
@@ -548,7 +671,24 @@ export function ConvexSync() {
 
       // Record what we just loaded as our "last pushed" baseline
       lastPushedTabs.current = JSON.stringify(
-        remoteTabs.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, workspaceId: (t as Record<string, unknown>).workspaceId as string | undefined, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: ((t as Record<string, unknown>).noteType as string) ?? "note" }))
+        remoteTabs.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, workspaceId: (t as Record<string, unknown>).workspaceId as string | undefined, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: ((t as Record<string, unknown>).noteType as string) ?? "note", customIcon: (t as Record<string, unknown>).customIcon as string | undefined, iconColor: (t as Record<string, unknown>).iconColor as string | undefined }))
+      );
+      lastPushedTabById.current = new Map(
+        remoteTabs.map((t) => {
+          const comparableTab: SyncComparableTab = {
+            tabId: t.tabId,
+            title: t.title,
+            content: t.content,
+            workspaceId: (t as Record<string, unknown>).workspaceId as string | undefined,
+            folderId: t.folderId,
+            tags: t.tags ?? [],
+            pinned: t.pinned ?? false,
+            noteType: ((t as Record<string, unknown>).noteType as string) ?? "note",
+            customIcon: (t as Record<string, unknown>).customIcon as string | undefined,
+            iconColor: (t as Record<string, unknown>).iconColor as string | undefined,
+          };
+          return [t.tabId, getTabSyncKey(comparableTab)] as const;
+        })
       );
       const sanitizedRemoteSettings = sanitizeSettings(mergedRemoteSettings);
       lastPushedWorkspace.current = JSON.stringify({
@@ -582,21 +722,22 @@ export function ConvexSync() {
       // No data in Convex yet — push current local state up
       didInitialSave.current = true;
       const s = useEditorStore.getState();
+      const initialTabs = s.tabs.filter((t) => t.origin !== "local").map((t) => ({
+        tabId: t.id,
+        title: t.title,
+        content: t.content,
+        workspaceId: getTabWorkspaceId(t),
+        folderId: t.folderId,
+        tags: t.tags,
+        pinned: t.pinned,
+        noteType: t.noteType ?? "note",
+        customIcon: t.customIcon,
+        iconColor: t.iconColor,
+      }));
 
       syncAllTabs({
         userId,
-        tabs: s.tabs.filter((t) => t.origin !== "local").map((t) => ({
-          tabId: t.id,
-          title: t.title,
-          content: t.content,
-          workspaceId: getTabWorkspaceId(t),
-          folderId: t.folderId,
-          tags: t.tags,
-          pinned: t.pinned,
-          noteType: t.noteType ?? "note",
-          customIcon: t.customIcon,
-          iconColor: t.iconColor,
-        })),
+        tabs: initialTabs,
       }).catch(console.error);
 
       setSyncState({ status: "syncing", error: null });
@@ -625,6 +766,29 @@ export function ConvexSync() {
         profiles: s.profiles.map((p) => ({ id: p.id, name: p.name })),
         activeProfileId: s.activeProfileId,
       }).then(() => {
+        lastPushedTabs.current = JSON.stringify(
+          initialTabs.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, workspaceId: t.workspaceId, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: t.noteType ?? "note", customIcon: t.customIcon, iconColor: t.iconColor }))
+        );
+        lastPushedTabById.current = new Map(
+          initialTabs.map((t) => [t.tabId, getTabSyncKey(t)] as const)
+        );
+        lastPushedWorkspace.current = JSON.stringify({
+          activeTabId: s.activeTabId && onlineTabIdsInActiveWorkspace.has(s.activeTabId) ? s.activeTabId : null,
+          openTabIds: s.openTabIds.filter((id) => onlineTabIdsInActiveWorkspace.has(id)),
+          folders: s.folders.map((f) => ({
+            id: f.id,
+            name: f.name,
+            color: f.color,
+            parentId: f.parentId,
+            sortOrder: f.sortOrder,
+          })),
+          viewMode: s.viewMode,
+          theme: (s.theme === "dark" || s.theme === "light") ? s.theme : (String(s.theme).toLowerCase().includes("dark") ? "dark" : "light"),
+          fileTreeOpen: s.fileTreeOpen,
+          settings: sanitizeSettings(s.settings),
+          profiles: s.profiles.map((p) => ({ id: p.id, name: p.name })),
+          activeProfileId: s.activeProfileId,
+        });
         setSyncState({ status: "synced", lastSyncedAt: Date.now(), error: null });
       }).catch((err) => {
         console.error("[ConvexSync] initial push failed:", err);
@@ -787,6 +951,23 @@ export function ConvexSync() {
     });
 
     lastPushedTabs.current = incomingTabsKey;
+    lastPushedTabById.current = new Map(
+      remoteTabs.map((t) => {
+        const comparableTab: SyncComparableTab = {
+          tabId: t.tabId,
+          title: t.title,
+          content: t.content,
+          workspaceId: (t as Record<string, unknown>).workspaceId as string | undefined,
+          folderId: t.folderId,
+          tags: t.tags ?? [],
+          pinned: t.pinned ?? false,
+          noteType: ((t as Record<string, unknown>).noteType as string) ?? "note",
+          customIcon: (t as Record<string, unknown>).customIcon as string | undefined,
+          iconColor: (t as Record<string, unknown>).iconColor as string | undefined,
+        };
+        return [t.tabId, getTabSyncKey(comparableTab)] as const;
+      })
+    );
     lastPushedWorkspace.current = incomingWorkspaceKey;
     lastRemoteTabs.current = incomingTabsKey;
     lastRemoteWorkspace.current = incomingWorkspaceKey;
@@ -840,7 +1021,7 @@ export function ConvexSync() {
         lastPushedTabs.current = JSON.stringify(
           newTabs
             .filter((t) => t.origin !== "local")
-            .map((t) => ({ tabId: t.id, title: t.title, content: t.content, workspaceId: t.workspaceId, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false }))
+            .map((t) => ({ tabId: t.id, title: t.title, content: t.content, workspaceId: t.workspaceId, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: t.noteType ?? "note", customIcon: t.customIcon, iconColor: t.iconColor }))
         );
         requestAnimationFrame(() => { isHydrating.current = false; });
       }
@@ -849,7 +1030,7 @@ export function ConvexSync() {
     applyCollabUpdates();
   }, [sharedTabs]);
 
-  // ── Persist store changes → Convex (debounced 500ms) ───────────────
+  // ── Persist store changes → Convex (debounced) ─────────────────────
   useEffect(() => {
     if (!isAuthenticated || !userId) return;
 
@@ -862,8 +1043,7 @@ export function ConvexSync() {
         viewMode: s.viewMode,
         theme: (s.theme === "dark" || s.theme === "light") ? s.theme : (String(s.theme).toLowerCase().includes("dark") ? "dark" : "light"),
         fileTreeOpen: s.fileTreeOpen,
-        // Only send allowed fields to Convex (must match settingsValidator)
-        settings: sanitizeSettings(s.settings),
+        settings: s.settings,
         profiles: s.profiles,
         activeProfileId: s.activeProfileId,
       }),
@@ -879,9 +1059,9 @@ export function ConvexSync() {
         if (saveTimeout.current) clearTimeout(saveTimeout.current);
         saveTimeout.current = setTimeout(() => {
           pushCurrentState();
-        }, 500);
+        }, SAVE_DEBOUNCE_MS);
       },
-      { equalityFn: (a, b) => a === b }
+      { equalityFn: shallow }
     );
 
     return () => {
