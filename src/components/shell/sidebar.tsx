@@ -543,7 +543,7 @@ function SyncButton({
       case "synced":
         return "Synced — click to sync now";
       case "error":
-        return `Sync error — click to retry`;
+        return "Sync error — click to retry";
       case "offline":
         return "Offline — changes saved locally";
       case "disabled":

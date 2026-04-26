@@ -535,7 +535,8 @@ export function KanbanView() {
         nextColumns.push(doneColumn);
       }
 
-      const doneIndex = nextColumns.findIndex((column) => column.id === doneColumn!.id);
+      const doneIndex = nextColumns.findIndex((column) => column.id === doneColumn.id);
+      if (doneIndex < 0) return;
       nextColumns[doneIndex].cards.unshift(completedCard);
 
       commit({ ...board, columns: ensureAtLeastOneColumn(nextColumns) });

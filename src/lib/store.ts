@@ -716,8 +716,8 @@ export const useEditorStore = create<EditorState>()(
         const toDelete = new Set<string>();
         const queue: string[] = [id];
         while (queue.length) {
-          const current = queue.pop()!;
-          if (toDelete.has(current)) continue;
+          const current = queue.pop();
+          if (!current || toDelete.has(current)) continue;
           toDelete.add(current);
           s.folders.forEach((f) => {
             if (f.parentId === current) queue.push(f.id);

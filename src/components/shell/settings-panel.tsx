@@ -727,7 +727,7 @@ function TypographySection({
                 });
               }
             }
-            placeholder={`e.g. "Fira Code", ui-monospace, monospace`}
+            placeholder='e.g. "Fira Code", ui-monospace, monospace'
             className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
           {settings.fontFamily && (

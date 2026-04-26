@@ -99,9 +99,10 @@ function InlineLine({ lineIndex, text, isActive, onFocus, onBlur, onChange, onKe
 
   // Auto-resize textarea height
   useEffect(() => {
-    if (isActive && textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = textareaRef.current.scrollHeight + "px";
+    const textarea = textareaRef.current;
+    if (isActive && textarea) {
+      textarea.style.removeProperty("height");
+      textarea.style.height = `${textarea.scrollHeight}px`;
     }
   }, [isActive, text]);
 

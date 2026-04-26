@@ -43,13 +43,14 @@ async function readLocalFiles(folder: string): Promise<LocalFile[]> {
   const files: LocalFile[] = [];
 
   for (const entry of entries) {
-    if (!entry.name || entry.isDirectory) continue;
-    const ext = SYNC_EXTENSIONS.find((e) => entry.name!.endsWith(e));
+    const entryName = entry.name;
+    if (!entryName || entry.isDirectory) continue;
+    const ext = SYNC_EXTENSIONS.find((e) => entryName.endsWith(e));
     if (!ext) continue;
     try {
-      const content = await readTextFile(`${folder}/${entry.name}`);
+      const content = await readTextFile(`${folder}/${entryName}`);
       files.push({
-        name: entry.name,
+        name: entryName,
         content,
         noteType: extensionToNoteType(ext),
       });

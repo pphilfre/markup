@@ -275,7 +275,7 @@ function IconPickerPopover({
             ))}
             {tab.iconColor && (
               <button
-                onClick={() => setTabIcon(tab.id, tab.customIcon, undefined)}
+                onClick={() => setTabIcon(tab.id, tab.customIcon)}
                 className="h-4 w-4 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-foreground"
                 title="Reset color"
               >
@@ -314,7 +314,7 @@ function IconPickerPopover({
           {tab.customIcon && (
             <button
               onClick={() => {
-                setTabIcon(tab.id, undefined, undefined);
+                setTabIcon(tab.id);
                 setOpen(false);
               }}
               className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
@@ -706,6 +706,12 @@ function FileItem({
     setAddingTag(false);
   };
 
+  useEffect(() => {
+    if (addingTag) {
+      tagInputRef.current?.focus();
+    }
+  }, [addingTag]);
+
   const allTags = getAllTags();
 
   return (
@@ -993,7 +999,6 @@ function FileItem({
           {addingTag ? (
             <input
               ref={tagInputRef}
-              autoFocus
               value={newTag}
               onChange={(e) => setNewTag(e.target.value)}
               onBlur={commitTag}

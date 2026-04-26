@@ -250,6 +250,13 @@ export function GraphView() {
   const lastMouseRef = useRef({ x: 0, y: 0 });
   const animFrameRef = useRef<number>(0);
   const dragMovedRef = useRef(false);
+  const editingGroupInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (editingGroupName) {
+      editingGroupInputRef.current?.focus();
+    }
+  }, [editingGroupName]);
 
   // Gather all unique tags
   const allTags = useMemo(() => {
@@ -1070,7 +1077,7 @@ export function GraphView() {
                         />
                         {editingGroupName === group.id ? (
                           <input
-                            autoFocus
+                            ref={editingGroupInputRef}
                             defaultValue={group.name}
                             className="flex-1 bg-transparent text-[10px] outline-none border-b border-primary/50"
                             onBlur={(e) => {

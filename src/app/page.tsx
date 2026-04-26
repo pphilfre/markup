@@ -74,7 +74,7 @@ export default function Home() {
 
     if (desktopPort) {
       // Clear the cookie immediately
-      document.cookie = "desktop_port=; path=/; max-age=0";
+      document.cookie = "desktop_port=; path=/; max-age=0; secure; samesite=lax";
       (async () => {
         try {
           const res = await fetch("/api/auth/token");
