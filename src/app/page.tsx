@@ -16,6 +16,9 @@ import { useGlobalKeybinds } from "@/lib/keybinds";
 import { useIsMobile } from "@/lib/use-mobile";
 import { useEffect, useState, useCallback, useRef } from "react";
 
+/**
+ * Root application shell that hydrates editor state and selects mobile/desktop layout.
+ */
 export default function Home() {
   const hydrated = useEditorStore((s) => s._hydrated);
   const hydrate = useEditorStore((s) => s.hydrate);

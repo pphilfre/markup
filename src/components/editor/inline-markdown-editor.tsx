@@ -19,9 +19,14 @@ import "katex/dist/katex.min.css";
 import { emojify } from "node-emoji";
 import { useEditorStore } from "@/lib/store";
 
+const HIGHLIGHT_MARK_PATTERN = new RegExp("==([^=\\n]+)==", "g");
+
+/**
+ * Applies single-line markdown preprocessing shortcuts before rendering.
+ */
 function preprocessLine(line: string): string {
   let out = emojify(line, { fallback: (name) => `:${name}:` });
-  out = out.replace(/==([^=\n]+)==/g, '<mark>$1</mark>');
+  out = out.replace(HIGHLIGHT_MARK_PATTERN, "<mark>$1</mark>");
   return out;
 }
 
@@ -33,6 +38,9 @@ const ADMONITION_TYPES: Record<string, { color: string; icon: string; label: str
   CAUTION: { color: "#ef4444", icon: "🔴", label: "Caution" },
 };
 
+/**
+ * Parses GitHub-style admonition markers from blockquote children.
+ */
 function parseAdmonition(children: React.ReactNode): { type: string; content: React.ReactNode } | null {
   const childArr = Array.isArray(children) ? children : [children];
   if (childArr.length === 0) return null;
@@ -79,6 +87,9 @@ interface LineProps {
   };
 }
 
+/**
+ * Renders a single editable markdown line, toggling between preview and textarea modes.
+ */
 function InlineLine({ lineIndex, text, isActive, onFocus, onBlur, onChange, onKeyDown, onActiveTextarea, onSelectionChange, settings }: LineProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -201,6 +212,9 @@ function InlineLine({ lineIndex, text, isActive, onFocus, onBlur, onChange, onKe
   );
 }
 
+/**
+ * Main inline markdown editor that manages line-level editing and selection sync.
+ */
 export function InlineMarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => void } = {}) {
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const tabs = useEditorStore((s) => s.tabs);
@@ -214,6 +228,20 @@ export function InlineMarkdownEditor({ onScroll }: { onScroll?: (fraction: numbe
   const containerRef = useRef<HTMLDivElement>(null);
 
   const lines = useMemo(() => (activeTab?.content ?? "").split("\n"), [activeTab?.content]);
+  const lineKeys = useMemo(() => {
+    const result = lines.reduce(
+      (acc, line) => {
+        const nextKey = `${line.length}:${acc.offset}:${line}`;
+        return {
+          keys: [...acc.keys, nextKey],
+          offset: acc.offset + line.length + 1,
+        };
+      },
+      { keys: [] as string[], offset: 0 }
+    );
+
+    return result.keys;
+  }, [lines]);
 
   const handleFocus = useCallback((idx: number) => setActiveLineIdx(idx), []);
 
@@ -238,72 +266,105 @@ export function InlineMarkdownEditor({ onScroll }: { onScroll?: (fraction: numbe
     [activeTab, lines, updateContent]
   );
 
-  const handleKeyDown = useCallback(
-    (idx: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (settings.autoPunctuation && e.key === " " && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
-        const input = e.currentTarget;
-        const selStart = input.selectionStart ?? 0;
-        const selEnd = input.selectionEnd ?? 0;
-        const lineText = lines[idx] ?? "";
+  const tryAutoPunctuation = useCallback(
+    (idx: number, e: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
+      if (!settings.autoPunctuation || e.key !== " ") return false;
+      if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return false;
 
-        if (
-          selStart === selEnd &&
-          selStart >= 2 &&
-          lineText[selStart - 1] === " " &&
-          /[A-Za-z0-9\])"']/.test(lineText[selStart - 2])
-        ) {
-          e.preventDefault();
-          if (!activeTab) return;
+      const input = e.currentTarget;
+      const selStart = input.selectionStart ?? 0;
+      const selEnd = input.selectionEnd ?? 0;
+      const lineText = lines[idx] ?? "";
 
-          const updatedLine = `${lineText.slice(0, selStart - 1)}. ${lineText.slice(selStart)}`;
-          const newLines = [...lines];
-          newLines[idx] = updatedLine;
-          updateContent(activeTab.id, newLines.join("\n"));
+      const hasSelection = selStart !== selEnd;
+      const canInsertSentenceBreak =
+        selStart >= 2 && lineText[selStart - 1] === " " && /[A-Za-z0-9\])"']/.test(lineText[selStart - 2]);
 
-          queueMicrotask(() => {
-            const cursorPos = selStart + 1;
-            input.setSelectionRange(cursorPos, cursorPos);
-            setInlineSelection({ lineIndex: idx, from: cursorPos, to: cursorPos });
-          });
-          return;
-        }
-      }
+      if (hasSelection || !canInsertSentenceBreak) return false;
+
+      e.preventDefault();
+      if (!activeTab) return true;
+
+      const updatedLine = `${lineText.slice(0, selStart - 1)}. ${lineText.slice(selStart)}`;
+      const newLines = [...lines];
+      newLines[idx] = updatedLine;
+      updateContent(activeTab.id, newLines.join("\n"));
+
+      queueMicrotask(() => {
+        const cursorPos = selStart + 1;
+        input.setSelectionRange(cursorPos, cursorPos);
+        setInlineSelection({ lineIndex: idx, from: cursorPos, to: cursorPos });
+      });
+      return true;
+    },
+    [activeTab, lines, setInlineSelection, settings.autoPunctuation, updateContent]
+  );
+
+  const tryLineNavigation = useCallback(
+    (idx: number, e: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
+      if (!activeTab) return false;
 
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        if (!activeTab) return;
         const newLines = [...lines];
         newLines.splice(idx + 1, 0, "");
         updateContent(activeTab.id, newLines.join("\n"));
         setActiveLineIdx(idx + 1);
-      } else if (e.key === "Backspace" && lines[idx] === "" && lines.length > 1) {
+        return true;
+      }
+
+      if (e.key === "Backspace" && lines[idx] === "" && lines.length > 1) {
         e.preventDefault();
-        if (!activeTab) return;
         const newLines = [...lines];
         newLines.splice(idx, 1);
         updateContent(activeTab.id, newLines.join("\n"));
         setActiveLineIdx(Math.max(0, idx - 1));
-      } else if (e.key === "ArrowUp" && idx > 0) {
+        return true;
+      }
+
+      if (e.key === "ArrowUp" && idx > 0) {
         e.preventDefault();
         setActiveLineIdx(idx - 1);
-      } else if (e.key === "ArrowDown" && idx < lines.length - 1) {
+        return true;
+      }
+
+      if (e.key === "ArrowDown" && idx < lines.length - 1) {
         e.preventDefault();
         setActiveLineIdx(idx + 1);
+        return true;
       }
+
+      return false;
     },
-    [activeTab, lines, settings.autoPunctuation, setInlineSelection, updateContent]
+    [activeTab, lines, updateContent]
+  );
+
+  const handleKeyDown = useCallback(
+    (idx: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (tryAutoPunctuation(idx, e)) return;
+      tryLineNavigation(idx, e);
+    },
+    [tryAutoPunctuation, tryLineNavigation]
   );
 
   // Scroll sync
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !onScroll) return;
-    const handler = () => {
+
+    /**
+     * Emits normalized scroll progress for parent preview sync.
+     */
+    const handler = (): void => {
       const max = el.scrollHeight - el.clientHeight;
       onScroll(max > 0 ? el.scrollTop / max : 0);
     };
+
     el.addEventListener("scroll", handler, { passive: true });
-    return () => el.removeEventListener("scroll", handler);
+
+    return () => {
+      el.removeEventListener("scroll", handler);
+    };
   }, [onScroll]);
 
   if (!activeTab) {
@@ -323,7 +384,7 @@ export function InlineMarkdownEditor({ onScroll }: { onScroll?: (fraction: numbe
       <div className="mx-auto py-4" style={{ maxWidth: settings.maxLineWidth > 0 ? `${settings.maxLineWidth}ch` : undefined }}>
         {lines.map((line, idx) => (
           <InlineLine
-            key={idx}
+            key={lineKeys[idx]}
             lineIndex={idx}
             text={line}
             isActive={activeLineIdx === idx}

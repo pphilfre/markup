@@ -9,6 +9,12 @@ const RESTART_DELAY_MS = 1200;
 let child = null;
 let stopping = false;
 
+/**
+ * Reads and parses JSON from disk.
+ *
+ * @param {string} filePath
+ * @returns {unknown | null}
+ */
 function readJson(filePath) {
   try {
     return JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -17,6 +23,12 @@ function readJson(filePath) {
   }
 }
 
+/**
+ * Checks whether a process id currently exists.
+ *
+ * @param {number} pid
+ * @returns {boolean}
+ */
 function processExists(pid) {
   if (!Number.isInteger(pid) || pid <= 1) {
     return false;
@@ -29,6 +41,12 @@ function processExists(pid) {
   }
 }
 
+/**
+ * Reads cwd and command line information for a Linux process.
+ *
+ * @param {number} pid
+ * @returns {{ cwd: string, cmdline: string } | null}
+ */
 function getLinuxProcessInfo(pid) {
   try {
     const cwd = fs.readlinkSync(`/proc/${pid}/cwd`);
@@ -40,6 +58,12 @@ function getLinuxProcessInfo(pid) {
   }
 }
 
+/**
+ * Determines whether a pid belongs to this workspace's Next.js dev process.
+ *
+ * @param {number} pid
+ * @returns {boolean}
+ */
 function isWorkspaceNextDevProcess(pid) {
   if (pid === process.pid || !processExists(pid) || process.platform !== "linux") {
     return false;
@@ -51,6 +75,13 @@ function isWorkspaceNextDevProcess(pid) {
   return info.cmdline.includes("node_modules/next/dist/bin/next") && info.cmdline.includes(" dev");
 }
 
+/**
+ * Sends a signal to a process group, falling back to a direct pid signal.
+ *
+ * @param {number} pid
+ * @param {NodeJS.Signals} [signal="SIGTERM"]
+ * @returns {void}
+ */
 function killProcessTree(pid, signal = "SIGTERM") {
   if (!processExists(pid)) {
     return;
@@ -68,6 +99,11 @@ function killProcessTree(pid, signal = "SIGTERM") {
   }
 }
 
+/**
+ * Removes the Next.js dev lock file if it exists.
+ *
+ * @returns {void}
+ */
 function removeLockFile() {
   try {
     fs.unlinkSync(nextDevLockPath);
@@ -76,6 +112,11 @@ function removeLockFile() {
   }
 }
 
+/**
+ * Stops stale workspace Next.js dev processes and clears the lock file.
+ *
+ * @returns {void}
+ */
 function cleanupPreviousNextDev() {
   const lock = readJson(nextDevLockPath);
   const lockPid = Number.isInteger(lock?.pid) ? lock.pid : null;
@@ -110,6 +151,11 @@ function cleanupPreviousNextDev() {
   removeLockFile();
 }
 
+/**
+ * Starts Next.js dev and restarts it when it exits unexpectedly.
+ *
+ * @returns {void}
+ */
 function startNext() {
   cleanupPreviousNextDev();
 
@@ -121,7 +167,7 @@ function startNext() {
 
   child.on("exit", (code, signal) => {
     if (stopping) {
-      process.exit(code ?? (signal ? 1 : 0));
+      process.exitCode = code ?? (signal ? 1 : 0);
       return;
     }
 
@@ -144,6 +190,12 @@ function startNext() {
   });
 }
 
+/**
+ * Stops the currently running Next.js dev child process.
+ *
+ * @param {NodeJS.Signals} signal
+ * @returns {void}
+ */
 function stopNext(signal) {
   if (stopping) {
     return;
@@ -155,7 +207,7 @@ function stopNext(signal) {
     try {
       process.kill(-childPid, signal);
     } catch {
-      process.exit(0);
+      process.exitCode = 0;
       return;
     }
 
@@ -169,7 +221,7 @@ function stopNext(signal) {
       }
     }, 500).unref();
   } else {
-    process.exit(0);
+    process.exitCode = 0;
   }
 }
 

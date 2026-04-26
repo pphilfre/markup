@@ -1,9 +1,22 @@
+/**
+ * Normalizes a version string by trimming and removing a leading "v".
+ *
+ * @param {unknown} input
+ * @returns {string}
+ */
 function normalizeVersion(input) {
   const trimmed = String(input ?? "").trim();
   if (!trimmed) throw new Error("Missing version");
   return trimmed.startsWith("v") ? trimmed.slice(1) : trimmed;
 }
 
+/**
+ * Updates the package version inside Cargo.toml text.
+ *
+ * @param {string} text
+ * @param {string} nextVersion
+ * @returns {string}
+ */
 function updateCargoToml(text, nextVersion) {
   const lines = text.split(/\r?\n/);
   let inPackage = false;
@@ -26,9 +39,16 @@ function updateCargoToml(text, nextVersion) {
   }
 
   if (!changed) throw new Error("Failed to update src-tauri/Cargo.toml package version");
-  return lines.join("\n").replace(/\n{3,}/g, "\n\n") + "\n";
+  return `${lines.join("\n").replace(/\n{3,}/g, "\n\n")}\n`;
 }
 
+/**
+ * Updates the markup package version inside Cargo.lock text.
+ *
+ * @param {string} text
+ * @param {string} nextVersion
+ * @returns {string}
+ */
 function updateCargoLock(text, nextVersion) {
   const lines = text.split(/\r?\n/);
   let inPackage = false;
@@ -58,19 +78,37 @@ function updateCargoLock(text, nextVersion) {
   }
 
   if (!changed) throw new Error("Failed to update src-tauri/Cargo.lock package version");
-  return lines.join("\n") + "\n";
+  return `${lines.join("\n")}\n`;
 }
 
+/**
+ * Synchronizes project version files from version.json.
+ *
+ * @returns {Promise<void>}
+ */
 async function main() {
   const fs = await import("node:fs");
   const path = await import("node:path");
 
+  /**
+   * Reads JSON from a file.
+   *
+   * @param {string} filePath
+   * @returns {any}
+   */
   function readJson(filePath) {
     return JSON.parse(fs.readFileSync(filePath, "utf8"));
   }
 
+  /**
+   * Writes JSON to a file with trailing newline.
+   *
+   * @param {string} filePath
+   * @param {unknown} value
+   * @returns {void}
+   */
   function writeJson(filePath, value) {
-    fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n", "utf8");
+    fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
   }
 
   const root = path.resolve(__dirname, "..");

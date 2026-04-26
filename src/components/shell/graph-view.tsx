@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useMemo, useState, useCallback } from "react";
-import { useEditorStore, Tab } from "@/lib/store";
+import { useEditorStore } from "@/lib/store";
 import { extractBacklinks } from "@/components/editor/markdown-preview";
 import {
   forceSimulation,
@@ -15,7 +15,6 @@ import {
   SimulationLinkDatum,
 } from "d3-force";
 import {
-  Tag,
   Filter,
   ZoomIn,
   ZoomOut,
@@ -69,6 +68,7 @@ const GROUP_COLORS = [
   "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899",
 ];
 
+/** Return a deterministic color for a tag from the shared palette. */
 function getTagColor(tag: string, allTags: string[]): string {
   const idx = allTags.indexOf(tag);
   return TAG_COLORS[idx % TAG_COLORS.length];
@@ -113,6 +113,7 @@ const DEFAULT_FORCES: ForceSettings = {
 const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 3;
 
+/** Clamp zoom values to the graph view's safe range. */
 function clampZoom(value: number): number {
   return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value));
 }
@@ -146,6 +147,7 @@ function PanelSection({
   );
 }
 
+/** Render a compact slider control used by graph settings rows. */
 function SliderRow({
   label,
   value,
@@ -180,6 +182,7 @@ function SliderRow({
   );
 }
 
+/** Render a compact toggle control used by graph settings rows. */
 function ToggleRow({
   label,
   checked,
@@ -413,57 +416,49 @@ export function GraphView() {
 
     const isDark = theme === "dark";
 
-    const render = () => {
-      const dpr = window.devicePixelRatio || 1;
-      const rect = container.getBoundingClientRect();
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      canvas.style.width = rect.width + "px";
-      canvas.style.height = rect.height + "px";
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const getLinkNodeIds = (link: GraphLink) => ({
+      sourceId: typeof link.source === "object" ? link.source.id : link.source,
+      targetId: typeof link.target === "object" ? link.target.id : link.target,
+    });
 
-      ctx.fillStyle = isDark ? "#0a0a0a" : "#fafafa";
-      ctx.fillRect(0, 0, rect.width, rect.height);
-
-      ctx.save();
-      ctx.translate(pan.x, pan.y);
-      ctx.scale(zoom, zoom);
-
-      const simNodes = nodesRef.current;
-      const simLinks = linksRef.current;
-
-      // Draw group backgrounds
+    const drawGroupBackgrounds = (simNodes: GraphNode[]) => {
       groups.forEach((group) => {
         const groupNodes = simNodes.filter((n) => group.nodeIds.has(n.id) && n.x != null && n.y != null);
         if (groupNodes.length < 2) return;
 
-        let gMinX = Infinity, gMinY = Infinity, gMaxX = -Infinity, gMaxY = -Infinity;
+        let gMinX = Infinity;
+        let gMinY = Infinity;
+        let gMaxX = -Infinity;
+        let gMaxY = -Infinity;
         groupNodes.forEach((n) => {
           gMinX = Math.min(gMinX, n.x ?? 0);
           gMinY = Math.min(gMinY, n.y ?? 0);
           gMaxX = Math.max(gMaxX, n.x ?? 0);
           gMaxY = Math.max(gMaxY, n.y ?? 0);
         });
+
         const pad = 40;
-        ctx.beginPath();
         const rx = gMinX - pad;
         const ry = gMinY - pad;
         const rw = gMaxX - gMinX + pad * 2;
         const rh = gMaxY - gMinY + pad * 2;
+
+        ctx.beginPath();
         ctx.roundRect(rx, ry, rw, rh, 12);
-        ctx.fillStyle = group.color + "15";
+        ctx.fillStyle = `${group.color}15`;
         ctx.fill();
-        ctx.strokeStyle = group.color + "40";
+        ctx.strokeStyle = `${group.color}40`;
         ctx.lineWidth = 1;
         ctx.stroke();
 
         ctx.font = "bold 10px system-ui, sans-serif";
-        ctx.fillStyle = group.color + "80";
+        ctx.fillStyle = `${group.color}80`;
         ctx.textAlign = "left";
         ctx.fillText(group.name, rx + 8, ry + 14);
       });
+    };
 
-      // Draw links
+    const drawLinks = (simNodes: GraphNode[], simLinks: GraphLink[]) => {
       simLinks.forEach((link) => {
         const source = typeof link.source === "object" ? link.source : simNodes.find((n) => n.id === link.source);
         const target = typeof link.target === "object" ? link.target : simNodes.find((n) => n.id === link.target);
@@ -474,7 +469,7 @@ export function GraphView() {
         if (!sourceVisible && !targetVisible) return;
 
         const isHighlighted = hoveredNode === source.id || hoveredNode === target.id;
-        const isManual = (link as GraphLink).manual;
+        const isManual = link.manual;
 
         ctx.beginPath();
         ctx.moveTo(source.x, source.y);
@@ -491,110 +486,156 @@ export function GraphView() {
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Arrows
-        if (display.showArrows) {
-          const dx = target.x - source.x;
-          const dy = target.y - source.y;
-          const len = Math.sqrt(dx * dx + dy * dy);
-          if (len > 0) {
-            const baseNodeSize = (target as GraphNode).hasContent ? 7 : 5;
-            const r = baseNodeSize * display.nodeSize;
-            const nx = dx / len;
-            const ny = dy / len;
-            const ax = target.x - nx * (r + 3);
-            const ay = target.y - ny * (r + 3);
-            const arrowSize = 6 * display.lineThickness;
-            ctx.beginPath();
-            ctx.moveTo(ax, ay);
-            ctx.lineTo(ax - arrowSize * nx + arrowSize * 0.4 * ny, ay - arrowSize * ny - arrowSize * 0.4 * nx);
-            ctx.lineTo(ax - arrowSize * nx - arrowSize * 0.4 * ny, ay - arrowSize * ny + arrowSize * 0.4 * nx);
-            ctx.closePath();
-            ctx.fillStyle = isHighlighted
-              ? (isDark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)")
-              : (isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.2)");
-            ctx.fill();
-          }
-        }
-      });
+        if (!display.showArrows) return;
 
-      // Draw link-mode indicator
-      if (linkMode && linkSourceId) {
-        const sourceNode = simNodes.find((n) => n.id === linkSourceId);
-        if (sourceNode && sourceNode.x != null && sourceNode.y != null) {
-          ctx.beginPath();
-          ctx.arc(sourceNode.x, sourceNode.y, 14 * display.nodeSize, 0, Math.PI * 2);
-          ctx.strokeStyle = accentColor;
-          ctx.lineWidth = 2;
-          ctx.setLineDash([4, 3]);
-          ctx.stroke();
-          ctx.setLineDash([]);
-        }
-      }
+        const dx = target.x - source.x;
+        const dy = target.y - source.y;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len <= 0) return;
 
-      // Draw nodes
-      simNodes.forEach((node) => {
-        if (node.x == null || node.y == null) return;
-
-        const visible = filteredNodeIds.has(node.id);
-        const isHovered = hoveredNode === node.id;
-        const isLinkSource = linkMode && linkSourceId === node.id;
-        const isConnectedToHover = hoveredNode
-          ? simLinks.some((l) => {
-              const sId = typeof l.source === "object" ? l.source.id : l.source;
-              const tId = typeof l.target === "object" ? l.target.id : l.target;
-              return (sId === hoveredNode && tId === node.id) || (tId === hoveredNode && sId === node.id);
-            })
-          : false;
-
-        const opacity = !visible ? 0.15 : isHovered || isConnectedToHover || isLinkSource ? 1 : hoveredNode ? 0.4 : 1;
-        const baseRadius = node.hasContent ? 7 : 5;
-        const radius = (isHovered ? baseRadius + 3 : baseRadius) * display.nodeSize;
-        const color = getNodeColor(node);
-
-        if (isHovered) {
-          ctx.beginPath();
-          ctx.arc(node.x, node.y, radius + 6, 0, Math.PI * 2);
-          ctx.fillStyle = color + "30";
-          ctx.fill();
-        }
+        const baseNodeSize = target.hasContent ? 7 : 5;
+        const targetRadius = baseNodeSize * display.nodeSize;
+        const nx = dx / len;
+        const ny = dy / len;
+        const ax = target.x - nx * (targetRadius + 3);
+        const ay = target.y - ny * (targetRadius + 3);
+        const arrowSize = 6 * display.lineThickness;
 
         ctx.beginPath();
-        ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-        ctx.fillStyle = color;
-        ctx.globalAlpha = opacity;
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(ax - arrowSize * nx + arrowSize * 0.4 * ny, ay - arrowSize * ny - arrowSize * 0.4 * nx);
+        ctx.lineTo(ax - arrowSize * nx - arrowSize * 0.4 * ny, ay - arrowSize * ny + arrowSize * 0.4 * nx);
+        ctx.closePath();
+        ctx.fillStyle = isHighlighted
+          ? (isDark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)")
+          : (isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.2)");
         ctx.fill();
-
-        ctx.strokeStyle = isDark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.2)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        // Label — fade based on zoom
-        const textOpacity = zoom < display.textFadeThreshold ? 0 : Math.min(1, (zoom - display.textFadeThreshold) / 0.3);
-        if (visible && textOpacity > 0 && (isHovered || isConnectedToHover || !hoveredNode)) {
-          const fontSize = Math.min(14, 11 / zoom) * display.nodeSize;
-          ctx.font = `${isHovered ? "bold " : ""}${fontSize}px system-ui, sans-serif`;
-          ctx.textAlign = "center";
-          ctx.fillStyle = isDark ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.85)";
-          ctx.globalAlpha = opacity * textOpacity;
-          ctx.fillText(node.title, node.x, node.y + radius + 14);
-
-          if (display.showTags && node.tags.length > 0 && (isHovered || zoom > 1.2)) {
-            ctx.font = `${Math.max(8, fontSize * 0.7)}px system-ui, sans-serif`;
-            ctx.globalAlpha = opacity * textOpacity * 0.6;
-            const tagStr = node.tags.map((t) => `#${t}`).join(" ");
-            ctx.fillText(tagStr, node.x, node.y + radius + 14 + fontSize + 2);
-          }
-        }
-
-        ctx.globalAlpha = 1;
       });
+    };
+
+    const isConnectedToHovered = (nodeId: string, simLinks: GraphLink[]): boolean => {
+      if (!hoveredNode) return false;
+      return simLinks.some((link) => {
+        const { sourceId, targetId } = getLinkNodeIds(link);
+        return (sourceId === hoveredNode && targetId === nodeId) || (targetId === hoveredNode && sourceId === nodeId);
+      });
+    };
+
+    const drawNode = (node: GraphNode, simLinks: GraphLink[]) => {
+      if (node.x == null || node.y == null) return;
+
+      const visible = filteredNodeIds.has(node.id);
+      const isHovered = hoveredNode === node.id;
+      const isLinkSource = linkMode && linkSourceId === node.id;
+      const connectedToHover = isConnectedToHovered(node.id, simLinks);
+
+      const opacity = !visible
+        ? 0.15
+        : isHovered || connectedToHover || isLinkSource
+          ? 1
+          : hoveredNode
+            ? 0.4
+            : 1;
+      const baseRadius = node.hasContent ? 7 : 5;
+      const radius = (isHovered ? baseRadius + 3 : baseRadius) * display.nodeSize;
+      const color = getNodeColor(node);
+
+      if (isHovered) {
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, radius + 6, 0, Math.PI * 2);
+        ctx.fillStyle = `${color}30`;
+        ctx.fill();
+      }
+
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.globalAlpha = opacity;
+      ctx.fill();
+
+      ctx.strokeStyle = isDark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.2)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      const textOpacity = zoom < display.textFadeThreshold
+        ? 0
+        : Math.min(1, (zoom - display.textFadeThreshold) / 0.3);
+      const shouldDrawText = visible && textOpacity > 0 && (isHovered || connectedToHover || !hoveredNode);
+      if (!shouldDrawText) {
+        ctx.globalAlpha = 1;
+        return;
+      }
+
+      const fontSize = Math.min(14, 11 / zoom) * display.nodeSize;
+      ctx.font = `${isHovered ? "bold " : ""}${fontSize}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.fillStyle = isDark ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.85)";
+      ctx.globalAlpha = opacity * textOpacity;
+      ctx.fillText(node.title, node.x, node.y + radius + 14);
+
+      if (display.showTags && node.tags.length > 0 && (isHovered || zoom > 1.2)) {
+        ctx.font = `${Math.max(8, fontSize * 0.7)}px system-ui, sans-serif`;
+        ctx.globalAlpha = opacity * textOpacity * 0.6;
+        const tagStr = node.tags.map((t) => `#${t}`).join(" ");
+        ctx.fillText(tagStr, node.x, node.y + radius + 14 + fontSize + 2);
+      }
+
+      ctx.globalAlpha = 1;
+    };
+
+    const drawNodes = (simNodes: GraphNode[], simLinks: GraphLink[]) => {
+      simNodes.forEach((node) => {
+        drawNode(node, simLinks);
+      });
+    };
+
+    const drawLinkModeIndicator = (simNodes: GraphNode[]) => {
+      if (!linkMode || !linkSourceId) return;
+      const sourceNode = simNodes.find((n) => n.id === linkSourceId);
+      if (!sourceNode || sourceNode.x == null || sourceNode.y == null) return;
+
+      ctx.beginPath();
+      ctx.arc(sourceNode.x, sourceNode.y, 14 * display.nodeSize, 0, Math.PI * 2);
+      ctx.strokeStyle = accentColor;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    };
+
+    /** Draw one animation frame of the graph canvas. */
+    function render(): void {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = container.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      canvas.style.width = `${rect.width}px`;
+      canvas.style.height = `${rect.height}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      ctx.fillStyle = isDark ? "#0a0a0a" : "#fafafa";
+      ctx.fillRect(0, 0, rect.width, rect.height);
+
+      ctx.save();
+      ctx.translate(pan.x, pan.y);
+      ctx.scale(zoom, zoom);
+
+      const simNodes = nodesRef.current;
+      const simLinks = linksRef.current;
+
+      drawGroupBackgrounds(simNodes);
+      drawLinks(simNodes, simLinks);
+      drawLinkModeIndicator(simNodes);
+      drawNodes(simNodes, simLinks);
 
       ctx.restore();
       animFrameRef.current = requestAnimationFrame(render);
-    };
+    }
 
     animFrameRef.current = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(animFrameRef.current);
+    return () => {
+      cancelAnimationFrame(animFrameRef.current);
+    };
   }, [theme, zoom, pan, filteredNodeIds, hoveredNode, getNodeColor, display, linkMode, linkSourceId, accentColor, groups]);
 
   // Coordinate transform helpers
@@ -1047,7 +1088,7 @@ export function GraphView() {
                               ? "border-transparent text-white"
                               : "border-border text-muted-foreground hover:text-foreground"
                           )}
-                          style={isSelected ? { background: color } : { background: color + "15" }}
+                          style={isSelected ? { background: color } : { background: `${color}15` }}
                         >
                           #{tag}
                         </button>

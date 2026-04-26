@@ -37,6 +37,7 @@ import {
   Briefcase,
   GraduationCap,
   SlidersHorizontal,
+  icons,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -119,12 +120,12 @@ const ICON_CHOICES = [
   "Plane", "Car", "Bike", "Ship", "Train", "Home",
 ] as const;
 
-// Map of icon names to lucide components — loaded lazily to avoid importing all
-import * as LucideIcons from "lucide-react";
-
+/**
+ * Resolves a lucide icon component by its exported icon name.
+ */
 function getLucideIcon(name?: string): React.ComponentType<{ className?: string; style?: React.CSSProperties }> | null {
   if (!name) return null;
-  const icon = (LucideIcons as Record<string, unknown>)[name];
+  const icon = (icons as Record<string, unknown>)[name];
   if (typeof icon === "function" || (typeof icon === "object" && icon !== null)) {
     return icon as React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   }
@@ -142,6 +143,41 @@ function getTabIcon(tab: Tab): React.ComponentType<{ className?: string; style?:
   if (tab.noteType === "kanban") return KanbanSquare;
   if (tab.noteType === "pdf") return FileType;
   return FileText;
+}
+
+/** Get a display-friendly tab title, optionally hiding supported extensions. */
+function getDisplayTabName(tab: Tab, hideMd: boolean): string {
+  const hasSupportedExtension = tab.title.endsWith(".md")
+    || tab.title.endsWith(".canvas")
+    || tab.title.endsWith(".mindmap")
+    || tab.title.endsWith(".kanban")
+    || tab.title.endsWith(".pdf");
+
+  if (!hideMd || !hasSupportedExtension) {
+    return tab.title;
+  }
+
+  return tab.title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/, "");
+}
+
+/** Map note type to its canonical file extension. */
+function getExpectedTabExtension(tab: Tab): string {
+  if (tab.noteType === "whiteboard") return ".canvas";
+  if (tab.noteType === "mindmap") return ".mindmap";
+  if (tab.noteType === "kanban") return ".kanban";
+  if (tab.noteType === "pdf") return ".pdf";
+  return ".md";
+}
+
+/** Download text content in browsers using an object URL. */
+function downloadTabContent(fileName: string, content: string): void {
+  const blob = new Blob([content], { type: "text/markdown" });
+  const objectUrl = URL.createObjectURL(blob);
+  const downloadLink = document.createElement("a");
+  downloadLink.href = objectUrl;
+  downloadLink.download = fileName;
+  downloadLink.click();
+  URL.revokeObjectURL(objectUrl);
 }
 
 // ── Inline rename input ───────────────────────────────────────────────────
@@ -162,20 +198,20 @@ function InlineRename({
     inputRef.current?.select();
   }, []);
 
-  const commit = () => {
-    const t = value.trim();
-    if (t) onCommit(t);
+  function commitRename() {
+    const trimmedValue = value.trim();
+    if (trimmedValue) onCommit(trimmedValue);
     else onCancel();
-  };
+  }
 
   return (
     <input
       ref={inputRef}
       value={value}
       onChange={(e) => setValue(e.target.value)}
-      onBlur={commit}
+      onBlur={commitRename}
       onKeyDown={(e) => {
-        if (e.key === "Enter") commit();
+        if (e.key === "Enter") commitRename();
         if (e.key === "Escape") onCancel();
       }}
       className="w-full bg-transparent text-xs outline-none border-b border-primary/50 py-0.5"
@@ -328,6 +364,79 @@ function IconPickerPopover({
   );
 }
 
+function FolderHeaderButton({
+  folder,
+  expanded,
+  depth,
+  mobile,
+  mobileDraggingTabId,
+  renaming,
+  folderTabCount,
+  onHeaderClick,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onColorPick,
+  onRenameCommit,
+  onRenameCancel,
+}: {
+  folder: Folder;
+  expanded: boolean;
+  depth: number;
+  mobile?: boolean;
+  mobileDraggingTabId?: string | null;
+  renaming: boolean;
+  folderTabCount: number;
+  onHeaderClick: () => void;
+  onDragStart: (event: React.DragEvent) => void;
+  onDragOver: (event: React.DragEvent) => void;
+  onDrop: (event: React.DragEvent) => void;
+  onColorPick: (color: string) => void;
+  onRenameCommit: (nextName: string) => void;
+  onRenameCancel: () => void;
+}) {
+  return (
+    <button
+      onClick={onHeaderClick}
+      draggable={!mobile}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      className={cn(
+        "flex w-full items-center gap-1.5 rounded-sm pr-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors group",
+        mobile ? "py-2 text-[13px]" : "py-1 text-xs",
+        mobile && mobileDraggingTabId && "border border-dashed border-primary/50 bg-primary/5 text-foreground"
+      )}
+      style={{ paddingLeft: (mobile ? 10 : 8) + depth * (mobile ? 14 : 12) }}
+    >
+      {expanded ? (
+        <ChevronDown className={cn("shrink-0", mobile ? "h-4 w-4" : "h-3 w-3")} />
+      ) : (
+        <ChevronRight className={cn("shrink-0", mobile ? "h-4 w-4" : "h-3 w-3")} />
+      )}
+      <ColorPicker current={folder.color} onPick={onColorPick}>
+        <span
+          className={cn("rounded-sm shrink-0 cursor-pointer hover:scale-125 transition-transform", mobile ? "h-3.5 w-3.5" : "h-2.5 w-2.5")}
+          style={{ background: folder.color }}
+          onClick={(event) => event.stopPropagation()}
+        />
+      </ColorPicker>
+      {renaming ? (
+        <InlineRename
+          initial={folder.name}
+          onCommit={onRenameCommit}
+          onCancel={onRenameCancel}
+        />
+      ) : (
+        <span className="truncate">{folder.name}</span>
+      )}
+      <span className="ml-auto text-[10px] text-muted-foreground/50">
+        {folderTabCount}
+      </span>
+    </button>
+  );
+}
+
 // ── Folder item ───────────────────────────────────────────────────────────
 function FolderItem({
   folder,
@@ -386,7 +495,7 @@ function FolderItem({
   if (sortAsc === true) folderTabs = [...folderTabs].sort((a, b) => a.title.localeCompare(b.title));
   else if (sortAsc === false) folderTabs = [...folderTabs].sort((a, b) => b.title.localeCompare(a.title));
 
-  const exportFolder = async () => {
+  async function exportFolder() {
     if (isTauri()) {
       try {
         const { open } = await import("@tauri-apps/plugin-dialog");
@@ -403,30 +512,24 @@ function FolderItem({
       }
     }
     folderTabs.forEach((tab) => {
-      const blob = new Blob([tab.content], { type: "text/markdown" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = tab.title;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadTabContent(tab.title, tab.content);
     });
-  };
+  }
 
   // Drag-drop: accept files dragged onto folder
-  const onFolderDragStart = (e: React.DragEvent) => {
+  function onFolderDragStart(e: React.DragEvent) {
     if (mobile) return;
     e.dataTransfer.setData("text/folder-id", folder.id);
     e.dataTransfer.effectAllowed = "move";
-  };
+  }
 
-  const onDragOver = (e: React.DragEvent) => {
+  function onDragOver(e: React.DragEvent) {
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = "move";
-  };
+  }
 
-  const onDrop = (e: React.DragEvent) => {
+  function onDrop(e: React.DragEvent) {
     e.preventDefault();
     e.stopPropagation();
 
@@ -443,64 +546,42 @@ function FolderItem({
       moveTabToFolder(tabId, folder.id);
       if (!expandedFolders.has(folder.id)) toggleExpand(folder.id);
     }
-  };
+  }
+
+  function onFolderHeaderClick() {
+    if (mobile && mobileDraggingTabId) {
+      onMobileDropTab?.(folder.id);
+      if (!expandedFolders.has(folder.id)) toggleExpand(folder.id);
+      return;
+    }
+    toggleExpand(folder.id);
+  }
+
+  function onFolderRenameCommit(nextName: string) {
+    renameFolder(folder.id, nextName);
+    setRenaming(false);
+  }
 
   return (
     <div>
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <button
-            onClick={() => {
-              if (mobile && mobileDraggingTabId) {
-                onMobileDropTab?.(folder.id);
-                if (!expandedFolders.has(folder.id)) toggleExpand(folder.id);
-                return;
-              }
-              toggleExpand(folder.id);
-            }}
-            draggable={!mobile}
+          <FolderHeaderButton
+            folder={folder}
+            expanded={expanded}
+            depth={depth}
+            mobile={mobile}
+            mobileDraggingTabId={mobileDraggingTabId}
+            renaming={renaming}
+            folderTabCount={folderTabs.length}
+            onHeaderClick={onFolderHeaderClick}
             onDragStart={onFolderDragStart}
             onDragOver={onDragOver}
             onDrop={onDrop}
-            className={cn(
-              "flex w-full items-center gap-1.5 rounded-sm pr-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors group",
-              mobile ? "py-2 text-[13px]" : "py-1 text-xs",
-              mobile && mobileDraggingTabId && "border border-dashed border-primary/50 bg-primary/5 text-foreground"
-            )}
-            style={{ paddingLeft: (mobile ? 10 : 8) + depth * (mobile ? 14 : 12) }}
-          >
-            {expanded ? (
-              <ChevronDown className={cn("shrink-0", mobile ? "h-4 w-4" : "h-3 w-3")} />
-            ) : (
-              <ChevronRight className={cn("shrink-0", mobile ? "h-4 w-4" : "h-3 w-3")} />
-            )}
-            {/* Clickable colour dot */}
-            <ColorPicker
-              current={folder.color}
-              onPick={(c) => colorFolder(folder.id, c)}
-            >
-              <span
-                className={cn("rounded-sm shrink-0 cursor-pointer hover:scale-125 transition-transform", mobile ? "h-3.5 w-3.5" : "h-2.5 w-2.5")}
-                style={{ background: folder.color }}
-                onClick={(e) => e.stopPropagation()}
-              />
-            </ColorPicker>
-            {renaming ? (
-              <InlineRename
-                initial={folder.name}
-                onCommit={(v) => {
-                  renameFolder(folder.id, v);
-                  setRenaming(false);
-                }}
-                onCancel={() => setRenaming(false)}
-              />
-            ) : (
-              <span className="truncate">{folder.name}</span>
-            )}
-            <span className="ml-auto text-[10px] text-muted-foreground/50">
-              {folderTabs.length}
-            </span>
-          </button>
+            onColorPick={(color) => colorFolder(folder.id, color)}
+            onRenameCommit={onFolderRenameCommit}
+            onRenameCancel={() => setRenaming(false)}
+          />
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onClick={() => requestCreateTab(folder.id)}>
@@ -588,6 +669,357 @@ function FolderItem({
 }
 
 // ── File item ─────────────────────────────────────────────────────────────
+type WorkspaceOption = {
+  id: string;
+  name: string;
+  color: string;
+};
+
+function PinToggleMenuLabel({ pinned }: { pinned: boolean }) {
+  if (pinned) {
+    return <><PinOff className="mr-2 h-3.5 w-3.5" /> Unpin</>;
+  }
+  return <><Pin className="mr-2 h-3.5 w-3.5" /> Pin to Top</>;
+}
+
+function FileItemQuickActions({
+  mobile,
+  tab,
+  allTags,
+  profiles,
+  currentWorkspaceId,
+  addTag,
+  moveTabToWorkspace,
+  togglePin,
+  onStartRename,
+  onExportFile,
+  onOpenShare,
+  onOpenExport,
+  onClose,
+}: {
+  mobile?: boolean;
+  tab: Tab;
+  allTags: string[];
+  profiles: WorkspaceOption[];
+  currentWorkspaceId: string;
+  addTag: (tabId: string, tag: string) => void;
+  moveTabToWorkspace: (tabId: string, workspaceId: string) => void;
+  togglePin: (tabId: string) => void;
+  onStartRename: () => void;
+  onExportFile: () => void;
+  onOpenShare: () => void;
+  onOpenExport: () => void;
+  onClose: () => void;
+}) {
+  const availableTags = allTags.filter((tagName) => !tab.tags.includes(tagName));
+
+  return (
+    <div className={cn("flex items-center shrink-0 transition-opacity", mobile ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
+      {!mobile && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              onClick={(event) => event.stopPropagation()}
+              className="flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              title="Quick add tag"
+            >
+              <Tag className="h-2.5 w-2.5" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent side="right" align="start" className="w-48 p-2" onPointerDownOutside={(event) => event.stopPropagation()}>
+            <p className="text-[10px] font-medium text-muted-foreground mb-1.5">Add tag</p>
+            <div className="flex flex-wrap gap-1 mb-1.5">
+              {availableTags.map((tagName) => (
+                <button
+                  key={tagName}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    addTag(tab.id, tagName);
+                  }}
+                  className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  +{tagName}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1">
+              <input
+                placeholder="New tag…"
+                className="flex-1 rounded-sm border border-input bg-background px-1.5 py-0.5 text-[10px] outline-none focus:ring-1 focus:ring-ring"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    const normalizedTag = (event.target as HTMLInputElement).value.trim().toLowerCase();
+                    if (normalizedTag) {
+                      addTag(tab.id, normalizedTag);
+                      (event.target as HTMLInputElement).value = "";
+                    }
+                  }
+                  event.stopPropagation();
+                }}
+                onClick={(event) => event.stopPropagation()}
+              />
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            onClick={(event) => event.stopPropagation()}
+            className={cn(
+              "flex items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors",
+              mobile ? "h-7 w-7" : "h-5 w-5"
+            )}
+            title="More actions"
+          >
+            <MoreHorizontal className="h-3 w-3" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuItem onClick={() => togglePin(tab.id)}>
+            <PinToggleMenuLabel pinned={tab.pinned} />
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onStartRename}>
+            <Pencil className="mr-2 h-3.5 w-3.5" /> Rename
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onExportFile}>
+            <Download className="mr-2 h-3.5 w-3.5" /> Download
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onOpenShare}>
+            <Share2 className="mr-2 h-3.5 w-3.5" /> Share
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onOpenExport}>
+            <FileOutput className="mr-2 h-3.5 w-3.5" /> Export As…
+          </DropdownMenuItem>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <User className="mr-2 h-3.5 w-3.5" /> Move to Workspace
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {profiles.map((profile) => (
+                <DropdownMenuItem
+                  key={profile.id}
+                  onClick={() => moveTabToWorkspace(tab.id, profile.id)}
+                  className={cn(profile.id === currentWorkspaceId && "bg-accent")}
+                >
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: profile.color }} />
+                  <span>{profile.name}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={onClose}
+            className="text-destructive focus:text-destructive"
+          >
+            <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+function FileItemContextPanel({
+  tab,
+  profiles,
+  currentWorkspaceId,
+  addingTag,
+  newTag,
+  allTags,
+  tagInputRef,
+  getTagColor,
+  addTag,
+  removeTag,
+  setTagColor,
+  setNewTag,
+  setAddingTag,
+  commitTag,
+  togglePin,
+  moveTabToWorkspace,
+  onStartRename,
+  onExportFile,
+  onOpenShare,
+  onOpenExport,
+  onClose,
+}: {
+  tab: Tab;
+  profiles: WorkspaceOption[];
+  currentWorkspaceId: string;
+  addingTag: boolean;
+  newTag: string;
+  allTags: string[];
+  tagInputRef: React.RefObject<HTMLInputElement | null>;
+  getTagColor: (tag: string) => string;
+  addTag: (tabId: string, tag: string) => void;
+  removeTag: (tabId: string, tag: string) => void;
+  setTagColor: (tag: string, color: string) => void;
+  setNewTag: (nextTag: string) => void;
+  setAddingTag: (isAdding: boolean) => void;
+  commitTag: () => void;
+  togglePin: (tabId: string) => void;
+  moveTabToWorkspace: (tabId: string, workspaceId: string) => void;
+  onStartRename: () => void;
+  onExportFile: () => void;
+  onOpenShare: () => void;
+  onOpenExport: () => void;
+  onClose: () => void;
+}) {
+  const availableTags = allTags.filter((tagName) => !tab.tags.includes(tagName));
+
+  return (
+    <ContextMenuContent className="w-52">
+      <ContextMenuItem onClick={() => togglePin(tab.id)}>
+        <PinToggleMenuLabel pinned={tab.pinned} />
+      </ContextMenuItem>
+      <ContextMenuItem onClick={onStartRename}>
+        <Pencil className="mr-2 h-3.5 w-3.5" /> Rename
+      </ContextMenuItem>
+      <ContextMenuItem onClick={onExportFile}>
+        <Download className="mr-2 h-3.5 w-3.5" /> Download
+      </ContextMenuItem>
+      <ContextMenuItem asChild onSelect={(event) => event.preventDefault()}>
+        <IconPickerPopover tab={tab}>
+          <div className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground">
+            <Palette className="h-3.5 w-3.5" />
+            <span>Change Icon</span>
+          </div>
+        </IconPickerPopover>
+      </ContextMenuItem>
+      <ContextMenuItem onClick={onOpenShare}>
+        <Share2 className="mr-2 h-3.5 w-3.5" /> Share
+      </ContextMenuItem>
+      <ContextMenuItem onClick={onOpenExport}>
+        <FileOutput className="mr-2 h-3.5 w-3.5" /> Export As…
+      </ContextMenuItem>
+      <ContextMenuSeparator />
+      <div className="px-2 py-1.5">
+        <p className="mb-1 text-xs font-medium text-muted-foreground">Move to Workspace</p>
+        <div className="space-y-1">
+          {profiles.map((profile) => (
+            <button
+              key={profile.id}
+              onClick={(event) => {
+                event.stopPropagation();
+                moveTabToWorkspace(tab.id, profile.id);
+              }}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-sm px-1.5 py-1 text-left text-xs transition-colors",
+                profile.id === currentWorkspaceId
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: profile.color }} />
+              <span className="truncate">{profile.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <ContextMenuSeparator />
+      <div className="px-2 py-1.5" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+        <p className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
+          <Tag className="h-3 w-3" /> Tags
+        </p>
+        <div className="flex flex-wrap gap-1 mb-1.5">
+          {tab.tags.map((tagName) => (
+            <span
+              key={tagName}
+              className="inline-flex items-center gap-0.5 rounded-sm px-1.5 py-0.5 text-xs"
+              style={{
+                background: `${getTagColor(tagName)}20`,
+                color: getTagColor(tagName),
+              }}
+            >
+              #{tagName}
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  removeTag(tab.id, tagName);
+                }}
+                className="ml-0.5 opacity-60 hover:opacity-100"
+              >
+                ×
+              </button>
+              <span className="ml-1 inline-flex gap-0.5">
+                {TAG_PALETTE.map((colorOption) => (
+                  <button
+                    key={colorOption}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setTagColor(tagName, colorOption);
+                    }}
+                    className={cn(
+                      "h-2.5 w-2.5 rounded-full border",
+                      getTagColor(tagName) === colorOption
+                        ? "border-foreground scale-125"
+                        : "border-transparent opacity-60 hover:opacity-100"
+                    )}
+                    style={{ background: colorOption }}
+                  />
+                ))}
+              </span>
+            </span>
+          ))}
+        </div>
+        {addingTag ? (
+          <input
+            ref={tagInputRef}
+            value={newTag}
+            onChange={(event) => setNewTag(event.target.value)}
+            onBlur={commitTag}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") commitTag();
+              if (event.key === "Escape") {
+                setNewTag("");
+                setAddingTag(false);
+              }
+              event.stopPropagation();
+            }}
+            placeholder="tag name"
+            className="w-full rounded-sm border border-border bg-background px-1.5 py-0.5 text-xs outline-none"
+            onClick={(event) => event.stopPropagation()}
+          />
+        ) : (
+          <button
+            onClick={(event) => {
+              event.stopPropagation();
+              setAddingTag(true);
+            }}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            + Add tag
+          </button>
+        )}
+        {availableTags.length > 0 && !addingTag && (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {availableTags.slice(0, 6).map((tagName) => (
+              <button
+                key={tagName}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  addTag(tab.id, tagName);
+                }}
+                className="rounded-sm border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                +{tagName}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <ContextMenuSeparator />
+      <ContextMenuItem
+        onClick={onClose}
+        className="text-destructive focus:text-destructive"
+      >
+        <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+      </ContextMenuItem>
+    </ContextMenuContent>
+  );
+}
+
 function FileItem({
   tab,
   isActive,
@@ -629,14 +1061,11 @@ function FileItem({
   const longPressTriggeredRef = useRef(false);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
-  const displayName = hideMd && (tab.title.endsWith(".md") || tab.title.endsWith(".canvas") || tab.title.endsWith(".mindmap") || tab.title.endsWith(".kanban") || tab.title.endsWith(".pdf"))
-    ? tab.title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/, "")
-    : tab.title;
-
-  const expectedExt = tab.noteType === "whiteboard" ? ".canvas" : tab.noteType === "mindmap" ? ".mindmap" : tab.noteType === "kanban" ? ".kanban" : tab.noteType === "pdf" ? ".pdf" : ".md";
+  const displayName = getDisplayTabName(tab, hideMd);
+  const expectedExt = getExpectedTabExtension(tab);
   const currentWorkspaceId = getTabWorkspaceId(tab);
 
-  const exportFile = async () => {
+  async function exportFile() {
     if (isTauri()) {
       try {
         const { save } = await import("@tauri-apps/plugin-dialog");
@@ -653,28 +1082,24 @@ function FileItem({
         // Fall through to web download
       }
     }
-    const blob = new Blob([tab.content], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = tab.title;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+    downloadTabContent(tab.title, tab.content);
+  }
 
   // Make file draggable
-  const onDragStart = (e: React.DragEvent) => {
+  function onDragStart(e: React.DragEvent) {
     e.dataTransfer.setData("text/tab-id", tab.id);
     e.dataTransfer.effectAllowed = "move";
-  };
+  }
 
-  const clearLongPressTimer = () => {
+  /** Clear any pending long-press timer used for mobile drag start. */
+  function clearLongPressTimer() {
     if (!longPressTimerRef.current) return;
     clearTimeout(longPressTimerRef.current);
     longPressTimerRef.current = null;
-  };
+  }
 
-  const onTouchStart = (e: React.TouchEvent) => {
+  /** Begin touch tracking for long-press drag on mobile. */
+  function onTouchStart(e: React.TouchEvent) {
     if (!mobile || !onStartMobileDrag) return;
     if (e.touches.length !== 1) return;
     longPressTriggeredRef.current = false;
@@ -683,28 +1108,65 @@ function FileItem({
       longPressTriggeredRef.current = true;
       onStartMobileDrag(tab.id);
     }, 300);
-  };
+  }
 
-  const onTouchMove = (e: React.TouchEvent) => {
+  /** Cancel long-press drag if touch movement exceeds the threshold. */
+  function onTouchMove(e: React.TouchEvent) {
     if (!mobile || !touchStartRef.current || e.touches.length !== 1) return;
     const dx = Math.abs(e.touches[0].clientX - touchStartRef.current.x);
     const dy = Math.abs(e.touches[0].clientY - touchStartRef.current.y);
     if (dx > 8 || dy > 8) {
       clearLongPressTimer();
     }
-  };
+  }
 
-  const onTouchEnd = () => {
+  /** Reset touch state once the current touch interaction ends. */
+  function onTouchEnd() {
     clearLongPressTimer();
     touchStartRef.current = null;
-  };
+  }
 
-  const commitTag = () => {
-    const t = newTag.trim().toLowerCase();
-    if (t) addTag(tab.id, t);
+  /** Commit the currently typed tag and close tag-entry mode. */
+  function commitTag() {
+    const normalizedTag = newTag.trim().toLowerCase();
+    if (normalizedTag) addTag(tab.id, normalizedTag);
     setNewTag("");
     setAddingTag(false);
-  };
+  }
+
+  function startRename() {
+    setRenaming(true);
+  }
+
+  function stopRename() {
+    setRenaming(false);
+  }
+
+  function commitRename(nextTitle: string) {
+    const baseTitle = nextTitle.replace(/\.(md|canvas|mindmap|kanban|pdf)$/i, "");
+    renameTab(tab.id, `${baseTitle}${expectedExt}`);
+    setRenaming(false);
+  }
+
+  function openShareDialog() {
+    switchTab(tab.id);
+    document.dispatchEvent(new CustomEvent("open-share"));
+  }
+
+  function openExportDialog() {
+    switchTab(tab.id);
+    document.dispatchEvent(new CustomEvent("open-export"));
+  }
+
+  function onPrimaryButtonClick(event: React.MouseEvent<HTMLButtonElement>) {
+    if (mobile && longPressTriggeredRef.current) {
+      event.preventDefault();
+      event.stopPropagation();
+      longPressTriggeredRef.current = false;
+      return;
+    }
+    onSwitch();
+  }
 
   useEffect(() => {
     if (addingTag) {
@@ -713,6 +1175,7 @@ function FileItem({
   }, [addingTag]);
 
   const allTags = getAllTags();
+  const TabIcon = getTabIcon(tab);
 
   return (
     <ContextMenu>
@@ -720,15 +1183,7 @@ function FileItem({
         <div className="group">
           <div className="flex w-full items-center">
             <button
-              onClick={(e) => {
-                if (mobile && longPressTriggeredRef.current) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  longPressTriggeredRef.current = false;
-                  return;
-                }
-                onSwitch();
-              }}
+              onClick={onPrimaryButtonClick}
               draggable={!mobile}
               onDragStart={onDragStart}
               onTouchStart={onTouchStart}
@@ -744,19 +1199,12 @@ function FileItem({
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
-              {(() => {
-                const Icon = getTabIcon(tab);
-                return <Icon className={cn("shrink-0", mobile ? "h-4 w-4" : "h-3 w-3")} style={tab.iconColor ? { color: tab.iconColor } : undefined} />;
-              })()}
+              <TabIcon className={cn("shrink-0", mobile ? "h-4 w-4" : "h-3 w-3")} style={tab.iconColor ? { color: tab.iconColor } : undefined} />
               {renaming ? (
                 <InlineRename
                   initial={tab.title}
-                  onCommit={(v) => {
-                    const base = v.replace(/\.(md|canvas|mindmap|kanban|pdf)$/i, "");
-                    renameTab(tab.id, `${base}${expectedExt}`);
-                    setRenaming(false);
-                  }}
-                  onCancel={() => setRenaming(false)}
+                  onCommit={commitRename}
+                  onCancel={stopRename}
                 />
               ) : (
                 <span className="truncate">{displayName}</span>
@@ -765,289 +1213,63 @@ function FileItem({
                 <Pin className="ml-auto h-2.5 w-2.5 shrink-0 text-muted-foreground/60" />
               )}
             </button>
-            {/* Quick tag + triple‑dot buttons */}
-            <div className={cn("flex items-center shrink-0 transition-opacity", mobile ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
-              {!mobile && (
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                      title="Quick add tag"
-                    >
-                      <Tag className="h-2.5 w-2.5" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent side="right" align="start" className="w-48 p-2" onPointerDownOutside={(e) => e.stopPropagation()}>
-                    <p className="text-[10px] font-medium text-muted-foreground mb-1.5">Add tag</p>
-                    <div className="flex flex-wrap gap-1 mb-1.5">
-                      {allTags.filter((t) => !tab.tags.includes(t)).map((tag) => (
-                        <button
-                          key={tag}
-                          onClick={(e) => { e.stopPropagation(); addTag(tab.id, tag); }}
-                          className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                        >
-                          +{tag}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <input
-                        placeholder="New tag…"
-                        className="flex-1 rounded-sm border border-input bg-background px-1.5 py-0.5 text-[10px] outline-none focus:ring-1 focus:ring-ring"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            const val = (e.target as HTMLInputElement).value.trim().toLowerCase();
-                            if (val) { addTag(tab.id, val); (e.target as HTMLInputElement).value = ""; }
-                          }
-                          e.stopPropagation();
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              )}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    onClick={(e) => e.stopPropagation()}
-                    className={cn(
-                      "flex items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors",
-                      mobile ? "h-7 w-7" : "h-5 w-5"
-                    )}
-                    title="More actions"
-                  >
-                    <MoreHorizontal className="h-3 w-3" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem onClick={() => togglePin(tab.id)}>
-                    {tab.pinned
-                      ? <><PinOff className="mr-2 h-3.5 w-3.5" /> Unpin</>
-                      : <><Pin className="mr-2 h-3.5 w-3.5" /> Pin to Top</>
-                    }
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setRenaming(true)}>
-                    <Pencil className="mr-2 h-3.5 w-3.5" /> Rename
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={exportFile}>
-                    <Download className="mr-2 h-3.5 w-3.5" /> Download
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => {
-                    switchTab(tab.id);
-                    document.dispatchEvent(new CustomEvent("open-share"));
-                  }}>
-                    <Share2 className="mr-2 h-3.5 w-3.5" /> Share
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => {
-                    switchTab(tab.id);
-                    document.dispatchEvent(new CustomEvent("open-export"));
-                  }}>
-                    <FileOutput className="mr-2 h-3.5 w-3.5" /> Export As…
-                  </DropdownMenuItem>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      <User className="mr-2 h-3.5 w-3.5" /> Move to Workspace
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                      {profiles.map((profile) => (
-                        <DropdownMenuItem
-                          key={profile.id}
-                          onClick={() => moveTabToWorkspace(tab.id, profile.id)}
-                          className={cn(profile.id === currentWorkspaceId && "bg-accent")}
-                        >
-                          <span className="h-2.5 w-2.5 rounded-full" style={{ background: profile.color }} />
-                          <span>{profile.name}</span>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={onClose}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            <FileItemQuickActions
+              mobile={mobile}
+              tab={tab}
+              allTags={allTags}
+              profiles={profiles}
+              currentWorkspaceId={currentWorkspaceId}
+              addTag={addTag}
+              moveTabToWorkspace={moveTabToWorkspace}
+              togglePin={togglePin}
+              onStartRename={startRename}
+              onExportFile={exportFile}
+              onOpenShare={openShareDialog}
+              onOpenExport={openExportDialog}
+              onClose={onClose}
+            />
           </div>
-          {/* Tag chips */}
           {tab.tags.length > 0 && (
             <div className="flex flex-wrap gap-0.5 px-3 pb-0.5">
-              {tab.tags.map((tag) => (
+              {tab.tags.map((tagName) => (
                 <span
-                  key={tag}
+                  key={tagName}
                   className="inline-flex items-center rounded-sm px-1 py-0 text-[9px] leading-tight"
                   style={{
-                    background: `${getTagColor(tag)}20`,
-                    color: getTagColor(tag),
+                    background: `${getTagColor(tagName)}20`,
+                    color: getTagColor(tagName),
                   }}
                 >
-                  #{tag}
+                  #{tagName}
                 </span>
               ))}
             </div>
           )}
         </div>
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-52">
-        <ContextMenuItem onClick={() => togglePin(tab.id)}>
-          {tab.pinned
-            ? <><PinOff className="mr-2 h-3.5 w-3.5" /> Unpin</>
-            : <><Pin className="mr-2 h-3.5 w-3.5" /> Pin to Top</>
-          }
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => setRenaming(true)}>
-          <Pencil className="mr-2 h-3.5 w-3.5" /> Rename
-        </ContextMenuItem>
-        <ContextMenuItem onClick={exportFile}>
-          <Download className="mr-2 h-3.5 w-3.5" /> Download
-        </ContextMenuItem>
-        <ContextMenuItem asChild onSelect={(e) => e.preventDefault()}>
-          <IconPickerPopover tab={tab}>
-            <div className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground">
-              <Palette className="h-3.5 w-3.5" />
-              <span>Change Icon</span>
-            </div>
-          </IconPickerPopover>
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => {
-          switchTab(tab.id);
-          document.dispatchEvent(new CustomEvent("open-share"));
-        }}>
-          <Share2 className="mr-2 h-3.5 w-3.5" /> Share
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => {
-          switchTab(tab.id);
-          document.dispatchEvent(new CustomEvent("open-export"));
-        }}>
-          <FileOutput className="mr-2 h-3.5 w-3.5" /> Export As…
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <div className="px-2 py-1.5">
-          <p className="mb-1 text-xs font-medium text-muted-foreground">Move to Workspace</p>
-          <div className="space-y-1">
-            {profiles.map((profile) => (
-              <button
-                key={profile.id}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  moveTabToWorkspace(tab.id, profile.id);
-                }}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-sm px-1.5 py-1 text-left text-xs transition-colors",
-                  profile.id === currentWorkspaceId
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                )}
-              >
-                <span className="h-2.5 w-2.5 rounded-full" style={{ background: profile.color }} />
-                <span className="truncate">{profile.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-        <ContextMenuSeparator />
-        {/* Tag management */}
-        <div className="px-2 py-1.5" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
-          <p className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
-            <Tag className="h-3 w-3" /> Tags
-          </p>
-          <div className="flex flex-wrap gap-1 mb-1.5">
-            {tab.tags.map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex items-center gap-0.5 rounded-sm px-1.5 py-0.5 text-xs"
-                style={{
-                  background: `${getTagColor(tag)}20`,
-                  color: getTagColor(tag),
-                }}
-              >
-                #{tag}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeTag(tab.id, tag);
-                  }}
-                  className="ml-0.5 opacity-60 hover:opacity-100"
-                >
-                  ×
-                </button>
-                {/* Color swatches */}
-                <span className="ml-1 inline-flex gap-0.5">
-                  {TAG_PALETTE.map((c) => (
-                    <button
-                      key={c}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setTagColor(tag, c);
-                      }}
-                      className={cn(
-                        "h-2.5 w-2.5 rounded-full border",
-                        getTagColor(tag) === c ? "border-foreground scale-125" : "border-transparent opacity-60 hover:opacity-100"
-                      )}
-                      style={{ background: c }}
-                    />
-                  ))}
-                </span>
-              </span>
-            ))}
-          </div>
-          {addingTag ? (
-            <input
-              ref={tagInputRef}
-              value={newTag}
-              onChange={(e) => setNewTag(e.target.value)}
-              onBlur={commitTag}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") commitTag();
-                if (e.key === "Escape") { setNewTag(""); setAddingTag(false); }
-                e.stopPropagation();
-              }}
-              placeholder="tag name"
-              className="w-full rounded-sm border border-border bg-background px-1.5 py-0.5 text-xs outline-none"
-              onClick={(e) => e.stopPropagation()}
-            />
-          ) : (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setAddingTag(true);
-              }}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              + Add tag
-            </button>
-          )}
-          {/* Quick-add: show existing tags not yet on this file */}
-          {allTags.filter((t) => !tab.tags.includes(t)).length > 0 && !addingTag && (
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {allTags.filter((t) => !tab.tags.includes(t)).slice(0, 6).map((tag) => (
-                <button
-                  key={tag}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    addTag(tab.id, tag);
-                  }}
-                  className="rounded-sm border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                >
-                  +{tag}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          onClick={onClose}
-          className="text-destructive focus:text-destructive"
-        >
-          <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
-        </ContextMenuItem>
-      </ContextMenuContent>
+      <FileItemContextPanel
+        tab={tab}
+        profiles={profiles}
+        currentWorkspaceId={currentWorkspaceId}
+        addingTag={addingTag}
+        newTag={newTag}
+        allTags={allTags}
+        tagInputRef={tagInputRef}
+        getTagColor={getTagColor}
+        addTag={addTag}
+        removeTag={removeTag}
+        setTagColor={setTagColor}
+        setNewTag={setNewTag}
+        setAddingTag={setAddingTag}
+        commitTag={commitTag}
+        togglePin={togglePin}
+        moveTabToWorkspace={moveTabToWorkspace}
+        onStartRename={startRename}
+        onExportFile={exportFile}
+        onOpenShare={openShareDialog}
+        onOpenExport={openExportDialog}
+        onClose={onClose}
+      />
     </ContextMenu>
   );
 }
@@ -1066,6 +1288,7 @@ interface WorkspaceDraft {
   spellCheck: boolean;
 }
 
+/** Convert workspace draft form state into the persisted settings shape. */
 function toWorkspaceSettingsPartial(draft: WorkspaceDraft): Partial<WorkspaceSettings> {
   return {
     themeMode: draft.themeMode,
@@ -1077,6 +1300,7 @@ function toWorkspaceSettingsPartial(draft: WorkspaceDraft): Partial<WorkspaceSet
   };
 }
 
+/** Render editable controls used by the create/edit workspace dialogs. */
 function WorkspaceSettingsForm({
   draft,
   profiles,
@@ -1225,6 +1449,7 @@ function WorkspaceSettingsForm({
   );
 }
 
+/** Workspace switcher dropdown and workspace create/edit dialog flow. */
 function ProfileSelector() {
   const profiles = useEditorStore((s) => s.profiles);
   const activeProfileId = useEditorStore((s) => s.activeProfileId);
@@ -1318,21 +1543,17 @@ function ProfileSelector() {
   return (
     <>
       <DropdownMenu>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 gap-1 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
-              >
-                <span className="h-2.5 w-2.5 rounded-full" style={{ background: active?.color ?? "#7c3aed" }} />
-                <span className="max-w-[90px] truncate">{active?.name ?? "Workspace"}</span>
-              </Button>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">Switch Workspace</TooltipContent>
-        </Tooltip>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+            title="Switch Workspace"
+          >
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: active?.color ?? "#7c3aed" }} />
+            <span className="max-w-[90px] truncate">{active?.name ?? "Workspace"}</span>
+          </Button>
+        </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="min-w-[220px]">
           {profiles.map((profile) => {
             return (
@@ -1527,6 +1748,594 @@ function ProfileSelector() {
   );
 }
 
+/** Toolbar row for primary file tree actions and sorting/filter toggles. */
+function FileTreeToolbar({
+  mobile,
+  onMobileClose,
+  toolbarButtonSize,
+  toolbarIconSize,
+  requestCreateTab,
+  createWhiteboard,
+  createMindmap,
+  createKanban,
+  createPdf,
+  createFolder,
+  sortAsc,
+  setSortAsc,
+  sortByType,
+  setSortByType,
+  expandedCount,
+  collapseAll,
+  expandAll,
+  tagFilterOpen,
+  setTagFilterOpen,
+  activeTagFilterCount,
+  toggleFileTree,
+}: {
+  mobile?: boolean;
+  onMobileClose?: () => void;
+  toolbarButtonSize: string;
+  toolbarIconSize: string;
+  requestCreateTab: (folderId?: string | null) => void;
+  createWhiteboard: (folderId?: string | null) => void;
+  createMindmap: (folderId?: string | null) => void;
+  createKanban: (folderId?: string | null) => void;
+  createPdf: (folderId?: string | null) => void;
+  createFolder: (name?: string, parentId?: string | null) => void;
+  sortAsc: boolean | null;
+  setSortAsc: React.Dispatch<React.SetStateAction<boolean | null>>;
+  sortByType: boolean;
+  setSortByType: React.Dispatch<React.SetStateAction<boolean>>;
+  expandedCount: number;
+  collapseAll: () => void;
+  expandAll: () => void;
+  tagFilterOpen: boolean;
+  setTagFilterOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  activeTagFilterCount: number;
+  toggleFileTree: () => void;
+}) {
+  return (
+    <div className={cn("flex items-center px-2 border-b border-border", mobile ? "py-2 gap-1.5" : "py-1.5 gap-1")}>
+      <div className={cn("flex items-center flex-wrap", mobile ? "gap-1" : "gap-0.5")}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              title="New…"
+              className={cn(toolbarButtonSize, "text-muted-foreground hover:text-foreground")}
+            >
+              <Plus className={toolbarIconSize} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-[140px]">
+            <DropdownMenuItem onClick={() => requestCreateTab()}>
+              <FileText className="mr-2 h-3.5 w-3.5" /> Note
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => createWhiteboard()}>
+              <PenTool className="mr-2 h-3.5 w-3.5" /> Whiteboard
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => createMindmap()}>
+              <GitBranch className="mr-2 h-3.5 w-3.5" /> Mindmap
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => createKanban()}>
+              <KanbanSquare className="mr-2 h-3.5 w-3.5" /> Kanban
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => createPdf()}>
+              <FileType className="mr-2 h-3.5 w-3.5" /> PDF
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => createFolder("New Folder")}
+              className={cn(toolbarButtonSize, "text-muted-foreground hover:text-foreground")}
+            >
+              <FolderPlus className={toolbarIconSize} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">New Folder</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() =>
+                setSortAsc((prev) =>
+                  prev === null ? true : prev === true ? false : null
+                )
+              }
+              className={cn(
+                toolbarButtonSize,
+                "text-muted-foreground hover:text-foreground",
+                sortAsc !== null && "text-foreground"
+              )}
+            >
+              {sortAsc === false ? (
+                <ArrowUpZA className={toolbarIconSize} />
+              ) : (
+                <ArrowDownAZ className={toolbarIconSize} />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {sortAsc === null ? "Sort A→Z" : sortAsc ? "Sort Z→A" : "Unsort"}
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSortByType((prev) => !prev)}
+              className={cn(
+                toolbarButtonSize,
+                "text-muted-foreground hover:text-foreground",
+                sortByType && "text-foreground"
+              )}
+            >
+              <Layers className={toolbarIconSize} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {sortByType ? "Unsort by type" : "Sort by type"}
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={expandedCount > 0 ? collapseAll : expandAll}
+              className={cn(toolbarButtonSize, "text-muted-foreground hover:text-foreground")}
+            >
+              {expandedCount > 0 ? (
+                <ChevronsDownUp className={toolbarIconSize} />
+              ) : (
+                <ChevronsUpDown className={toolbarIconSize} />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {expandedCount > 0 ? "Collapse All" : "Expand All"}
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setTagFilterOpen((prev) => !prev)}
+              className={cn(
+                toolbarButtonSize,
+                "text-muted-foreground hover:text-foreground",
+                (tagFilterOpen || activeTagFilterCount > 0) && "text-foreground"
+              )}
+            >
+              <Tag className={toolbarIconSize} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {tagFilterOpen ? "Hide Tags" : "Filter by Tags"}
+            {activeTagFilterCount > 0 && ` (${activeTagFilterCount})`}
+          </TooltipContent>
+        </Tooltip>
+
+        {!mobile && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleFileTree}
+                className={cn(toolbarButtonSize, "text-muted-foreground hover:text-foreground")}
+              >
+                <PanelLeftClose className={toolbarIconSize} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              Close Sidebar <kbd className="ml-1 text-[10px] opacity-60">Alt+B</kbd>
+            </TooltipContent>
+          </Tooltip>
+        )}
+
+        {mobile && onMobileClose && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onMobileClose}
+            className={cn(toolbarButtonSize, "text-muted-foreground hover:text-foreground")}
+          >
+            <X className={toolbarIconSize} />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Tag filter panel and active-tag chips shown above the tree. */
+function FileTreeTagFilterPanel({
+  tagFilterOpen,
+  allTags,
+  activeTagFilters,
+  clearTagFilters,
+  toggleTagFilter,
+  getTagColor,
+}: {
+  tagFilterOpen: boolean;
+  allTags: string[];
+  activeTagFilters: Set<string>;
+  clearTagFilters: () => void;
+  toggleTagFilter: (tag: string) => void;
+  getTagColor: (tag: string) => string;
+}) {
+  return (
+    <>
+      {tagFilterOpen && allTags.length > 0 && (
+        <div className="px-2 py-1.5 border-b border-border/50 bg-muted/30">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Filter by Tags</p>
+            {activeTagFilters.size > 0 && (
+              <button
+                onClick={clearTagFilters}
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {allTags.map((tag) => (
+              <button
+                key={tag}
+                onClick={() => toggleTagFilter(tag)}
+                className={cn(
+                  "rounded-sm px-1.5 py-0.5 text-[10px] border transition-colors",
+                  activeTagFilters.has(tag)
+                    ? "border-transparent font-medium"
+                    : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+                style={
+                  activeTagFilters.has(tag)
+                    ? {
+                        background: `${getTagColor(tag)}20`,
+                        color: getTagColor(tag),
+                      }
+                    : undefined
+                }
+              >
+                #{tag}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!tagFilterOpen && activeTagFilters.size > 0 && (
+        <div className="flex items-center gap-1 px-2 py-1 border-b border-border/50 bg-muted/30">
+          <Filter className="h-2.5 w-2.5 shrink-0 text-muted-foreground" />
+          <div className="flex flex-wrap gap-0.5 flex-1">
+            {Array.from(activeTagFilters).map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex items-center gap-0.5 rounded-sm px-1 py-0 text-[9px] leading-tight"
+                style={{
+                  background: `${getTagColor(tag)}20`,
+                  color: getTagColor(tag),
+                }}
+              >
+                #{tag}
+                <button onClick={() => toggleTagFilter(tag)} className="opacity-60 hover:opacity-100">×</button>
+              </span>
+            ))}
+          </div>
+          <button
+            onClick={clearTagFilters}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Root tree panel with context menu, pinned list, folders, and root files. */
+function FileTreeRootArea({
+  onRootDragOver,
+  onRootDrop,
+  onlineTabs,
+  tabPassesFilter,
+  activeTabId,
+  switchTab,
+  deleteTab,
+  hideMd,
+  mobile,
+  mobileDraggedTabId,
+  startMobileDrag,
+  dropMobileDraggedTab,
+  cancelMobileDrag,
+  visibleFoldersByParent,
+  renderFolder,
+  visibleFolderIds,
+  unpinnedRootTabs,
+  requestCreateTab,
+  createWhiteboard,
+  createMindmap,
+  createKanban,
+  createPdf,
+  createFolder,
+}: {
+  onRootDragOver: (e: React.DragEvent) => void;
+  onRootDrop: (e: React.DragEvent) => void;
+  onlineTabs: Tab[];
+  tabPassesFilter: (tab: Tab) => boolean;
+  activeTabId: string | null;
+  switchTab: (id: string) => void;
+  deleteTab: (id: string) => void;
+  hideMd: boolean;
+  mobile?: boolean;
+  mobileDraggedTabId: string | null;
+  startMobileDrag: (tabId: string) => void;
+  dropMobileDraggedTab: (folderId: string | null) => void;
+  cancelMobileDrag: () => void;
+  visibleFoldersByParent: Map<string | null, Folder[]>;
+  renderFolder: (folder: Folder, depth: number) => React.ReactNode;
+  visibleFolderIds: Set<string>;
+  unpinnedRootTabs: Tab[];
+  requestCreateTab: (folderId?: string | null) => void;
+  createWhiteboard: (folderId?: string | null) => void;
+  createMindmap: (folderId?: string | null) => void;
+  createKanban: (folderId?: string | null) => void;
+  createPdf: (folderId?: string | null) => void;
+  createFolder: (name?: string, parentId?: string | null) => void;
+}) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          className="flex-1 overflow-y-auto px-1 py-1"
+          onDragOver={onRootDragOver}
+          onDrop={onRootDrop}
+        >
+          {onlineTabs.some((t) => t.pinned && tabPassesFilter(t)) && (
+            <div className="mb-1 pb-1 border-b border-border/50">
+              <p className="px-2 py-0.5 text-[10px] text-muted-foreground/50 uppercase tracking-wider flex items-center gap-1">
+                <Pin className="h-2.5 w-2.5" /> Pinned
+              </p>
+              {onlineTabs
+                .filter((t) => t.pinned && tabPassesFilter(t))
+                .map((tab) => (
+                  <FileItem
+                    key={`pinned-${tab.id}`}
+                    tab={tab}
+                    isActive={tab.id === activeTabId}
+                    onSwitch={() => switchTab(tab.id)}
+                    onClose={() => deleteTab(tab.id)}
+                    hideMd={hideMd}
+                    mobile={mobile}
+                    mobileDraggingTabId={mobileDraggedTabId}
+                    onStartMobileDrag={startMobileDrag}
+                  />
+                ))}
+            </div>
+          )}
+
+          {mobile && mobileDraggedTabId && (
+            <div className="mx-1 mb-2 rounded-md border border-dashed border-primary/50 bg-primary/5 p-2">
+              <p className="text-[10px] text-muted-foreground mb-1">Move file: tap a folder to drop, or place it in root.</p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => dropMobileDraggedTab(null)}
+                  className="rounded-md border border-border bg-background px-2 py-1 text-[10px] text-foreground hover:bg-muted transition-colors"
+                >
+                  Move to Root
+                </button>
+                <button
+                  onClick={cancelMobileDrag}
+                  className="rounded-md border border-border bg-background px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(visibleFoldersByParent.get(null) ?? []).map((folder) => renderFolder(folder, 0))}
+
+          {visibleFolderIds.size > 0 && unpinnedRootTabs.length > 0 && (
+            <div className="mt-1 pt-1 border-t border-border/50">
+              <p className="px-2 py-0.5 text-[10px] text-muted-foreground/50 uppercase tracking-wider">
+                Unsorted
+              </p>
+            </div>
+          )}
+          {unpinnedRootTabs.map((tab) => (
+            <FileItem
+              key={tab.id}
+              tab={tab}
+              isActive={tab.id === activeTabId}
+              onSwitch={() => switchTab(tab.id)}
+              onClose={() => deleteTab(tab.id)}
+              hideMd={hideMd}
+              mobile={mobile}
+              mobileDraggingTabId={mobileDraggedTabId}
+              onStartMobileDrag={startMobileDrag}
+            />
+          ))}
+
+          {onlineTabs.length === 0 && (
+            <p className="px-3 py-4 text-center text-[10px] text-muted-foreground/50">
+              No files yet
+            </p>
+          )}
+
+          <div className="min-h-[40px]" />
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onClick={() => requestCreateTab()}>
+          <Plus className="mr-2 h-3.5 w-3.5" /> New File
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => createWhiteboard()}>
+          <PenTool className="mr-2 h-3.5 w-3.5" /> New Whiteboard
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => createMindmap()}>
+          <GitBranch className="mr-2 h-3.5 w-3.5" /> New Mindmap
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => createKanban()}>
+          <KanbanSquare className="mr-2 h-3.5 w-3.5" /> New Kanban
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => createPdf()}>
+          <FileType className="mr-2 h-3.5 w-3.5" /> New PDF
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => createFolder("New Folder")}>
+          <FolderPlus className="mr-2 h-3.5 w-3.5" /> New Folder
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+/** Local-files drawer shown in Tauri builds. */
+function LocalFilesDrawer({
+  localDrawerOpen,
+  setLocalDrawerOpen,
+  localTabs,
+  mobile,
+  onLocalDrawerResizeMouseDown,
+  localDrawerHeight,
+  activeTabId,
+  switchTab,
+  syncLocalTabToOnline,
+  profiles,
+  moveTabToWorkspace,
+  hideMd,
+}: {
+  localDrawerOpen: boolean;
+  setLocalDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  localTabs: Tab[];
+  mobile?: boolean;
+  onLocalDrawerResizeMouseDown?: (e: React.MouseEvent) => void;
+  localDrawerHeight: number;
+  activeTabId: string | null;
+  switchTab: (id: string) => void;
+  syncLocalTabToOnline: (id: string) => void;
+  profiles: { id: string; name: string; color: string }[];
+  moveTabToWorkspace: (tabId: string, workspaceId: string) => void;
+  hideMd: boolean;
+}) {
+  return (
+    <div className="border-t border-border">
+      <button
+        onClick={() => setLocalDrawerOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+      >
+        <HardDrive className="h-3.5 w-3.5" />
+        <span className="font-medium">Local</span>
+        <span className="ml-auto text-[10px] text-muted-foreground/70">{localTabs.length}</span>
+        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", localDrawerOpen ? "rotate-180" : "")} />
+      </button>
+      {localDrawerOpen && (
+        <div className="border-t border-border/60">
+          {!mobile && (
+            <button
+              type="button"
+              onMouseDown={onLocalDrawerResizeMouseDown}
+              className="block h-1.5 w-full cursor-row-resize bg-transparent hover:bg-primary/20 active:bg-primary/30 transition-colors"
+              aria-label="Resize local files drawer"
+            />
+          )}
+          <div
+            className="overflow-y-auto px-1 py-1"
+            style={!mobile ? { height: localDrawerHeight } : { maxHeight: 224 }}
+          >
+            {localTabs.length === 0 ? (
+              <p className="px-3 py-3 text-center text-[10px] text-muted-foreground/50">
+                No local files
+              </p>
+            ) : (
+              [...localTabs]
+                .sort((a, b) => a.title.localeCompare(b.title))
+                .map((tab) => {
+                  const LocalTabIcon = getTabIcon(tab);
+                  return (
+                    <div
+                      key={`local-${tab.id}`}
+                      className={cn(
+                        "group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-muted/50 transition-colors",
+                        tab.id === activeTabId && "bg-accent text-accent-foreground"
+                      )}
+                    >
+                      <button
+                        onClick={() => switchTab(tab.id)}
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left text-xs"
+                      >
+                        <LocalTabIcon className="h-3.5 w-3.5 shrink-0" style={tab.iconColor ? { color: tab.iconColor } : undefined} />
+                        <span className="truncate">{hideMd ? tab.title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/i, "") : tab.title}</span>
+                      </button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              syncLocalTabToOnline(tab.id);
+                            }}
+                          >
+                            <CloudUpload className="h-3.5 w-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="left">Sync to Online</TooltipContent>
+                      </Tooltip>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <MoreHorizontal className="h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-[170px]">
+                          {profiles.map((profile) => (
+                            <DropdownMenuItem
+                              key={profile.id}
+                              onClick={() => moveTabToWorkspace(tab.id, profile.id)}
+                              className={cn(profile.id === getTabWorkspaceId(tab) && "bg-accent")}
+                            >
+                              <span className="h-2.5 w-2.5 rounded-full" style={{ background: profile.color }} />
+                              <span className="truncate">Move to {profile.name}</span>
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  );
+                })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main FileTree component ───────────────────────────────────────────────
 export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobileClose?: () => void } = {}) {
   const fileTreeOpen = useEditorStore((s) => s.fileTreeOpen);
@@ -1639,9 +2448,6 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
     });
   }, []);
 
-  const collapseAll = () => setExpandedFolders(new Set());
-  const expandAll = () => setExpandedFolders(new Set(Array.from(visibleFolderIds)));
-
   const folderIdSet = useMemo(() => new Set(folders.map((f) => f.id)), [folders]);
   const foldersByParent = useMemo(() => {
     const map = new Map<string | null, Folder[]>();
@@ -1661,6 +2467,11 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
   // Render all folders, including empty ones, so newly created folders are immediately visible.
   const visibleFolderIds = new Set<string>(folders.map((folder) => folder.id));
 
+  /** Collapse every expanded folder in the file tree. */
+  const collapseAll = () => setExpandedFolders(new Set());
+  /** Expand every currently visible folder in the file tree. */
+  const expandAll = () => setExpandedFolders(new Set(Array.from(visibleFolderIds)));
+
   const visibleFoldersByParent = new Map<string | null, Folder[]>();
   for (const [parentId, children] of foldersByParent.entries()) {
     const visibleChildren = children.filter((folder) => visibleFolderIds.has(folder.id));
@@ -1669,6 +2480,7 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
     }
   }
 
+  /** Render a folder node and its nested descendants recursively. */
   function renderFolder(folder: Folder, depth: number) {
     return (
       <FolderItem
@@ -1706,7 +2518,11 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
   };
-  const onRootDrop = (e: React.DragEvent) => {
+  /**
+   * Handle dropping a tab or folder onto the root area.
+   * @param e Drag event from the file tree root drop zone.
+   */
+  function onRootDrop(e: React.DragEvent): void {
     e.preventDefault();
     const folderId = e.dataTransfer.getData("text/folder-id");
     if (folderId) {
@@ -1715,7 +2531,7 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
     }
     const tabId = e.dataTransfer.getData("text/tab-id");
     if (tabId) moveTabToFolder(tabId, null);
-  };
+  }
 
   // Uncollapse strip when file tree is closed (desktop only)
   if (!mobile && !fileTreeOpen) {
@@ -1740,21 +2556,26 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
     const startX = e.clientX;
     const startWidth = fileTreeWidth;
 
-    const onMove = (ev: MouseEvent) => {
+    /**
+     * Update sidebar width while dragging the desktop resize handle.
+     * @param ev Mouse move event while resizing.
+     */
+    function onMove(ev: MouseEvent): void {
       if (!draggingRef.current) return;
       const next = Math.max(160, Math.min(480, startWidth + ev.clientX - startX));
       pendingWidthRef.current = next;
       document.documentElement.style.setProperty("--filetree-drag-width", `${next}px`);
-    };
+    }
 
-    const onUp = () => {
+    /** Finalize sidebar width and remove desktop resize listeners. */
+    function onUp(): void {
       if (!draggingRef.current) return;
       draggingRef.current = false;
       document.documentElement.style.removeProperty("--filetree-drag-width");
       updateSettings({ fileTreeWidth: Math.round(pendingWidthRef.current) });
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
-    };
+    }
 
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
@@ -1768,14 +2589,19 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
     const startY = e.clientY;
     const startHeight = localDrawerHeight;
 
-    const onMove = (ev: MouseEvent) => {
+    /**
+     * Update local drawer height while dragging the divider.
+     * @param ev Mouse move event while resizing.
+     */
+    function onMove(ev: MouseEvent): void {
       if (!localDrawerDraggingRef.current) return;
       const next = Math.max(120, Math.min(420, startHeight - (ev.clientY - startY)));
       pendingLocalDrawerHeightRef.current = next;
       setLocalDrawerHeight(next);
-    };
+    }
 
-    const onUp = () => {
+    /** Commit local drawer height and remove divider listeners. */
+    function onUp(): void {
       if (!localDrawerDraggingRef.current) return;
       localDrawerDraggingRef.current = false;
       const committed = Math.round(pendingLocalDrawerHeightRef.current);
@@ -1783,7 +2609,7 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
       window.localStorage.setItem("markup-local-drawer-height-v1", String(committed));
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
-    };
+    }
 
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
@@ -1794,450 +2620,80 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
       className={cn("relative flex h-full flex-col border-r border-border bg-card overflow-hidden")}
       style={!mobile ? { width: `var(--filetree-drag-width, ${fileTreeWidth}px)`, maxWidth: "100vw" } : undefined}
     >
-      {/* Header row 1: title + main controls */}
-      <div className={cn("flex items-center px-2 border-b border-border", mobile ? "py-2 gap-1.5" : "py-1.5 gap-1")}>
-        <div className={cn("flex items-center flex-wrap", mobile ? "gap-1" : "gap-0.5")}>
-          <DropdownMenu>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className={cn(toolbarButtonSize, "text-muted-foreground hover:text-foreground")}
-                  >
-                    <Plus className={toolbarIconSize} />
-                  </Button>
-                </DropdownMenuTrigger>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">New…</TooltipContent>
-            </Tooltip>
-            <DropdownMenuContent align="start" className="min-w-[140px]">
-              <DropdownMenuItem onClick={() => requestCreateTab()}>
-                <FileText className="mr-2 h-3.5 w-3.5" /> Note
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => createWhiteboard()}>
-                <PenTool className="mr-2 h-3.5 w-3.5" /> Whiteboard
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => createMindmap()}>
-                <GitBranch className="mr-2 h-3.5 w-3.5" /> Mindmap
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => createKanban()}>
-                <KanbanSquare className="mr-2 h-3.5 w-3.5" /> Kanban
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => createPdf()}>
-                <FileType className="mr-2 h-3.5 w-3.5" /> PDF
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => createFolder("New Folder")}
-                className={cn(toolbarButtonSize, "text-muted-foreground hover:text-foreground")}
-              >
-                <FolderPlus className={toolbarIconSize} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">New Folder</TooltipContent>
-          </Tooltip>
-          {/* Sort A-Z / Z-A */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() =>
-                  setSortAsc((prev) =>
-                    prev === null ? true : prev === true ? false : null
-                  )
-                }
-                className={cn(
-                  toolbarButtonSize,
-                  "text-muted-foreground hover:text-foreground",
-                  sortAsc !== null && "text-foreground"
-                )}
-              >
-                {sortAsc === false ? (
-                  <ArrowUpZA className={toolbarIconSize} />
-                ) : (
-                  <ArrowDownAZ className={toolbarIconSize} />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {sortAsc === null ? "Sort A→Z" : sortAsc ? "Sort Z→A" : "Unsort"}
-            </TooltipContent>
-          </Tooltip>
-          {/* Sort by Type */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setSortByType((prev) => !prev)}
-                className={cn(
-                  toolbarButtonSize,
-                  "text-muted-foreground hover:text-foreground",
-                  sortByType && "text-foreground"
-                )}
-              >
-                <Layers className={toolbarIconSize} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {sortByType ? "Unsort by type" : "Sort by type"}
-            </TooltipContent>
-          </Tooltip>
-          {/* Collapse / Expand all */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={expandedFolders.size > 0 ? collapseAll : expandAll}
-                className={cn(toolbarButtonSize, "text-muted-foreground hover:text-foreground")}
-              >
-                {expandedFolders.size > 0 ? (
-                  <ChevronsDownUp className={toolbarIconSize} />
-                ) : (
-                  <ChevronsUpDown className={toolbarIconSize} />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {expandedFolders.size > 0 ? "Collapse All" : "Expand All"}
-            </TooltipContent>
-          </Tooltip>
-          {/* Tag filter */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setTagFilterOpen((prev) => !prev)}
-                className={cn(
-                  toolbarButtonSize,
-                  "text-muted-foreground hover:text-foreground",
-                  (tagFilterOpen || activeTagFilters.size > 0) && "text-foreground"
-                )}
-              >
-                <Tag className={toolbarIconSize} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {tagFilterOpen ? "Hide Tags" : "Filter by Tags"}
-              {activeTagFilters.size > 0 && ` (${activeTagFilters.size})`}
-            </TooltipContent>
-          </Tooltip>
-          {/* Close sidebar — desktop only */}
-          {!mobile && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={toggleFileTree}
-                  className={cn(toolbarButtonSize, "text-muted-foreground hover:text-foreground")}
-                >
-                  <PanelLeftClose className={toolbarIconSize} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                Close Sidebar <kbd className="ml-1 text-[10px] opacity-60">Alt+B</kbd>
-              </TooltipContent>
-            </Tooltip>
-          )}
-          {/* Close — mobile only */}
-          {mobile && onMobileClose && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onMobileClose}
-              className={cn(toolbarButtonSize, "text-muted-foreground hover:text-foreground")}
-            >
-              <X className={toolbarIconSize} />
-            </Button>
-          )}
-        </div>
-      </div>
+      <FileTreeToolbar
+        mobile={mobile}
+        onMobileClose={onMobileClose}
+        toolbarButtonSize={toolbarButtonSize}
+        toolbarIconSize={toolbarIconSize}
+        requestCreateTab={requestCreateTab}
+        createWhiteboard={createWhiteboard}
+        createMindmap={createMindmap}
+        createKanban={createKanban}
+        createPdf={createPdf}
+        createFolder={createFolder}
+        sortAsc={sortAsc}
+        setSortAsc={setSortAsc}
+        sortByType={sortByType}
+        setSortByType={setSortByType}
+        expandedCount={expandedFolders.size}
+        collapseAll={collapseAll}
+        expandAll={expandAll}
+        tagFilterOpen={tagFilterOpen}
+        setTagFilterOpen={setTagFilterOpen}
+        activeTagFilterCount={activeTagFilters.size}
+        toggleFileTree={toggleFileTree}
+      />
 
-      {/* Tag filter panel */}
-      {tagFilterOpen && allTags.length > 0 && (
-        <div className="px-2 py-1.5 border-b border-border/50 bg-muted/30">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Filter by Tags</p>
-            {activeTagFilters.size > 0 && (
-              <button
-                onClick={clearTagFilters}
-                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {allTags.map((tag) => (
-              <button
-                key={tag}
-                onClick={() => toggleTagFilter(tag)}
-                className={cn(
-                  "rounded-sm px-1.5 py-0.5 text-[10px] border transition-colors",
-                  activeTagFilters.has(tag)
-                    ? "border-transparent font-medium"
-                    : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
-                )}
-                style={
-                  activeTagFilters.has(tag)
-                    ? {
-                        background: `${getTagColor(tag)}20`,
-                        color: getTagColor(tag),
-                      }
-                    : undefined
-                }
-              >
-                #{tag}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <FileTreeTagFilterPanel
+        tagFilterOpen={tagFilterOpen}
+        allTags={allTags}
+        activeTagFilters={activeTagFilters}
+        clearTagFilters={clearTagFilters}
+        toggleTagFilter={toggleTagFilter}
+        getTagColor={getTagColor}
+      />
 
-      {/* Active filter chips (when panel is closed) */}
-      {!tagFilterOpen && activeTagFilters.size > 0 && (
-        <div className="flex items-center gap-1 px-2 py-1 border-b border-border/50 bg-muted/30">
-          <Filter className="h-2.5 w-2.5 shrink-0 text-muted-foreground" />
-          <div className="flex flex-wrap gap-0.5 flex-1">
-            {Array.from(activeTagFilters).map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex items-center gap-0.5 rounded-sm px-1 py-0 text-[9px] leading-tight"
-                style={{
-                  background: `${getTagColor(tag)}20`,
-                  color: getTagColor(tag),
-                }}
-              >
-                #{tag}
-                <button onClick={() => toggleTagFilter(tag)} className="opacity-60 hover:opacity-100">×</button>
-              </span>
-            ))}
-          </div>
-          <button
-            onClick={clearTagFilters}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        </div>
-      )}
+      <FileTreeRootArea
+        onRootDragOver={onRootDragOver}
+        onRootDrop={onRootDrop}
+        onlineTabs={onlineTabs}
+        tabPassesFilter={tabPassesFilter}
+        activeTabId={activeTabId}
+        switchTab={switchTab}
+        deleteTab={deleteTab}
+        hideMd={hideMd}
+        mobile={mobile}
+        mobileDraggedTabId={mobileDraggedTabId}
+        startMobileDrag={startMobileDrag}
+        dropMobileDraggedTab={dropMobileDraggedTab}
+        cancelMobileDrag={cancelMobileDrag}
+        visibleFoldersByParent={visibleFoldersByParent}
+        renderFolder={renderFolder}
+        visibleFolderIds={visibleFolderIds}
+        unpinnedRootTabs={unpinnedRootTabs}
+        requestCreateTab={requestCreateTab}
+        createWhiteboard={createWhiteboard}
+        createMindmap={createMindmap}
+        createKanban={createKanban}
+        createPdf={createPdf}
+        createFolder={createFolder}
+      />
 
-      {/* Tree content — right-click context menu on empty space */}
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <div
-            className="flex-1 overflow-y-auto px-1 py-1"
-            onDragOver={onRootDragOver}
-            onDrop={onRootDrop}
-          >
-            {/* Pinned files (across all folders) */}
-            {onlineTabs.some((t) => t.pinned && tabPassesFilter(t)) && (
-              <div className="mb-1 pb-1 border-b border-border/50">
-                <p className="px-2 py-0.5 text-[10px] text-muted-foreground/50 uppercase tracking-wider flex items-center gap-1">
-                  <Pin className="h-2.5 w-2.5" /> Pinned
-                </p>
-                {onlineTabs
-                  .filter((t) => t.pinned && tabPassesFilter(t))
-                  .map((tab) => (
-                    <FileItem
-                      key={`pinned-${tab.id}`}
-                      tab={tab}
-                      isActive={tab.id === activeTabId}
-                      onSwitch={() => switchTab(tab.id)}
-                      onClose={() => deleteTab(tab.id)}
-                      hideMd={hideMd}
-                      mobile={mobile}
-                      mobileDraggingTabId={mobileDraggedTabId}
-                      onStartMobileDrag={startMobileDrag}
-                    />
-                  ))}
-              </div>
-            )}
-
-            {mobile && mobileDraggedTabId && (
-              <div className="mx-1 mb-2 rounded-md border border-dashed border-primary/50 bg-primary/5 p-2">
-                <p className="text-[10px] text-muted-foreground mb-1">Move file: tap a folder to drop, or place it in root.</p>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => dropMobileDraggedTab(null)}
-                    className="rounded-md border border-border bg-background px-2 py-1 text-[10px] text-foreground hover:bg-muted transition-colors"
-                  >
-                    Move to Root
-                  </button>
-                  <button
-                    onClick={cancelMobileDrag}
-                    className="rounded-md border border-border bg-background px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Folders */}
-            {(visibleFoldersByParent.get(null) ?? []).map((folder) => renderFolder(folder, 0))}
-
-            {/* Root files (no folder) */}
-            {visibleFolderIds.size > 0 && unpinnedRootTabs.length > 0 && (
-              <div className="mt-1 pt-1 border-t border-border/50">
-                <p className="px-2 py-0.5 text-[10px] text-muted-foreground/50 uppercase tracking-wider">
-                  Unsorted
-                </p>
-              </div>
-            )}
-            {unpinnedRootTabs.map((tab) => (
-              <FileItem
-                key={tab.id}
-                tab={tab}
-                isActive={tab.id === activeTabId}
-                onSwitch={() => switchTab(tab.id)}
-                onClose={() => deleteTab(tab.id)}
-                hideMd={hideMd}
-                mobile={mobile}
-                mobileDraggingTabId={mobileDraggedTabId}
-                onStartMobileDrag={startMobileDrag}
-              />
-            ))}
-
-            {onlineTabs.length === 0 && (
-              <p className="px-3 py-4 text-center text-[10px] text-muted-foreground/50">
-                No files yet
-              </p>
-            )}
-
-            {/* Spacer to ensure there's droppable area */}
-            <div className="min-h-[40px]" />
-          </div>
-        </ContextMenuTrigger>
-        <ContextMenuContent>
-          <ContextMenuItem onClick={() => requestCreateTab()}>
-            <Plus className="mr-2 h-3.5 w-3.5" /> New File
-          </ContextMenuItem>
-          <ContextMenuItem onClick={() => createWhiteboard()}>
-            <PenTool className="mr-2 h-3.5 w-3.5" /> New Whiteboard
-          </ContextMenuItem>
-          <ContextMenuItem onClick={() => createMindmap()}>
-            <GitBranch className="mr-2 h-3.5 w-3.5" /> New Mindmap
-          </ContextMenuItem>
-          <ContextMenuItem onClick={() => createKanban()}>
-            <KanbanSquare className="mr-2 h-3.5 w-3.5" /> New Kanban
-          </ContextMenuItem>
-          <ContextMenuItem onClick={() => createPdf()}>
-            <FileType className="mr-2 h-3.5 w-3.5" /> New PDF
-          </ContextMenuItem>
-          <ContextMenuItem onClick={() => createFolder("New Folder")}>
-            <FolderPlus className="mr-2 h-3.5 w-3.5" /> New Folder
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
       {isTauri() && (
-        <div className="border-t border-border">
-          <button
-            onClick={() => setLocalDrawerOpen((v) => !v)}
-            className="flex w-full items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-          >
-            <HardDrive className="h-3.5 w-3.5" />
-            <span className="font-medium">Local</span>
-            <span className="ml-auto text-[10px] text-muted-foreground/70">{localTabs.length}</span>
-            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", localDrawerOpen ? "rotate-180" : "")} />
-          </button>
-          {localDrawerOpen && (
-            <div className="border-t border-border/60">
-              {!mobile && (
-                <button
-                  type="button"
-                  onMouseDown={onLocalDrawerResizeMouseDown}
-                  className="block h-1.5 w-full cursor-row-resize bg-transparent hover:bg-primary/20 active:bg-primary/30 transition-colors"
-                  aria-label="Resize local files drawer"
-                />
-              )}
-              <div
-                className="overflow-y-auto px-1 py-1"
-                style={!mobile ? { height: localDrawerHeight } : { maxHeight: 224 }}
-              >
-              {localTabs.length === 0 ? (
-                <p className="px-3 py-3 text-center text-[10px] text-muted-foreground/50">
-                  No local files
-                </p>
-              ) : (
-                [...localTabs]
-                  .sort((a, b) => a.title.localeCompare(b.title))
-                  .map((tab) => {
-                    const Icon = getTabIcon(tab);
-                    return (
-                      <div
-                        key={`local-${tab.id}`}
-                        className={cn(
-                          "group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-muted/50 transition-colors",
-                          tab.id === activeTabId && "bg-accent text-accent-foreground"
-                        )}
-                      >
-                        <button
-                          onClick={() => switchTab(tab.id)}
-                          className="flex min-w-0 flex-1 items-center gap-2 text-left text-xs"
-                        >
-                          <Icon className="h-3.5 w-3.5 shrink-0" style={tab.iconColor ? { color: tab.iconColor } : undefined} />
-                          <span className="truncate">{hideMd ? tab.title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/i, "") : tab.title}</span>
-                        </button>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                syncLocalTabToOnline(tab.id);
-                              }}
-                            >
-                              <CloudUpload className="h-3.5 w-3.5" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="left">Sync to Online</TooltipContent>
-                        </Tooltip>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={(event) => event.stopPropagation()}
-                            >
-                              <MoreHorizontal className="h-3.5 w-3.5" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="min-w-[170px]">
-                            {profiles.map((profile) => (
-                              <DropdownMenuItem
-                                key={profile.id}
-                                onClick={() => moveTabToWorkspace(tab.id, profile.id)}
-                                className={cn(profile.id === getTabWorkspaceId(tab) && "bg-accent")}
-                              >
-                                <span className="h-2.5 w-2.5 rounded-full" style={{ background: profile.color }} />
-                                <span className="truncate">Move to {profile.name}</span>
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    );
-                  })
-              )}
-            </div>
-            </div>
-          )}
-        </div>
+        <LocalFilesDrawer
+          localDrawerOpen={localDrawerOpen}
+          setLocalDrawerOpen={setLocalDrawerOpen}
+          localTabs={localTabs}
+          mobile={mobile}
+          onLocalDrawerResizeMouseDown={onLocalDrawerResizeMouseDown}
+          localDrawerHeight={localDrawerHeight}
+          activeTabId={activeTabId}
+          switchTab={switchTab}
+          syncLocalTabToOnline={syncLocalTabToOnline}
+          profiles={profiles}
+          moveTabToWorkspace={moveTabToWorkspace}
+          hideMd={hideMd}
+        />
       )}
       {/* Profile selector — bottom */}
       <div className="flex items-center px-2 py-1.5 border-t border-border">
