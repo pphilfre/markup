@@ -75,7 +75,8 @@ function handleError(error: unknown) {
   if (error instanceof ApiError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
   }
-  console.error("[db/mutation]", error);
+  const message = error instanceof Error ? error.message : String(error);
+  console.error("[db/mutation] Unhandled error:", message, error);
   return NextResponse.json({ error: "Internal server error." }, { status: 500 });
 }
 
