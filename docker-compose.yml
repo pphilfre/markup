@@ -23,7 +23,7 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       # Database — points to the postgres service above
       DATABASE_URL: postgresql://markup:markup_password@db:5432/markup
