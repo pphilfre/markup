@@ -15,11 +15,23 @@ import { getDesktopToken, isTauri } from "@/lib/tauri";
 type IAnnotationStore = import("pdfjs-annotation-extension-for-react").IAnnotationStore;
 type PdfAnnotatorProps = import("pdfjs-annotation-extension-for-react").PdfAnnotatorProps;
 
+// Indirection prevents Turbopack from statically resolving the optional style
+// import at build time when the package may not be installed.
+const _pdfStylePkg = [
+  "pdfjs-annotation-extension-for-react",
+  "style",
+].join("/");
+
 const PdfAnnotator = dynamic<PdfAnnotatorProps>(
   async () => {
     // Style and worker URL are resolved inside the dynamic import so Turbopack
     // does not attempt to resolve these optional packages during the static build.
-    await import("pdfjs-annotation-extension-for-react/style" as string);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      await import(/* webpackIgnore: true */ _pdfStylePkg as string);
+    } catch {
+      // Style is optional; ignore if the package is not installed.
+    }
     const mod = await import("pdfjs-annotation-extension-for-react");
     return mod.PdfAnnotator;
   },
