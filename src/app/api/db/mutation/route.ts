@@ -187,17 +187,27 @@ export async function POST(req: NextRequest) {
         const user = await requireAuthUser(req);
         assertUserIdMatch(userId, user);
 
-        const data = stripUndefined({
-          activeTabId: args.activeTabId,
-          openTabIds: args.openTabIds,
-          folders: args.folders,
-          viewMode: args.viewMode,
-          theme: args.theme,
-          fileTreeOpen: args.fileTreeOpen,
-          settings: args.settings,
-          profiles: args.profiles,
-          activeProfileId: args.activeProfileId,
-        });
+        const data: {
+          activeTabId?: string | null;
+          openTabIds?: unknown;
+          folders?: unknown;
+          viewMode?: string | null;
+          theme?: string | null;
+          fileTreeOpen?: boolean | null;
+          settings?: unknown;
+          profiles?: unknown;
+          activeProfileId?: string | null;
+        } = {};
+
+        if (args.activeTabId !== undefined) data.activeTabId = args.activeTabId === null ? null : String(args.activeTabId);
+        if (args.openTabIds !== undefined) data.openTabIds = args.openTabIds;
+        if (args.folders !== undefined) data.folders = args.folders;
+        if (args.viewMode !== undefined) data.viewMode = args.viewMode === null ? null : String(args.viewMode);
+        if (args.theme !== undefined) data.theme = args.theme === null ? null : String(args.theme);
+        if (args.fileTreeOpen !== undefined) data.fileTreeOpen = args.fileTreeOpen === null ? null : Boolean(args.fileTreeOpen);
+        if (args.settings !== undefined) data.settings = args.settings;
+        if (args.profiles !== undefined) data.profiles = args.profiles;
+        if (args.activeProfileId !== undefined) data.activeProfileId = args.activeProfileId === null ? null : String(args.activeProfileId);
 
         const existing = await prisma.workspace.findUnique({
           where: { userId },
