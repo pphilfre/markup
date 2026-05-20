@@ -607,7 +607,7 @@ export function GraphView() {
     function render(): void {
       const dpr = window.devicePixelRatio || 1;
       const currentContainer = containerRef.current;
-      if (!currentContainer) return;
+      if (!canvas || !ctx || !currentContainer) return;
       const rect = currentContainer.getBoundingClientRect();
       canvas.width = rect.width * dpr;
       canvas.height = rect.height * dpr;

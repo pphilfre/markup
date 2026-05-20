@@ -190,24 +190,24 @@ export async function POST(req: NextRequest) {
 
         const data: {
           activeTabId?: string | null;
-          openTabIds?: Prisma.InputJsonValue | null;
-          folders?: Prisma.InputJsonValue | null;
+          openTabIds?: Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue;
+          folders?: Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue;
           viewMode?: string | null;
           theme?: string | null;
           fileTreeOpen?: boolean | null;
-          settings?: Prisma.InputJsonValue | null;
-          profiles?: Prisma.InputJsonValue | null;
+          settings?: Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue;
+          profiles?: Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue;
           activeProfileId?: string | null;
         } = {};
 
         if (args.activeTabId !== undefined) data.activeTabId = args.activeTabId === null ? null : String(args.activeTabId);
-        if (args.openTabIds !== undefined) data.openTabIds = args.openTabIds === null ? null : (args.openTabIds as Prisma.InputJsonValue);
-        if (args.folders !== undefined) data.folders = args.folders === null ? null : (args.folders as Prisma.InputJsonValue);
+        if (args.openTabIds !== undefined) data.openTabIds = args.openTabIds === null ? Prisma.JsonNull : (args.openTabIds as Prisma.InputJsonValue);
+        if (args.folders !== undefined) data.folders = args.folders === null ? Prisma.JsonNull : (args.folders as Prisma.InputJsonValue);
         if (args.viewMode !== undefined) data.viewMode = args.viewMode === null ? null : String(args.viewMode);
         if (args.theme !== undefined) data.theme = args.theme === null ? null : String(args.theme);
         if (args.fileTreeOpen !== undefined) data.fileTreeOpen = args.fileTreeOpen === null ? null : Boolean(args.fileTreeOpen);
-        if (args.settings !== undefined) data.settings = args.settings === null ? null : (args.settings as Prisma.InputJsonValue);
-        if (args.profiles !== undefined) data.profiles = args.profiles === null ? null : (args.profiles as Prisma.InputJsonValue);
+        if (args.settings !== undefined) data.settings = args.settings === null ? Prisma.JsonNull : (args.settings as Prisma.InputJsonValue);
+        if (args.profiles !== undefined) data.profiles = args.profiles === null ? Prisma.JsonNull : (args.profiles as Prisma.InputJsonValue);
         if (args.activeProfileId !== undefined) data.activeProfileId = args.activeProfileId === null ? null : String(args.activeProfileId);
 
         const existing = await prisma.workspace.findUnique({
@@ -256,17 +256,18 @@ export async function POST(req: NextRequest) {
         const user = await requireAuthUser(req);
         assertUserIdMatch(userId, user);
 
-        const data = stripUndefined({
+        const tagsValue = optionalStringArray(args.tags, "tags");
+        const tabUpdateData: Prisma.TabUpdateInput = stripUndefined({
           title,
           content,
           workspaceId: optionalString(args.workspaceId),
           folderId,
-          tags: optionalStringArray(args.tags, "tags"),
+          tags: tagsValue === null ? Prisma.JsonNull : tagsValue,
           pinned: typeof args.pinned === "boolean" ? args.pinned : undefined,
           noteType: optionalString(args.noteType),
           customIcon: optionalString(args.customIcon),
           iconColor: optionalString(args.iconColor),
-        });
+        }) as Prisma.TabUpdateInput;
 
         await prisma.tab.upsert({
           where: {
@@ -275,12 +276,20 @@ export async function POST(req: NextRequest) {
               tabId,
             },
           },
-          create: stripUndefined({
+          create: {
             userId,
             tabId,
-            ...data,
-          }),
-          update: data,
+            title,
+            content,
+            workspaceId: optionalString(args.workspaceId),
+            folderId,
+            tags: tagsValue === null ? Prisma.JsonNull : tagsValue,
+            pinned: typeof args.pinned === "boolean" ? args.pinned : undefined,
+            noteType: optionalString(args.noteType),
+            customIcon: optionalString(args.customIcon),
+            iconColor: optionalString(args.iconColor),
+          },
+          update: tabUpdateData,
         });
 
         return NextResponse.json(null);
@@ -361,17 +370,18 @@ export async function POST(req: NextRequest) {
           });
 
           for (const tab of tabs) {
-            const data = stripUndefined({
+            const syncTagsValue = tab.tags === null ? Prisma.JsonNull : tab.tags;
+            const syncUpdateData: Prisma.TabUpdateInput = stripUndefined({
               title: tab.title,
               content: tab.content,
               workspaceId: tab.workspaceId,
               folderId: tab.folderId,
-              tags: tab.tags,
+              tags: syncTagsValue,
               pinned: tab.pinned,
               noteType: tab.noteType,
               customIcon: tab.customIcon,
               iconColor: tab.iconColor,
-            });
+            }) as Prisma.TabUpdateInput;
 
             await tx.tab.upsert({
               where: {
@@ -380,12 +390,20 @@ export async function POST(req: NextRequest) {
                   tabId: tab.tabId,
                 },
               },
-              create: stripUndefined({
+              create: {
                 userId,
                 tabId: tab.tabId,
-                ...data,
-              }),
-              update: data,
+                title: tab.title,
+                content: tab.content,
+                workspaceId: tab.workspaceId,
+                folderId: tab.folderId,
+                tags: syncTagsValue,
+                pinned: tab.pinned,
+                noteType: tab.noteType,
+                customIcon: tab.customIcon,
+                iconColor: tab.iconColor,
+              },
+              update: syncUpdateData,
             });
           }
         });
@@ -456,7 +474,7 @@ export async function POST(req: NextRequest) {
         }
 
         await prisma.sharedNote.create({
-          data: stripUndefined({
+          data: {
             shareId,
             ownerUserId,
             tabId,
@@ -465,10 +483,10 @@ export async function POST(req: NextRequest) {
             visibility,
             permission,
             allowedUsers: normalizedAllowed,
-            noteType,
-            whiteboardData,
-            mindmapData,
-          }),
+            ...(noteType !== undefined ? { noteType } : {}),
+            ...(whiteboardData !== undefined ? { whiteboardData } : {}),
+            ...(mindmapData !== undefined ? { mindmapData } : {}),
+          },
         });
 
         return NextResponse.json(shareId);

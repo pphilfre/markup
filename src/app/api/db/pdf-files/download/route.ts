@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
     headers.set("Content-Disposition", `inline; filename="${safeFileName(record.fileName)}"`);
     headers.set("Cache-Control", "no-store");
 
-    return new NextResponse(record.data, {
+    return new NextResponse(new Uint8Array(record.data), {
       status: 200,
       headers,
     });

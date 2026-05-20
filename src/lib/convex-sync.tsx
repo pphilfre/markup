@@ -356,7 +356,7 @@ export function ConvexSync() {
         convex.query(api.tabs.list, { userId }),
       ]);
 
-      latestWorkspace = freshWorkspace;
+      latestWorkspace = freshWorkspace as typeof latestWorkspace;
       latestRemoteTabs = freshTabs;
     } catch (err) {
       console.error("[ConvexSync] manual pull failed:", err);

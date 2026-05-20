@@ -71,7 +71,7 @@ function parsePdfTabData(content: string): PdfTabData {
     const parsed = JSON.parse(content) as Partial<PdfTabData>;
     if (!parsed || typeof parsed !== "object") return EMPTY_PDF_DATA;
     const normalizedSource =
-      parsed.source === "online" || parsed.source === "convex" ? "online" : "local";
+      parsed.source === "online" || (parsed.source as string) === "convex" ? "online" : "local";
     return {
       version: 1,
       fileName: typeof parsed.fileName === "string" ? parsed.fileName : null,
