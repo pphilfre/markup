@@ -18,6 +18,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_DB_PROVIDER: postgres
     restart: unless-stopped
     depends_on:
       db:
@@ -36,6 +38,9 @@ services:
 
       # App URL (used for CSP / redirect base)
       NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+
+      # Use Postgres instead of Convex for self-hosted deployments
+      NEXT_PUBLIC_DB_PROVIDER: postgres
 
       NODE_ENV: production
 

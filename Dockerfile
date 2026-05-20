@@ -16,6 +16,10 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Accept public env vars as build args so Next.js can bake them into the bundle
+ARG NEXT_PUBLIC_DB_PROVIDER=postgres
+ENV NEXT_PUBLIC_DB_PROVIDER=$NEXT_PUBLIC_DB_PROVIDER
+
 # Generate Prisma client (dummy DATABASE_URL satisfies schema validation at build time)
 RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" node node_modules/prisma/build/index.js generate
 
