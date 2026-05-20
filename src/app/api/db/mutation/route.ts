@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/server/prisma";
 import {
   ApiError,
@@ -189,24 +190,24 @@ export async function POST(req: NextRequest) {
 
         const data: {
           activeTabId?: string | null;
-          openTabIds?: unknown;
-          folders?: unknown;
+          openTabIds?: Prisma.InputJsonValue | null;
+          folders?: Prisma.InputJsonValue | null;
           viewMode?: string | null;
           theme?: string | null;
           fileTreeOpen?: boolean | null;
-          settings?: unknown;
-          profiles?: unknown;
+          settings?: Prisma.InputJsonValue | null;
+          profiles?: Prisma.InputJsonValue | null;
           activeProfileId?: string | null;
         } = {};
 
         if (args.activeTabId !== undefined) data.activeTabId = args.activeTabId === null ? null : String(args.activeTabId);
-        if (args.openTabIds !== undefined) data.openTabIds = args.openTabIds;
-        if (args.folders !== undefined) data.folders = args.folders;
+        if (args.openTabIds !== undefined) data.openTabIds = args.openTabIds === null ? null : (args.openTabIds as Prisma.InputJsonValue);
+        if (args.folders !== undefined) data.folders = args.folders === null ? null : (args.folders as Prisma.InputJsonValue);
         if (args.viewMode !== undefined) data.viewMode = args.viewMode === null ? null : String(args.viewMode);
         if (args.theme !== undefined) data.theme = args.theme === null ? null : String(args.theme);
         if (args.fileTreeOpen !== undefined) data.fileTreeOpen = args.fileTreeOpen === null ? null : Boolean(args.fileTreeOpen);
-        if (args.settings !== undefined) data.settings = args.settings;
-        if (args.profiles !== undefined) data.profiles = args.profiles;
+        if (args.settings !== undefined) data.settings = args.settings === null ? null : (args.settings as Prisma.InputJsonValue);
+        if (args.profiles !== undefined) data.profiles = args.profiles === null ? null : (args.profiles as Prisma.InputJsonValue);
         if (args.activeProfileId !== undefined) data.activeProfileId = args.activeProfileId === null ? null : String(args.activeProfileId);
 
         const existing = await prisma.workspace.findUnique({
