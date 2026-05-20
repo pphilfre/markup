@@ -77,7 +77,8 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: isTauriBuild,
   },
   // Static export for Tauri production builds (no Node.js server needed)
-  ...(isTauriBuild ? { output: "export" } : {}),
+  // Standalone output for Docker deployments
+  ...(isTauriBuild ? { output: "export" } : { output: "standalone" }),
   allowedDevOrigins,
   async rewrites() {
     // Rewrites are not supported with static export, skip them for Tauri

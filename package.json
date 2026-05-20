@@ -7,6 +7,7 @@
     "dev:next": "node scripts/dev-next-supervisor.js",
     "dev:convex": "npx convex dev",
     "build": "npx convex deploy --cmd \"prisma generate && next build\"",
+    "build:docker": "prisma generate && next build",
     "sync-version": "node scripts/sync-version.js",
     "build:tauri": "npm run sync-version && node scripts/tauri-build.js",
     "start": "next start",

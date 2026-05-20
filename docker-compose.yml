@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: markup
+      POSTGRES_PASSWORD: markup_password
+      POSTGRES_DB: markup
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U markup -d markup"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      # Database — points to the postgres service above
+      DATABASE_URL: postgresql://markup:markup_password@db:5432/markup
+
+      # WorkOS auth — fill these in or use a .env file
+      WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID}
+      WORKOS_API_KEY: ${WORKOS_API_KEY}
+      WORKOS_COOKIE_PASSWORD: ${WORKOS_COOKIE_PASSWORD}
+      NEXT_PUBLIC_WORKOS_REDIRECT_URI: ${NEXT_PUBLIC_WORKOS_REDIRECT_URI}
+
+      # App URL (used for CSP / redirect base)
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+
+      NODE_ENV: production
+
+volumes:
+  postgres_data:
