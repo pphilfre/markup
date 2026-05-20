@@ -150,13 +150,11 @@ export async function POST(req: NextRequest) {
             lastName,
             profilePictureUrl,
           }),
-          create: stripUndefined({
+          create: {
             workosId,
             email,
-            firstName,
-            lastName,
-            profilePictureUrl,
-          }),
+            ...stripUndefined({ firstName, lastName, profilePictureUrl }),
+          },
         });
 
         const existingWorkspace = await prisma.workspace.findUnique({
