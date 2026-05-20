@@ -10,15 +10,24 @@ import { useEditorStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { getDbProvider } from "@/lib/db-provider";
 import { getDesktopToken, isTauri } from "@/lib/tauri";
-import type { IAnnotationStore, PdfAnnotatorProps } from "pdfjs-annotation-extension-for-react";
-import "pdfjs-annotation-extension-for-react/style";
 
-const PDF_WORKER_SRC = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+// Types are imported lazily to avoid static resolution of the optional package at build time.
+type IAnnotationStore = import("pdfjs-annotation-extension-for-react").IAnnotationStore;
+type PdfAnnotatorProps = import("pdfjs-annotation-extension-for-react").PdfAnnotatorProps;
 
 const PdfAnnotator = dynamic<PdfAnnotatorProps>(
-  async () => (await import("pdfjs-annotation-extension-for-react")).PdfAnnotator,
+  async () => {
+    // Style and worker URL are resolved inside the dynamic import so Turbopack
+    // does not attempt to resolve these optional packages during the static build.
+    await import("pdfjs-annotation-extension-for-react/style" as string);
+    const mod = await import("pdfjs-annotation-extension-for-react");
+    return mod.PdfAnnotator;
+  },
   { ssr: false }
 );
+
+// Resolved lazily at runtime so the pdfjs-dist package is not required during SSR/build.
+let PDF_WORKER_SRC = "";
 
 interface PdfTabData {
   version: number;
@@ -133,6 +142,17 @@ export function PdfEditorView() {
     const setupPdfWorker = async () => {
       try {
         await import("pdfjs-annotation-extension-for-react");
+        // Resolve the worker URL at runtime so pdfjs-dist is not required at build time.
+        if (!PDF_WORKER_SRC) {
+          try {
+            // Try to load from local node_modules via dynamic import
+            const workerMod = await import(/* webpackIgnore: true */ "pdfjs-dist/build/pdf.worker.min.mjs");
+            PDF_WORKER_SRC = workerMod.default ?? "";
+          } catch {
+            // Fall back to CDN if local package is unavailable
+            PDF_WORKER_SRC = `https://unpkg.com/pdfjs-dist@5.4.624/build/pdf.worker.min.mjs`;
+          }
+        }
         const pdfjsLib = (
           globalThis as typeof globalThis & {
             pdfjsLib?: {
@@ -141,7 +161,7 @@ export function PdfEditorView() {
           }
         ).pdfjsLib;
 
-        if (pdfjsLib?.GlobalWorkerOptions) {
+        if (pdfjsLib?.GlobalWorkerOptions && PDF_WORKER_SRC) {
           pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER_SRC;
         }
       } finally {

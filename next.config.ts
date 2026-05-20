@@ -68,6 +68,7 @@ const sensitiveNoStoreHeaders = [
 const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
+  serverExternalPackages: ["@prisma/client", "prisma"],
   typescript: {
     // For Tauri static export builds we temporarily strip server-only routes,
     // which can cause Next's generated type validators to reference modules
