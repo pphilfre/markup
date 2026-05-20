@@ -17,7 +17,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Generate Prisma client
-RUN ./node_modules/.bin/prisma generate
+RUN node node_modules/prisma/build/index.js generate
 
 # Build the Next.js app (no Convex deploy, just the Next build)
 RUN npm run build:docker
