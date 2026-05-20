@@ -16,8 +16,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Generate Prisma client
-RUN node node_modules/prisma/build/index.js generate
+# Generate Prisma client (dummy DATABASE_URL satisfies schema validation at build time)
+RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" node node_modules/prisma/build/index.js generate
 
 # Build the Next.js app (no Convex deploy, just the Next build)
 RUN npm run build:docker
