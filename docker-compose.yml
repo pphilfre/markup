@@ -23,7 +23,7 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "3001:3000"
+      - "3000:3000"
     environment:
       # Database — points to the postgres service above
       DATABASE_URL: postgresql://markup:markup_password@db:5432/markup
@@ -35,7 +35,7 @@ services:
       NEXT_PUBLIC_WORKOS_REDIRECT_URI: ${NEXT_PUBLIC_WORKOS_REDIRECT_URI}
 
       # App URL (used for CSP / redirect base)
-      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3001}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
 
       NODE_ENV: production
 
