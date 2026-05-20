@@ -361,7 +361,7 @@ interface EditorState {
 
   // Folders
   folders: Folder[];
-  createFolder: (name: string, parentId?: string | null) => string;
+  createFolder: (name?: string, parentId?: string | null) => string;
   renameFolder: (id: string, name: string) => void;
   colorFolder: (id: string, color: string) => void;
   deleteFolder: (id: string) => void;
@@ -690,12 +690,13 @@ export const useEditorStore = create<EditorState>()(
     createFolder: (name, parentId = null) => {
       const id = crypto.randomUUID();
       const { folders } = get();
+      const folderName = name ?? "New Folder";
       const siblingCount = folders.filter((f) => (f.parentId ?? null) === (parentId ?? null)).length;
       const color = FOLDER_COLORS[folders.length % FOLDER_COLORS.length];
       set({
         folders: [
           ...folders,
-          { id, name, color, parentId, sortOrder: siblingCount },
+          { id, name: folderName, color, parentId, sortOrder: siblingCount },
         ],
       });
       return id;

@@ -8,6 +8,7 @@ import {
   getDesktopToken,
   isTauri,
 } from "@/lib/tauri";
+import { getDbProvider } from "@/lib/db-provider";
 
 type Level = "error" | "warn";
 
@@ -25,6 +26,7 @@ function uniqId(prefix: string): string {
 export function DesktopDebugNotice() {
   const [notices, setNotices] = useState<Notice[]>([]);
   const enabled = useMemo(() => isTauri(), []);
+  const provider = useMemo(() => getDbProvider(), []);
 
   useEffect(() => {
     if (!enabled) return;
@@ -38,9 +40,26 @@ export function DesktopDebugNotice() {
     };
 
     (async () => {
-      const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
-      if (!convexUrl) {
-        addNotice("error", "Convex", "NEXT_PUBLIC_CONVEX_URL is missing in this build.");
+      if (provider === "convex") {
+        const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+        if (!convexUrl) {
+          addNotice("error", "Convex", "NEXT_PUBLIC_CONVEX_URL is missing in this build.");
+        }
+      } else {
+        try {
+          const headers: Record<string, string> = {};
+          const token = getDesktopToken();
+          if (token) headers.Authorization = `Bearer ${token}`;
+          const res = await fetch(`${apiBase()}/api/db/health`, {
+            headers,
+            credentials: "include",
+          });
+          if (!res.ok) {
+            addNotice("error", "Postgres", "Postgres backend is unavailable. Check DATABASE_URL.");
+          }
+        } catch {
+          addNotice("error", "Postgres", "Postgres backend is unreachable.");
+        }
       }
 
       try {
@@ -78,7 +97,7 @@ export function DesktopDebugNotice() {
       window.removeEventListener("error", onError);
       window.removeEventListener("unhandledrejection", onPromiseRejection);
     };
-  }, [enabled]);
+  }, [enabled, provider]);
 
   if (!enabled || notices.length === 0) {
     return null;

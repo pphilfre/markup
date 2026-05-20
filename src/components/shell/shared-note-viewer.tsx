@@ -1,7 +1,6 @@
 "use client";
 
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { useDbMutation, useDbQuery } from "@/lib/db-hooks";
 import { useAuthState } from "@/components/convex-client-provider";
 import { MarkdownPreviewStandalone } from "@/components/editor/markdown-preview-standalone";
 import { PublicThemeMenu } from "@/components/shell/public-theme-menu";
@@ -272,9 +271,9 @@ function ReadOnlyMindmapCanvas({ data }: { data: string }) {
 
 export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
   const { user } = useAuthState();
-  const sharedNote = useQuery(api.sharing.getByShareId, { shareId });
-  const workspace = useQuery(api.workspace.get, user?.id ? { userId: user.id } : "skip");
-  const updateByShareId = useMutation(api.sharing.updateByShareId);
+  const sharedNote = useDbQuery("sharing.getByShareId", { shareId });
+  const workspace = useDbQuery("workspace.get", user?.id ? { userId: user.id } : "skip");
+  const updateByShareId = useDbMutation("sharing.updateByShareId");
 
   const [editContent, setEditContent] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);

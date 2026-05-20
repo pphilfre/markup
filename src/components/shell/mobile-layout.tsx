@@ -45,7 +45,7 @@ import { SpotlightSearch } from "@/components/shell/spotlight-search";
 import { SettingsPanel } from "@/components/shell/settings-panel";
 import { PublishDialog } from "@/components/shell/publish-dialog";
 import { ThemeSync } from "@/components/theme-provider";
-import { ConvexSync } from "@/lib/convex-sync";
+import { DatabaseSync } from "@/lib/database-sync";
 import { GraphView } from "@/components/shell/graph-view";
 import { WhiteboardView } from "@/components/shell/whiteboard";
 import { MindmapView } from "@/components/shell/mindmap";
@@ -715,7 +715,7 @@ export function MobileLayout() {
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden mobile-safe-top mobile-root">
       <ThemeSync />
-      <ConvexSync />
+      <DatabaseSync />
       <SpotlightSearch />
       <SettingsPanel />
       <FirstRunDialog />

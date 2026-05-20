@@ -606,7 +606,9 @@ export function GraphView() {
     /** Draw one animation frame of the graph canvas. */
     function render(): void {
       const dpr = window.devicePixelRatio || 1;
-      const rect = container.getBoundingClientRect();
+      const currentContainer = containerRef.current;
+      if (!currentContainer) return;
+      const rect = currentContainer.getBoundingClientRect();
       canvas.width = rect.width * dpr;
       canvas.height = rect.height * dpr;
       canvas.style.width = `${rect.width}px`;

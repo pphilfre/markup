@@ -1781,7 +1781,7 @@ function FileTreeToolbar({
   createMindmap: (folderId?: string | null) => void;
   createKanban: (folderId?: string | null) => void;
   createPdf: (folderId?: string | null) => void;
-  createFolder: (name?: string, parentId?: string | null) => void;
+  createFolder: (name: string, parentId?: string | null) => void;
   sortAsc: boolean | null;
   setSortAsc: React.Dispatch<React.SetStateAction<boolean | null>>;
   sortByType: boolean;
@@ -2099,7 +2099,7 @@ function FileTreeRootArea({
   createMindmap: (folderId?: string | null) => void;
   createKanban: (folderId?: string | null) => void;
   createPdf: (folderId?: string | null) => void;
-  createFolder: (name?: string, parentId?: string | null) => void;
+  createFolder: (name: string, parentId?: string | null) => void;
 }) {
   return (
     <ContextMenu>

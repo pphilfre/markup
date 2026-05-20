@@ -19,7 +19,7 @@ import "katex/dist/katex.min.css";
 import { emojify } from "node-emoji";
 import { useEditorStore } from "@/lib/store";
 
-const HIGHLIGHT_MARK_PATTERN = new RegExp("==([^=\\n]+)==", "g");
+const HIGHLIGHT_MARK_PATTERN = /==([^=\n]+)==/g;
 
 /**
  * Applies single-line markdown preprocessing shortcuts before rendering.
@@ -347,25 +347,18 @@ export function InlineMarkdownEditor({ onScroll }: { onScroll?: (fraction: numbe
     [tryAutoPunctuation, tryLineNavigation]
   );
 
-  // Scroll sync
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el || !onScroll) return;
-
-    /**
-     * Emits normalized scroll progress for parent preview sync.
-     */
-    const handler = (): void => {
+  /**
+   * Emits normalized scroll progress for parent preview sync.
+   */
+  const handleContainerScroll = useCallback(
+    (event: React.UIEvent<HTMLDivElement>) => {
+      if (!onScroll) return;
+      const el = event.currentTarget;
       const max = el.scrollHeight - el.clientHeight;
       onScroll(max > 0 ? el.scrollTop / max : 0);
-    };
-
-    el.addEventListener("scroll", handler, { passive: true });
-
-    return () => {
-      el.removeEventListener("scroll", handler);
-    };
-  }, [onScroll]);
+    },
+    [onScroll]
+  );
 
   if (!activeTab) {
     return (
@@ -378,6 +371,7 @@ export function InlineMarkdownEditor({ onScroll }: { onScroll?: (fraction: numbe
   return (
     <div
       ref={containerRef}
+      onScroll={handleContainerScroll}
       className="flex-1 overflow-auto"
       style={{ paddingLeft: settings.editorMargin, paddingRight: settings.editorMargin }}
     >

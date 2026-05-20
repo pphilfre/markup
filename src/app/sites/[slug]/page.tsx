@@ -2,8 +2,7 @@
 
 import { useMemo, useCallback, isValidElement, cloneElement, Component, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { useQuery } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
+import { useDbQuery } from "@/lib/db-hooks";
 import { useAuthState } from "@/components/convex-client-provider";
 import { PublicThemeMenu } from "@/components/shell/public-theme-menu";
 import ReactMarkdown from "react-markdown";
@@ -100,8 +99,8 @@ function PublishedSitePageInner() {
 }
 
 function PublishedSiteContent({ slug, userId, loggedIn }: { slug: string; userId: string | null; loggedIn: boolean }) {
-  const site = useQuery(api.sites.getBySlug, { slug });
-  const workspace = useQuery(api.workspace.get, userId ? { userId } : "skip");
+  const site = useDbQuery("sites.getBySlug", { slug });
+  const workspace = useDbQuery("workspace.get", userId ? { userId } : "skip");
   const [timedOut, setTimedOut] = useState(false);
   const [copied, setCopied] = useState(false);
   const [renderContent, setRenderContent] = useState("");

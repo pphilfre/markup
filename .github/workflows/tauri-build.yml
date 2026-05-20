@@ -48,7 +48,10 @@ jobs:
       - name: Create env file
         shell: bash
         run: |
-          echo "NEXT_PUBLIC_CONVEX_URL=https://quixotic-chipmunk-339.eu-west-1.convex.cloud" > .env.local
+          cat <<'EOF' > .env.local
+          NEXT_PUBLIC_DB_PROVIDER=convex
+          NEXT_PUBLIC_CONVEX_URL=https://quixotic-chipmunk-339.eu-west-1.convex.cloud
+          EOF
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0

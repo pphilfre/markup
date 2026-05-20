@@ -2,14 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import dynamic from "next/dynamic";
-import { useConvex, useMutation } from "convex/react";
 import { CloudUpload, FileDown, HardDrive, Loader2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthState } from "@/components/convex-client-provider";
+import { useDbMutation, useDbQuery } from "@/lib/db-hooks";
 import { useEditorStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import { api } from "../../../convex/_generated/api";
-import type { Id } from "../../../convex/_generated/dataModel";
+import { getDbProvider } from "@/lib/db-provider";
+import { getDesktopToken, isTauri } from "@/lib/tauri";
 import type { IAnnotationStore, PdfAnnotatorProps } from "pdfjs-annotation-extension-for-react";
 import "pdfjs-annotation-extension-for-react/style";
 
@@ -23,7 +23,7 @@ const PdfAnnotator = dynamic<PdfAnnotatorProps>(
 interface PdfTabData {
   version: number;
   fileName: string | null;
-  source: "local" | "convex";
+  source: "local" | "online";
   dataBase64: string | null;
   storageId: string | null;
   annotations: IAnnotationStore[];
@@ -49,10 +49,12 @@ function parsePdfTabData(content: string): PdfTabData {
   try {
     const parsed = JSON.parse(content) as Partial<PdfTabData>;
     if (!parsed || typeof parsed !== "object") return EMPTY_PDF_DATA;
+    const normalizedSource =
+      parsed.source === "online" || parsed.source === "convex" ? "online" : "local";
     return {
       version: 1,
       fileName: typeof parsed.fileName === "string" ? parsed.fileName : null,
-      source: parsed.source === "convex" ? "convex" : "local",
+      source: normalizedSource,
       dataBase64: typeof parsed.dataBase64 === "string" ? parsed.dataBase64 : null,
       storageId: typeof parsed.storageId === "string" ? parsed.storageId : null,
       annotations: Array.isArray(parsed.annotations) ? parsed.annotations : [],
@@ -107,10 +109,14 @@ export function PdfEditorView() {
 
   const { isAuthenticated, user } = useAuthState();
   const userId = user?.id ?? null;
-  const convex = useConvex();
+  const isPostgresProvider = getDbProvider() === "postgres";
 
-  const generateUploadUrl = useMutation(api.pdfFiles.generateUploadUrl);
-  const upsertPdfFile = useMutation(api.pdfFiles.upsert);
+  const generateUploadUrl = useDbMutation("pdfFiles.generateUploadUrl");
+  const upsertPdfFile = useDbMutation("pdfFiles.upsert");
+  const remoteFileUrl = useDbQuery(
+    "pdfFiles.getFileUrl",
+    userId && activeTabId ? { userId, tabId: activeTabId } : "skip"
+  );
 
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string>("");
@@ -169,37 +175,32 @@ export function PdfEditorView() {
 
   useEffect(() => {
     if (!activeTabId || !userId) return;
-    if (tabData.source === "convex") return;
+    if (tabData.source === "online") return;
     if (tabData.dataBase64) return;
+    if (!remoteFileUrl) return;
 
-    let cancelled = false;
-
-    const detectRemotePdf = async () => {
-      try {
-        const remoteFileUrl = await convex.query(api.pdfFiles.getFileUrl, { userId, tabId: activeTabId });
-        if (!remoteFileUrl || cancelled) return;
-
-        writeTabData({
-          ...tabData,
-          source: "convex",
-        });
-        setTabOrigin("online");
-      } catch {
-        // Keep local state if remote lookup fails.
-      }
-    };
-
-    void detectRemotePdf();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTabId, convex, setTabOrigin, tabData, userId, writeTabData]);
+    writeTabData({
+      ...tabData,
+      source: "online",
+    });
+    setTabOrigin("online");
+  }, [activeTabId, remoteFileUrl, setTabOrigin, tabData, userId, writeTabData]);
 
   useEffect(() => {
-    if (!activeTabId || !userId || tabData.source !== "convex" || tabData.dataBase64) {
+    if (!activeTabId || !userId || tabData.source !== "online" || tabData.dataBase64) {
       setIsLoadingRemotePdf(false);
       setRemotePdfData(null);
+      return;
+    }
+
+    if (remoteFileUrl === undefined) {
+      return;
+    }
+
+    if (!remoteFileUrl) {
+      setIsLoadingRemotePdf(false);
+      setRemotePdfData(null);
+      setStatus("No online PDF found for this tab.");
       return;
     }
 
@@ -214,12 +215,18 @@ export function PdfEditorView() {
 
         for (let attempt = 0; attempt < 2; attempt += 1) {
           try {
-            const remoteFileUrl = await convex.query(api.pdfFiles.getFileUrl, { userId, tabId: activeTabId });
-            if (!remoteFileUrl) {
-              throw new Error("No online PDF found for this tab.");
-            }
-
-            const response = await fetch(remoteFileUrl, { cache: "no-store" });
+            const headers: HeadersInit | undefined =
+              isPostgresProvider && isTauri()
+                ? (() => {
+                    const token = getDesktopToken();
+                    return token ? { Authorization: `Bearer ${token}` } : undefined;
+                  })()
+                : undefined;
+            const response = await fetch(remoteFileUrl, {
+              cache: "no-store",
+              headers,
+              ...(isPostgresProvider ? { credentials: "include" } : {}),
+            });
             if (!response.ok) {
               throw new Error(`Failed to download online PDF (${response.status}).`);
             }
@@ -256,19 +263,43 @@ export function PdfEditorView() {
     return () => {
       cancelled = true;
     };
-  }, [activeTabId, convex, tabData.dataBase64, tabData.source, userId]);
+  }, [
+    activeTabId,
+    remoteFileUrl,
+    tabData.dataBase64,
+    tabData.source,
+    userId,
+    isPostgresProvider,
+  ]);
 
-  const uploadFileToConvex = useCallback(
+  const uploadFileOnline = useCallback(
     async (file: File): Promise<string> => {
       if (!userId || !activeTabId) throw new Error("You need to be signed in to save online.");
       if (file.size <= 0) throw new Error("Cannot upload an empty PDF file.");
 
       const uploadUrl = await generateUploadUrl({});
-      const uploadResult = await fetch(uploadUrl, {
+      const uploadTarget = isPostgresProvider
+        ? (() => {
+            const resolved = new URL(uploadUrl, window.location.origin);
+            resolved.searchParams.set("userId", userId);
+            resolved.searchParams.set("tabId", activeTabId);
+            resolved.searchParams.set("fileName", file.name);
+            return resolved.toString();
+          })()
+        : uploadUrl;
+      const headers: Record<string, string> = {
+        "Content-Type": file.type || "application/pdf",
+      };
+      if (isPostgresProvider && isTauri()) {
+        const token = getDesktopToken();
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
+      }
+      const uploadResult = await fetch(uploadTarget, {
         method: "POST",
-        headers: {
-          "Content-Type": file.type || "application/pdf",
-        },
+        headers,
+        ...(isPostgresProvider ? { credentials: "include" } : {}),
         body: file,
       });
 
@@ -284,7 +315,7 @@ export function PdfEditorView() {
       await upsertPdfFile({
         userId,
         tabId: activeTabId,
-        storageId: body.storageId as Id<"_storage">,
+        storageId: body.storageId,
         fileName: file.name,
         mimeType: file.type || "application/pdf",
         size: file.size,
@@ -306,17 +337,17 @@ export function PdfEditorView() {
         updateTitle(activeTabId, fileName);
 
         if (isAuthenticated && userId) {
-          const storageId = await uploadFileToConvex(file);
+          const storageId = await uploadFileOnline(file);
           writeTabData({
             version: 1,
             fileName,
-            source: "convex",
+            source: "online",
             storageId,
             dataBase64: null,
             annotations: [],
           });
           setTabOrigin("online");
-          setStatus("Saved to Convex.");
+          setStatus("Saved online.");
           return;
         }
 
@@ -338,7 +369,7 @@ export function PdfEditorView() {
         setBusy(false);
       }
     },
-    [activeTabId, isAuthenticated, setTabOrigin, updateTitle, uploadFileToConvex, userId, writeTabData]
+    [activeTabId, isAuthenticated, setTabOrigin, updateTitle, uploadFileOnline, userId, writeTabData]
   );
 
   const handleImportChange = useCallback(
@@ -358,7 +389,7 @@ export function PdfEditorView() {
     }
     if (!activeTabId) return;
 
-    if (tabData.source === "convex") {
+    if (tabData.source === "online") {
       setStatus("Already saved online.");
       return;
     }
@@ -374,11 +405,11 @@ export function PdfEditorView() {
       const bytes = fromBase64(tabData.dataBase64);
       const fileName = normalizePdfTitle(tabData.fileName ?? activeTab?.title ?? "Document.pdf");
       const file = new File([toArrayBuffer(bytes)], fileName, { type: "application/pdf" });
-      const storageId = await uploadFileToConvex(file);
+      const storageId = await uploadFileOnline(file);
 
       writeTabData({
         ...tabData,
-        source: "convex",
+        source: "online",
         storageId,
         dataBase64: null,
         fileName,
@@ -391,7 +422,7 @@ export function PdfEditorView() {
     } finally {
       setBusy(false);
     }
-  }, [activeTab?.title, activeTabId, isAuthenticated, setTabOrigin, tabData, uploadFileToConvex, userId, writeTabData]);
+  }, [activeTab?.title, activeTabId, isAuthenticated, setTabOrigin, tabData, uploadFileOnline, userId, writeTabData]);
 
   const saveLocal = useCallback(async () => {
     if (!activeTabId) return;
@@ -401,7 +432,7 @@ export function PdfEditorView() {
       return;
     }
 
-    if (!tabData.dataBase64 && tabData.source !== "convex") {
+    if (!tabData.dataBase64 && tabData.source !== "online") {
       setStatus("Import a PDF first.");
       return;
     }
@@ -412,7 +443,7 @@ export function PdfEditorView() {
     try {
       let nextBase64 = tabData.dataBase64;
 
-      if (!nextBase64 && tabData.source === "convex" && remotePdfData && remotePdfData.length > 0) {
+      if (!nextBase64 && tabData.source === "online" && remotePdfData && remotePdfData.length > 0) {
         nextBase64 = toBase64(toArrayBuffer(Uint8Array.from(remotePdfData)));
       }
 
@@ -440,7 +471,7 @@ export function PdfEditorView() {
 
   const saveAnnotations = useCallback((annotations: IAnnotationStore[]) => {
     writeTabData({ ...tabData, annotations });
-    setStatus(tabData.source === "convex" ? "Saved online." : "Saved locally.");
+    setStatus(tabData.source === "online" ? "Saved online." : "Saved locally.");
   }, [tabData, writeTabData]);
 
   const annotatorActions = useMemo(() => {
@@ -490,7 +521,7 @@ export function PdfEditorView() {
           size="sm"
           className="h-8 gap-1.5 text-xs"
           onClick={saveOnline}
-          disabled={busy || !isAuthenticated || (tabData.source === "convex" && !!tabData.storageId)}
+          disabled={busy || !isAuthenticated || (tabData.source === "online" && !!tabData.storageId)}
         >
           <CloudUpload className="h-3.5 w-3.5" />
           Save Online
@@ -532,7 +563,7 @@ export function PdfEditorView() {
         return undefined;
       }
     }
-    if (tabData.source === "convex" && remotePdfData && remotePdfData.length > 0) {
+    if (tabData.source === "online" && remotePdfData && remotePdfData.length > 0) {
       return remotePdfData;
     }
     return undefined;

@@ -44,7 +44,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useEditorStore } from "@/lib/store";
 import { useAuthState } from "@/components/convex-client-provider";
-import { useSyncState, triggerManualSync } from "@/lib/convex-sync";
+import { useSyncState, triggerManualSync } from "@/lib/sync-state";
 import { OrgPanel } from "@/components/shell/org-panel";
 import { signIn, signOut } from "@/lib/tauri";
 

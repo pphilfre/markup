@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { useDbMutation, useDbQuery } from "@/lib/db-hooks";
 import { useAuthState } from "@/components/convex-client-provider";
 import { signIn } from "@/lib/tauri";
 import { useEditorStore } from "@/lib/store";
@@ -52,13 +51,13 @@ export function PublishDialog({ open, onOpenChange, tabId }: PublishDialogProps)
   const targetTabId = tabId ?? activeTabId;
   const tab = tabs.find((t) => t.id === targetTabId);
 
-  const existingSite = useQuery(
-    api.sites.getByOwnerTab,
+  const existingSite = useDbQuery(
+    "sites.getByOwnerTab",
     userId && targetTabId ? { ownerUserId: userId, tabId: targetTabId } : "skip"
   );
 
-  const publish = useMutation(api.sites.publish);
-  const unpublish = useMutation(api.sites.unpublish);
+  const publish = useDbMutation("sites.publish");
+  const unpublish = useDbMutation("sites.unpublish");
 
   const [slugInput, setSlugInput] = useState("");
   const normalizedSlug = useMemo(() => normalizeSlug(slugInput), [slugInput]);

@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { useDbMutation, useDbQuery } from "@/lib/db-hooks";
 import { useAuthState } from "@/components/convex-client-provider";
 import { signIn } from "@/lib/tauri";
 import { useEditorStore, type ViewMode } from "@/lib/store";
@@ -69,22 +68,22 @@ export function ShareDialog({ open, onOpenChange, tabId }: ShareDialogProps) {
   const [copied, setCopied] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
 
-  const shareNote = useMutation(api.sharing.share);
-  const updateShareSettings = useMutation(api.sharing.updateSettings);
-  const unshareNote = useMutation(api.sharing.unshare);
+  const shareNote = useDbMutation("sharing.share");
+  const updateShareSettings = useDbMutation("sharing.updateSettings");
+  const unshareNote = useDbMutation("sharing.unshare");
 
-  const existingShare = useQuery(
-    api.sharing.getByOwnerTab,
+  const existingShare = useDbQuery(
+    "sharing.getByOwnerTab",
     userId && targetTabId ? { ownerUserId: userId, tabId: targetTabId } : "skip"
   );
 
   // Always fetch whiteboard/mindmap data so we can share any type
-  const whiteboardData = useQuery(
-    api.whiteboards.get,
+  const whiteboardData = useDbQuery(
+    "whiteboards.get",
     userId ? { userId } : "skip"
   );
-  const mindmapData = useQuery(
-    api.mindmaps.get,
+  const mindmapData = useDbQuery(
+    "mindmaps.get",
     userId ? { userId } : "skip"
   );
 

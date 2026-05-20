@@ -5,7 +5,7 @@ import { SpotlightSearch } from "@/components/shell/spotlight-search";
 import { SettingsPanel } from "@/components/shell/settings-panel";
 import { ThemeSync } from "@/components/theme-provider";
 import { MobileLayout } from "@/components/shell/mobile-layout";
-import { ConvexSync } from "@/lib/convex-sync";
+import { DatabaseSync } from "@/lib/database-sync";
 import { TauriFileSync } from "../lib/tauri-file-sync";
 import { SharedNoteViewer } from "@/components/shell/shared-note-viewer";
 import { FirstRunDialog } from "@/components/shell/first-run-dialog";
@@ -159,7 +159,7 @@ export default function Home() {
   return (
     <div id="markup-app-root" className={`flex h-screen overflow-hidden${compactMode ? " compact-mode" : ""}`}>
       <ThemeSync />
-      <ConvexSync />
+      <DatabaseSync />
       <TauriFileSync />
       <DesktopDebugNotice />
       <FirstRunDialog />

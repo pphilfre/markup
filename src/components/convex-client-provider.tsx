@@ -4,24 +4,14 @@ import { ConvexProvider, ConvexReactClient } from "convex/react";
 import {
   ReactNode,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import { getClientAuthToken } from "@/lib/tauri";
+import { getDbProvider } from "@/lib/db-provider";
 
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
-
-if (!convexUrl) {
-  // This is especially important in the Tauri build, where missing env
-  // variables can silently break sync.
-  // eslint-disable-next-line no-console
-  console.error(
-    "[Convex] NEXT_PUBLIC_CONVEX_URL is not set. Convex sync is disabled. " +
-      "Set NEXT_PUBLIC_CONVEX_URL to your Convex deployment URL in the environment used for this build."
-  );
-}
-
-const convex = convexUrl ? new ConvexReactClient(convexUrl) : null;
 
 // ---------------------------------------------------------------------------
 // Auth state shared across the app
@@ -70,7 +60,7 @@ export function useAuthState(): AuthState {
 // Fetch auth on mount
 // ---------------------------------------------------------------------------
 
-function AuthLoader() {
+export function AuthLoader() {
   const fetchedRef = useRef(false);
 
   useEffect(() => {
@@ -99,6 +89,35 @@ function AuthLoader() {
 // ---------------------------------------------------------------------------
 
 export function ConvexClientProvider({ children }: { children: ReactNode }) {
+  const provider = getDbProvider();
+  const shouldUseConvex = provider === "convex";
+  const convex = useMemo(() => {
+    if (!shouldUseConvex || !convexUrl) return null;
+    return new ConvexReactClient(convexUrl);
+  }, [shouldUseConvex, convexUrl]);
+
+  useEffect(() => {
+    if (!shouldUseConvex) return;
+    if (!convexUrl) {
+      // This is especially important in the Tauri build, where missing env
+      // variables can silently break sync.
+      // eslint-disable-next-line no-console
+      console.error(
+        "[Convex] NEXT_PUBLIC_CONVEX_URL is not set. Convex sync is disabled. " +
+          "Set NEXT_PUBLIC_CONVEX_URL to your Convex deployment URL in the environment used for this build."
+      );
+    }
+  }, [shouldUseConvex]);
+
+  if (!shouldUseConvex) {
+    return (
+      <>
+        <AuthLoader />
+        {children}
+      </>
+    );
+  }
+
   if (!convex) {
     return (
       <>

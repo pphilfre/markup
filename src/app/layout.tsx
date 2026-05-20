@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ConvexClientProvider } from "@/components/convex-client-provider";
+import { DatabaseClientProvider } from "@/components/database-client-provider";
 import { UpdateBanner } from "@/components/shell/update-banner";
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Analytics } from "@vercel/analytics/next"
@@ -188,12 +188,12 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased h-screen overflow-hidden`}
       >
-        <ConvexClientProvider>
+        <DatabaseClientProvider>
           <TooltipProvider delayDuration={300}>
             {children}
             <UpdateBanner />
           </TooltipProvider>
-        </ConvexClientProvider>
+        </DatabaseClientProvider>
         <SpeedInsights/>
         <Analytics/>
       </body>

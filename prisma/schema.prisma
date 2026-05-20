@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  workosId          String   @id
+  email             String
+  firstName         String?
+  lastName          String?
+  profilePictureUrl String?
+
+  tabs       Tab[]
+  workspaces Workspace[]
+  whiteboard Whiteboard?
+  mindmap    Mindmap?
+  sharedNotes SharedNote[] @relation("SharedNoteOwner")
+  sites       Site[]       @relation("SiteOwner")
+  pdfFiles    PdfFile[]
+
+  @@map("users")
+}
+
+model Tab {
+  id         String  @id @default(uuid())
+  userId     String
+  tabId      String
+  title      String
+  content    String  @db.Text
+  workspaceId String?
+  folderId   String?
+  tags       Json?
+  pinned     Boolean?
+  noteType   String?
+  customIcon String?
+  iconColor  String?
+
+  user User @relation(fields: [userId], references: [workosId], onDelete: Cascade)
+
+  @@unique([userId, tabId])
+  @@index([userId])
+  @@map("tabs")
+}
+
+model Workspace {
+  id              String  @id @default(uuid())
+  userId          String
+  activeTabId     String?
+  openTabIds      Json?
+  folders         Json?
+  viewMode        String?
+  theme           String?
+  fileTreeOpen    Boolean?
+  settings        Json?
+  profiles        Json?
+  activeProfileId String?
+
+  user User @relation(fields: [userId], references: [workosId], onDelete: Cascade)
+
+  @@unique([userId])
+  @@map("workspaces")
+}
+
+model Whiteboard {
+  id             String @id @default(uuid())
+  userId         String
+  elements       String @db.Text
+  canvasSettings String @db.Text
+
+  user User @relation(fields: [userId], references: [workosId], onDelete: Cascade)
+
+  @@unique([userId])
+  @@map("whiteboards")
+}
+
+model Mindmap {
+  id          String @id @default(uuid())
+  userId      String
+  nodes       String @db.Text
+  connections String @db.Text
+  settings    String @db.Text
+
+  user User @relation(fields: [userId], references: [workosId], onDelete: Cascade)
+
+  @@unique([userId])
+  @@map("mindmaps")
+}
+
+model SharedNote {
+  id            String   @id @default(uuid())
+  shareId       String   @unique
+  ownerUserId   String
+  tabId         String
+  title         String
+  content       String   @db.Text
+  visibility    String
+  permission    String
+  allowedUsers  String[]
+  noteType      String?
+  whiteboardData String? @db.Text
+  mindmapData    String? @db.Text
+
+  owner User @relation("SharedNoteOwner", fields: [ownerUserId], references: [workosId], onDelete: Cascade)
+
+  @@unique([ownerUserId, tabId])
+  @@index([ownerUserId])
+  @@map("shared_notes")
+}
+
+model Site {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  ownerUserId String
+  tabId       String
+  title       String
+  content     String   @db.Text
+  publishedAt DateTime
+  updatedAt   DateTime
+
+  owner User @relation("SiteOwner", fields: [ownerUserId], references: [workosId], onDelete: Cascade)
+
+  @@unique([ownerUserId, tabId])
+  @@index([ownerUserId])
+  @@map("sites")
+}
+
+model PdfFile {
+  id         String   @id @default(uuid())
+  userId     String
+  tabId      String
+  fileName   String
+  mimeType   String
+  size       Int
+  uploadedAt DateTime
+  data       Bytes    @db.ByteA
+
+  user User @relation(fields: [userId], references: [workosId], onDelete: Cascade)
+
+  @@unique([userId, tabId])
+  @@index([userId])
+  @@map("pdf_files")
+}

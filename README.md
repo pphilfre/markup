@@ -21,7 +21,7 @@ Markup combines markdown editing with advanced note tooling like split preview, 
   - Pinning, tags, custom note icons/colors
 - 🔎 **Spotlight search**
   - Search files, folders, features, and text lines
-- ☁️ **Convex-backed cloud sync**
+- ☁️ **Cloud sync (Convex or Postgres)**
   - Workspace + tabs synced per authenticated user
   - Offline-aware syncing/hydration strategy
 - 🔐 **Authentication with WorkOS AuthKit**
@@ -40,7 +40,7 @@ Markup combines markdown editing with advanced note tooling like split preview, 
 - **Language:** TypeScript
 - **UI:** shadcn/ui, Radix UI, Tailwind CSS, Lucide icons
 - **State:** Zustand
-- **Backend/Data:** Convex
+- **Backend/Data:** Convex or Postgres (Prisma)
 - **Auth:** WorkOS AuthKit
 - **Desktop:** Tauri (optional target)
 - **Editor/Rendering:** CodeMirror, React Markdown ecosystem, KaTeX, Mermaid, d3-force
@@ -70,7 +70,7 @@ Markup combines markdown editing with advanced note tooling like split preview, 
 
 - **Node.js** 18+ (recommended: latest LTS)
 - **npm** (or compatible package manager)
-- A **Convex** project/deployment
+- A **Convex** project/deployment or **Postgres** database (depending on provider)
 - **WorkOS** app credentials
 - (Optional) **Tauri v2** toolchain for desktop builds
 
@@ -80,11 +80,18 @@ Markup combines markdown editing with advanced note tooling like split preview, 
 
 Create a `.env.local` file in the project root.
 
-Because this app uses both Next.js + Convex + WorkOS, configure at least:
+Because this app uses Next.js + WorkOS + a database provider, configure at least:
 
 ```bash
+# Database provider
+# "convex" (default) or "postgres"
+NEXT_PUBLIC_DB_PROVIDER=convex
+
 # Convex
 NEXT_PUBLIC_CONVEX_URL=...
+
+# Postgres (only when provider=postgres)
+DATABASE_URL=...
 
 # WorkOS AuthKit
 WORKOS_CLIENT_ID=...
@@ -101,20 +108,24 @@ If unsure, follow WorkOS AuthKit for Next.js setup docs and mirror the values us
 ## Getting Started
 
 1. **Install dependencies**
+
    ```bash
    npm install
    ```
 
 2. **Run development servers (Next.js + Convex)**
+
    ```bash
    npm run dev
    ```
 
    This runs both:
+
    - `next dev`
    - `npx convex dev`
 
 3. Open:
+
    - App: `http://localhost:3000`
    - Convex dashboard/dev output in your terminal session
 
@@ -163,18 +174,22 @@ Workspace settings include typography/editor behavior, markdown behavior, appear
 ## Updating for contributers
 
 Edit the `version.json` to the next latest verison and run
-```
+
+```bash
 npm run sync-changes
 ```
 
 ## Deployment
 
 ### Web
+
 Deploy as a standard Next.js app (e.g. Vercel), with:
+
 - Convex deployment configured
 - All required env vars set in hosting provider
 
 ### Desktop
+
 Use Tauri build scripts after setting up the Rust/Tauri toolchain.
 
 ---
@@ -188,5 +203,6 @@ Use Tauri build scripts after setting up the Rust/Tauri toolchain.
 ## Credits
 
 Built by **Freddie Philpot**  
-- GitHub: https://github.com/pphilfre  
-- Website: https://freddiephilpot.dev
+
+- GitHub: <https://github.com/pphilfre>  
+- Website: <https://freddiephilpot.dev>
