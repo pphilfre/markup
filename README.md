@@ -1,49 +1,65 @@
 # Markup
 
-A fast, keyboard-first markdown workspace built with **Next.js**, **TypeScript**, **Convex**, **WorkOS AuthKit**, and **shadcn/ui**.  
+<p align="center">
+  <img src="https://raw.githubusercontent.com/pphilfre/markup-home/refs/heads/main/public/app.png" alt="Markup App Preview" width="100%" />
+</p>
+
+A fast, keyboard-first markdown workspace built with **Next.js**, **TypeScript**, **Prisma**, **PostgreSQL**, **WorkOS AuthKit**, and **shadcn/ui**.
 Markup combines markdown editing with advanced note tooling like split preview, graph view, whiteboards, mind maps, sharing, and local/remote sync.
+
+---
 
 ## Features
 
-- ⚡ **Keyboard-first markdown editing**
-- 👀 **Live preview** with:
-  - GitHub Flavored Markdown (`remark-gfm`)
-  - Math (`remark-math` + `rehype-katex`)
-  - Syntax highlighting (`rehype-highlight`)
-  - Mermaid diagram support
-- 🧭 **Multiple workspace modes**
-  - Editor / Split / Preview
-  - Graph view (backlink-based)
-  - Whiteboard mode
-  - Mind map mode
-- 🗂️ **File + folder organization**
-  - Folder colors and hierarchy support
-  - Pinning, tags, custom note icons/colors
-- 🔎 **Spotlight search**
-  - Search files, folders, features, and text lines
-- ☁️ **Cloud sync (Convex or Postgres)**
-  - Workspace + tabs synced per authenticated user
-  - Offline-aware syncing/hydration strategy
-- 🔐 **Authentication with WorkOS AuthKit**
-- 🔗 **Shared notes viewer**
-  - Public/private share modes with read-only rendering
-- 🖥️ **Desktop support via Tauri**
-  - Local filesystem sync (`.md`, `.canvas`, `.mindmap`)
-- 🎨 **Modern UI**
-  - shadcn/ui + Radix primitives + Tailwind CSS
+* ⚡ **Keyboard-first markdown editing**
+* 👀 **Live preview** with:
+
+  * GitHub Flavored Markdown (`remark-gfm`)
+  * Math (`remark-math` + `rehype-katex`)
+  * Syntax highlighting (`rehype-highlight`)
+  * Mermaid diagram support
+* 🧭 **Multiple workspace modes**
+
+  * Editor / Split / Preview
+  * Graph view (backlink-based)
+  * Whiteboard mode
+  * Mind map mode
+* 🗂️ **File + folder organization**
+
+  * Folder colors and hierarchy support
+  * Pinning, tags, custom note icons/colors
+* 🔎 **Spotlight search**
+
+  * Search files, folders, features, and text lines
+* ☁️ **Cloud sync**
+
+  * PostgreSQL + Prisma powered sync
+  * Workspace + tabs synced per authenticated user
+  * Offline-aware syncing/hydration strategy
+* 🔐 **Authentication with WorkOS AuthKit**
+* 🔗 **Shared notes viewer**
+
+  * Public/private share modes with read-only rendering
+* 🖥️ **Desktop support via Tauri**
+
+  * Local filesystem sync (`.md`, `.canvas`, `.mindmap`)
+* 🎨 **Modern UI**
+
+  * shadcn/ui + Radix primitives + Tailwind CSS
 
 ---
 
 ## Tech Stack
 
-- **Framework:** Next.js (App Router)
-- **Language:** TypeScript
-- **UI:** shadcn/ui, Radix UI, Tailwind CSS, Lucide icons
-- **State:** Zustand
-- **Backend/Data:** Convex or Postgres (Prisma)
-- **Auth:** WorkOS AuthKit
-- **Desktop:** Tauri (optional target)
-- **Editor/Rendering:** CodeMirror, React Markdown ecosystem, KaTeX, Mermaid, d3-force
+* **Framework:** Next.js (App Router)
+* **Language:** TypeScript
+* **UI:** shadcn/ui, Radix UI, Tailwind CSS, Lucide icons
+* **State:** Zustand
+* **Database:** PostgreSQL
+* **ORM:** Prisma
+* **Auth:** WorkOS AuthKit
+* **Desktop:** Tauri (optional target)
+* **Editor/Rendering:** CodeMirror, React Markdown ecosystem, KaTeX, Mermaid, d3-force
 
 ---
 
@@ -51,7 +67,7 @@ Markup combines markdown editing with advanced note tooling like split preview, 
 
 ```txt
 .
-├── convex/                    # Convex schema + functions
+├── prisma/                    # Prisma schema + migrations
 ├── src/
 │   ├── app/                  # Next.js app router
 │   ├── components/
@@ -60,6 +76,8 @@ Markup combines markdown editing with advanced note tooling like split preview, 
 │   │   └── ui/               # shadcn/radix UI components
 │   └── lib/                  # Store, sync logic, utilities
 ├── scripts/                  # Build scripts (including Tauri helpers)
+├── public/
+│   └── app.png               # README preview image
 ├── components.json           # shadcn/ui config
 └── package.json
 ```
@@ -68,11 +86,11 @@ Markup combines markdown editing with advanced note tooling like split preview, 
 
 ## Requirements
 
-- **Node.js** 18+ (recommended: latest LTS)
-- **npm** (or compatible package manager)
-- A **Convex** project/deployment or **Postgres** database (depending on provider)
-- **WorkOS** app credentials
-- (Optional) **Tauri v2** toolchain for desktop builds
+* **Node.js** 18+ (recommended: latest LTS)
+* **npm** (or compatible package manager)
+* A **PostgreSQL** database
+* **WorkOS** app credentials
+* (Optional) **Tauri v2** toolchain for desktop builds
 
 ---
 
@@ -80,18 +98,12 @@ Markup combines markdown editing with advanced note tooling like split preview, 
 
 Create a `.env.local` file in the project root.
 
-Because this app uses Next.js + WorkOS + a database provider, configure at least:
-
 ```bash
-# Database provider
-# "convex" (default) or "postgres"
-NEXT_PUBLIC_DB_PROVIDER=convex
+# PostgreSQL / Prisma
+DATABASE_URL=postgresql://user:password@localhost:5432/markup
 
-# Convex
-NEXT_PUBLIC_CONVEX_URL=...
-
-# Postgres (only when provider=postgres)
-DATABASE_URL=...
+# Select "convex" or "postgres"
+NEXT_PUBLIC_DB_PROVIDER=
 
 # WorkOS AuthKit
 WORKOS_CLIENT_ID=...
@@ -100,8 +112,8 @@ WORKOS_COOKIE_PASSWORD=...
 NEXT_PUBLIC_WORKOS_REDIRECT_URI=...
 ```
 
-You may also need additional WorkOS/AuthKit callback/session variables depending on your WorkOS setup.  
-If unsure, follow WorkOS AuthKit for Next.js setup docs and mirror the values used in your WorkOS dashboard.
+You may also need additional WorkOS/AuthKit callback/session variables depending on your WorkOS setup.
+If unsure, follow the WorkOS AuthKit for Next.js setup documentation and mirror the values used in your WorkOS dashboard.
 
 ---
 
@@ -113,21 +125,29 @@ If unsure, follow WorkOS AuthKit for Next.js setup docs and mirror the values us
    npm install
    ```
 
-2. **Run development servers (Next.js + Convex)**
+2. **Generate the Prisma client**
+
+   ```bash
+   npx prisma generate
+   ```
+
+3. **Run database migrations**
+
+   ```bash
+   npx prisma migrate dev
+   ```
+
+4. **Run the development server**
 
    ```bash
    npm run dev
    ```
 
-   This runs both:
+5. Open the app:
 
-   - `next dev`
-   - `npx convex dev`
-
-3. Open:
-
-   - App: `http://localhost:3000`
-   - Convex dashboard/dev output in your terminal session
+   ```txt
+   http://localhost:3000
+   ```
 
 ---
 
@@ -135,74 +155,76 @@ If unsure, follow WorkOS AuthKit for Next.js setup docs and mirror the values us
 
 From `package.json`:
 
-- `npm run dev` – run Next.js and Convex in parallel
-- `npm run dev:next` – run Next.js only
-- `npm run dev:convex` – run Convex dev only
-- `npm run build` – deploy Convex and build Next.js
-- `npm run start` – run production Next.js server
-- `npm run lint` – run ESLint
-- `npm run tauri:dev` – run Tauri dev + Convex dev
-- `npm run tauri:build` – build desktop app via Tauri
-- `npm run build:tauri` – run custom Tauri build script
+* `npm run dev` – run Next.js development server
+* `npm run build` – build production app
+* `npm run start` – run production Next.js server
+* `npm run lint` – run ESLint
+* `npm run tauri:dev` – run Tauri development build
+* `npm run tauri:build` – build desktop app via Tauri
+* `npm run build:tauri` – run custom Tauri build script
 
 ---
 
-## Data Model (Convex Overview)
+## Database Model Overview
 
-The schema includes key tables for:
+The database includes key models for:
 
-- **users** – WorkOS identity mapping
-- **tabs** – note/whiteboard/mindmap documents
-- **workspaces** – persisted UI state, settings, folders, open tabs, profile selection
-- (plus sharing-related entities used by the shared note viewer flow)
+* **users** – WorkOS identity mapping
+* **tabs** – note/whiteboard/mindmap documents
+* **workspaces** – persisted UI state, settings, folders, open tabs, profile selection
+* **shares** – public/private shared note access
 
-Workspace settings include typography/editor behavior, markdown behavior, appearance/theme settings, and sidebar/editor preferences.
+Workspace settings include typography/editor behavior, markdown rendering settings, appearance/theme configuration, and sidebar/editor preferences.
 
 ---
 
 ## Notes on Sync Behavior
 
-- App state is hydrated from Convex when authenticated.
-- Local edits can continue while offline and are flushed when connectivity returns.
-- In Tauri mode, notes can sync to a local folder with format-aware extensions:
-  - `.md`
-  - `.canvas`
-  - `.mindmap`
+* App state is hydrated from PostgreSQL when authenticated.
+* Local edits can continue while offline and are flushed when connectivity returns.
+* In Tauri mode, notes can sync to a local folder with format-aware extensions:
+
+  * `.md`
+  * `.canvas`
+  * `.mindmap`
 
 ---
 
-## Updating for contributers
+## Updating for Contributors
 
-Edit the `version.json` to the next latest verison and run
+Edit the `version.json` file to the next release version and run:
 
 ```bash
 npm run sync-changes
 ```
 
+---
+
 ## Deployment
 
 ### Web
 
-Deploy as a standard Next.js app (e.g. Vercel), with:
+Deploy as a standard Next.js application (e.g. Vercel), with:
 
-- Convex deployment configured
-- All required env vars set in hosting provider
+* PostgreSQL database configured
+* Prisma migrations applied
+* All required environment variables configured
 
 ### Desktop
 
-Use Tauri build scripts after setting up the Rust/Tauri toolchain.
+Use the Tauri build scripts after setting up the Rust/Tauri toolchain.
 
 ---
 
 ## License
 
-[Apache Licensce 2.0](https://github.com/pphilfre/markup/blob/main/LICENSE)
+[Apache License 2.0](https://github.com/pphilfre/markup/blob/main/LICENSE)
 
 ---
 
 ## Credits
 
-Built by **Freddie Philpot**  
+Built by **Freddie Philpot**
 
-- GitHub: <https://github.com/pphilfre>  
-- Website: <https://freddiephilpot.dev>
+* GitHub: [https://github.com/pphilfre](https://github.com/pphilfre)
+* Website: [https://freddiephilpot.dev](https://freddiephilpot.dev)
