@@ -1088,7 +1088,7 @@ function FileItem({
   // Make file draggable
   function onDragStart(e: React.DragEvent) {
     e.dataTransfer.setData("text/tab-id", tab.id);
-    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.effectAllowed = "copyMove";
   }
 
   /** Clear any pending long-press timer used for mobile drag start. */

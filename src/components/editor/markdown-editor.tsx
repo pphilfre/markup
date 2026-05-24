@@ -125,6 +125,7 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
   const tabs = useEditorStore((s) => s.tabs);
   const updateContent = useEditorStore((s) => s.updateContent);
   const setEditorView = useEditorStore((s) => s.setEditorView);
+  const insertNoteLink = useEditorStore((s) => s.insertNoteLink);
   const theme = useEditorStore((s) => s.theme);
   const settings = useEditorStore((s) => s.settings);
   const settingsRef = useRef(settings);
@@ -140,6 +141,33 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
         }
       }),
     [updateContent]
+  );
+
+  const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (event.dataTransfer.types.includes("text/tab-id")) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "link";
+    }
+  }, []);
+
+  const handleDrop = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      const tabId = event.dataTransfer.getData("text/tab-id");
+      if (!tabId) return;
+      event.preventDefault();
+
+      const view = viewRef.current;
+      if (view) {
+        const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+        if (pos != null) {
+          view.dispatch({ selection: { anchor: pos } });
+        }
+        view.focus();
+      }
+
+      insertNoteLink(tabId);
+    },
+    [insertNoteLink]
   );
 
   const buildSettingsExtensions = useCallback((s: typeof settings) => [
@@ -335,6 +363,8 @@ export function MarkdownEditor({ onScroll }: { onScroll?: (fraction: number) => 
     <EditorContextMenu>
       <div
         ref={containerRef}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
         className="flex-1 overflow-auto [&_.cm-editor]:h-full [&_.cm-editor]:outline-none [&_.cm-scroller]:px-6 [&_.cm-scroller]:py-2"
       />
     </EditorContextMenu>

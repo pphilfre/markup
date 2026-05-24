@@ -5,6 +5,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useMemo,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
@@ -33,6 +34,7 @@ import {
   Layers,
   ArrowUp,
   ArrowDown,
+  Link2,
 } from "lucide-react";
 import {
   Tooltip,
@@ -41,6 +43,8 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/lib/store";
+
+const OPEN_LINK_PICKER_EVENT = "open-link-picker";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -72,6 +76,7 @@ interface BaseElement {
   fillColor: string;
   strokeWidth: number;
   selected?: boolean;
+  linkTabId?: string;
 }
 
 interface RectElement extends BaseElement {
@@ -801,6 +806,7 @@ export function WhiteboardView() {
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
   const updateContent = useEditorStore((s) => s.updateContent);
+  const switchTab = useEditorStore((s) => s.switchTab);
 
   // Canvas transform state
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
@@ -837,6 +843,7 @@ export function WhiteboardView() {
       queueMicrotask(() => {
         if (nextElements) setElements(nextElements);
         if (nextCanvasSettings) setCanvasSettings((prev) => ({ ...prev, ...nextCanvasSettings }));
+        if (Array.isArray(data.linkedTabIds)) setLinkedTabIds(data.linkedTabIds);
       });
     } catch { /* ignore parse errors - might be empty/new */ }
   }, [activeTab]);
@@ -896,6 +903,8 @@ export function WhiteboardView() {
   // Context menu
   const [contextMenu, setContextMenu] = useState<Point | null>(null);
   const [clipboard, setClipboard] = useState<WhiteboardElement[]>([]);
+  const [linkedTabIds, setLinkedTabIds] = useState<string[]>([]);
+  const hasSelection = elements.some((el) => el.selected);
 
   useEffect(() => {
     if (!textInput?.visible) return;
@@ -918,7 +927,7 @@ export function WhiteboardView() {
     if (!activeTabId) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
-      const data = JSON.stringify({ elements, canvasSettings });
+      const data = JSON.stringify({ elements, canvasSettings, linkedTabIds });
       updateContent(activeTabId, data);
     }, 800);
     return () => {
@@ -1028,6 +1037,18 @@ export function WhiteboardView() {
 
   const handleSelectAll = useCallback(() => {
     setElements((prev) => prev.map((el) => ({ ...el, selected: true })));
+  }, []);
+
+  const handleLinkBoard = useCallback(() => {
+    document.dispatchEvent(new CustomEvent(OPEN_LINK_PICKER_EVENT, {
+      detail: {
+        title: "Link board",
+        description: "Link this whiteboard to a file.",
+        onPick: (tabId: string) => {
+          setLinkedTabIds((prev) => Array.from(new Set([...prev, tabId])));
+        },
+      },
+    }));
   }, []);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────
@@ -1570,6 +1591,8 @@ export function WhiteboardView() {
         style={{ touchAction: "none" }}
       />
 
+      
+
       {/* Text input overlay */}
       {textInput?.visible && (
         <input
@@ -1599,7 +1622,7 @@ export function WhiteboardView() {
         <WhiteboardContextMenu
           position={contextMenu}
           onClose={() => setContextMenu(null)}
-          hasSelection={elements.some((el) => el.selected)}
+          hasSelection={hasSelection}
           onDuplicate={handleDuplicate}
           onDelete={handleDelete}
           onBringToFront={handleBringToFront}
@@ -1703,6 +1726,20 @@ export function WhiteboardView() {
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">Reset View</TooltipContent>
+        </Tooltip>
+
+        <div className="mx-0.5 h-5 w-px bg-border" />
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => handleLinkBoard()}
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <Link2 className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Link board</TooltipContent>
         </Tooltip>
 
         <div className="mx-0.5 h-5 w-px bg-border" />

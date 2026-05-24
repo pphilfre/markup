@@ -222,6 +222,7 @@ export function InlineMarkdownEditor({ onScroll }: { onScroll?: (fraction: numbe
   const settings = useEditorStore((s) => s.settings);
   const setInlineTextarea = useEditorStore((s) => s.setInlineTextarea);
   const setInlineSelection = useEditorStore((s) => s.setInlineSelection);
+  const insertNoteLink = useEditorStore((s) => s.insertNoteLink);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const [activeLineIdx, setActiveLineIdx] = useState<number | null>(null);
@@ -372,6 +373,18 @@ export function InlineMarkdownEditor({ onScroll }: { onScroll?: (fraction: numbe
     <div
       ref={containerRef}
       onScroll={handleContainerScroll}
+      onDragOver={(event) => {
+        if (event.dataTransfer.types.includes("text/tab-id")) {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "link";
+        }
+      }}
+      onDrop={(event) => {
+        const tabId = event.dataTransfer.getData("text/tab-id");
+        if (!tabId) return;
+        event.preventDefault();
+        insertNoteLink(tabId);
+      }}
       className="flex-1 overflow-auto"
       style={{ paddingLeft: settings.editorMargin, paddingRight: settings.editorMargin }}
     >

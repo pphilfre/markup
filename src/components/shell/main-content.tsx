@@ -2,7 +2,7 @@
 
 import { useRef, useCallback, useState } from "react";
 import { getTabWorkspaceId, useEditorStore } from "@/lib/store";
-import { MarkdownEditor, MarkdownPreview, InlineMarkdownEditor } from "@/components/editor";
+import { MarkdownEditor, MarkdownPreview, InlineMarkdownEditor, RelatedNotesPanel, SelectionToolbar } from "@/components/editor";
 import { GraphView } from "@/components/shell/graph-view";
 import { WhiteboardView } from "@/components/shell/whiteboard";
 import { MindmapView } from "@/components/shell/mindmap";
@@ -150,8 +150,10 @@ export function MainContent() {
     const ratio = localRatio ?? splitRatio;
     return (
       <main ref={containerRef} className="flex flex-1 overflow-hidden bg-background" style={editorStyle}>
+        <SelectionToolbar />
         <div className="flex flex-col overflow-hidden" style={{ width: `${ratio * 100}%` }}>
           <MarkdownEditor onScroll={onEditorScroll} />
+          <RelatedNotesPanel />
         </div>
         {/* Resize handle */}
         <div
@@ -167,7 +169,20 @@ export function MainContent() {
 
   return (
     <main className="flex flex-1 flex-col overflow-hidden bg-background" style={editorStyle}>
-      {viewMode === "editor" ? <MarkdownEditor /> : viewMode === "inline" ? <InlineMarkdownEditor /> : <MarkdownPreview />}
+      <SelectionToolbar />
+      {viewMode === "editor" ? (
+        <>
+          <MarkdownEditor />
+          <RelatedNotesPanel />
+        </>
+      ) : viewMode === "inline" ? (
+        <>
+          <InlineMarkdownEditor />
+          <RelatedNotesPanel />
+        </>
+      ) : (
+        <MarkdownPreview />
+      )}
     </main>
   );
 }

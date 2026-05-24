@@ -5,6 +5,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useMemo,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
@@ -62,6 +63,7 @@ interface MindmapNode {
   width: number;
   height: number;
   selected?: boolean;
+  linkTabId?: string;
 }
 
 interface MindmapConnection {
@@ -732,6 +734,7 @@ export function MindmapView() {
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
   const updateContent = useEditorStore((s) => s.updateContent);
+  const switchTab = useEditorStore((s) => s.switchTab);
 
   // Canvas transform
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
@@ -741,6 +744,7 @@ export function MindmapView() {
   const [activeTool, setActiveTool] = useState<MindmapTool>("select");
   const [nodes, setNodes] = useState<MindmapNode[]>([]);
   const [connections, setConnections] = useState<MindmapConnection[]>([]);
+  const [linkedTabIds, setLinkedTabIds] = useState<string[]>([]);
 
   // Undo
   const [undoStack, setUndoStack] = useState<{ nodes: MindmapNode[]; connections: MindmapConnection[] }[]>([]);
@@ -770,6 +774,14 @@ export function MindmapView() {
 
   // Context menu
   const [contextMenu, setContextMenu] = useState<Point | null>(null);
+  const hasSelection = nodes.some((n) => n.selected);
+  const selectedLinkId = useMemo(() => {
+    const selected = nodes.filter((n) => n.selected);
+    if (selected.length === 0) return null;
+    const linkId = selected[0].linkTabId;
+    if (!linkId) return null;
+    return selected.every((n) => n.linkTabId === linkId) ? linkId : null;
+  }, [nodes]);
   useEffect(() => {
     const check = () => setIsDark(document.documentElement.classList.contains("dark"));
     check();
@@ -794,6 +806,9 @@ export function MindmapView() {
       if (data.settings && typeof data.settings === "object") {
         setSettings((prev) => ({ ...prev, ...data.settings }));
       }
+      if (Array.isArray(data.linkedTabIds)) {
+        setLinkedTabIds(data.linkedTabIds);
+      }
     } catch { /* ignore parse errors */ }
   }, [activeTab]);
 
@@ -803,7 +818,7 @@ export function MindmapView() {
     if (!activeTabId) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
-      const data = JSON.stringify({ nodes, connections, settings });
+      const data = JSON.stringify({ nodes, connections, settings, linkedTabIds });
       updateContent(activeTabId, data);
     }, 800);
     return () => {
@@ -891,6 +906,18 @@ export function MindmapView() {
 
   const handleSelectAll = useCallback(() => {
     setNodes((prev) => prev.map((n) => ({ ...n, selected: true })));
+  }, []);
+
+  const handleLinkBoard = useCallback(() => {
+    document.dispatchEvent(new CustomEvent("open-link-picker", {
+      detail: {
+        title: "Link board",
+        description: "Link this mindmap to a file.",
+        onPick: (tabId: string) => {
+          setLinkedTabIds((prev) => Array.from(new Set([...prev, tabId])));
+        },
+      },
+    }));
   }, []);
 
   // ── Snap ────────────────────────────────────────────────────────────
@@ -1504,6 +1531,7 @@ export function MindmapView() {
         style={{ touchAction: "none" }}
       />
 
+      
       {/* Edit node overlay */}
       {editNode && (
         <NodeEditPopover
@@ -1526,7 +1554,7 @@ export function MindmapView() {
         <MindmapContextMenu
           position={contextMenu}
           onClose={() => setContextMenu(null)}
-          hasSelection={nodes.some((n) => n.selected)}
+          hasSelection={hasSelection}
           onDuplicate={handleDuplicate}
           onDelete={handleDeleteSelected}
           onBringToFront={handleBringToFront}
@@ -1627,6 +1655,20 @@ export function MindmapView() {
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">Reset View</TooltipContent>
+        </Tooltip>
+
+        <div className="mx-0.5 h-5 w-px bg-border" />
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => handleLinkBoard()}
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <Link2 className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Link board</TooltipContent>
         </Tooltip>
 
         <div className="mx-0.5 h-5 w-px bg-border" />

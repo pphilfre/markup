@@ -457,6 +457,7 @@ interface EditorState {
   // Editor helpers — smart, multi-line aware
   insertSnippet: (snippet: string) => void;
   insertLinePrefix: (prefix: string) => void;
+  insertNoteLink: (tabId: string) => void;
   wrapSelection: (before: string, after: string) => void;
 
   // Persistence
@@ -556,6 +557,10 @@ function deriveTitle(content: string): string | null {
   const heading = firstLine.match(/^#{1,6}\s+(.+)/);
   if (heading) return heading[1].slice(0, 30);
   return null;
+}
+
+function getNoteLinkTitle(tab: Tab): string {
+  return tab.title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/i, "");
 }
 
 const FOLDER_COLORS = [
@@ -1570,6 +1575,45 @@ export const useEditorStore = create<EditorState>()(
         if (!el) return;
         el.focus();
         const anchor = Math.min(prefix.length, nextLine.length);
+        el.setSelectionRange(anchor, anchor);
+        get().setInlineSelection({ lineIndex, from: anchor, to: anchor });
+      });
+    },
+
+    insertNoteLink: (tabId) => {
+      const s = get();
+      const target = s.tabs.find((t) => t.id === tabId);
+      if (!target) return;
+
+      const linkText = `[[${getNoteLinkTitle(target)}]]`;
+
+      if (s.editorView) {
+        const { from, to } = s.editorView.state.selection.main;
+        s.editorView.dispatch({
+          changes: { from, to, insert: linkText },
+          selection: { anchor: from + linkText.length },
+        });
+        s.editorView.focus();
+        return;
+      }
+
+      if (!s.inlineSelection || !s.activeTabId) return;
+      const tab = s.tabs.find((t) => t.id === s.activeTabId);
+      if (!tab) return;
+
+      const { lineIndex, from, to } = s.inlineSelection;
+      const lines = tab.content.split("\n");
+      if (lineIndex < 0 || lineIndex >= lines.length) return;
+
+      const line = lines[lineIndex] ?? "";
+      lines[lineIndex] = line.slice(0, from) + linkText + line.slice(to);
+      s.updateContent(tab.id, lines.join("\n"));
+
+      queueMicrotask(() => {
+        const el = get().inlineTextarea;
+        if (!el) return;
+        el.focus();
+        const anchor = from + linkText.length;
         el.setSelectionRange(anchor, anchor);
         get().setInlineSelection({ lineIndex, from: anchor, to: anchor });
       });

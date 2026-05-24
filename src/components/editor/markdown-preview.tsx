@@ -24,6 +24,10 @@ export function extractBacklinks(content: string): string[] {
   return [...new Set(links)];
 }
 
+function normalizeTitle(title: string): string {
+  return title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/i, "");
+}
+
 // ── Admonition types ──────────────────────────────────────────────────────
 
 const ADMONITION_TYPES: Record<string, { color: string; icon: string; label: string }> = {
@@ -154,7 +158,7 @@ export function MarkdownPreview({
   // Backlinks
   const backlinks = useMemo(() => {
     if (!activeTab || standalone) return [];
-    const titleNoExt = activeTab.title.replace(/\.md$/, "");
+    const titleNoExt = normalizeTitle(activeTab.title);
     return tabs.filter((t) => {
       if (t.id === activeTab.id) return false;
       const refs = extractBacklinks(t.content);
@@ -169,7 +173,7 @@ export function MarkdownPreview({
   const handleBacklinkClick = useCallback(
     (title: string) => {
       const target = tabs.find((t) => {
-        const tTitle = t.title.replace(/\.md$/, "");
+        const tTitle = normalizeTitle(t.title);
         return tTitle.toLowerCase() === title.toLowerCase() || t.title.toLowerCase() === title.toLowerCase();
       });
       if (target) switchTab(target.id);
