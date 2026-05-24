@@ -23,6 +23,8 @@ import {
   Info,
   ExternalLink,
   BookOpenText,
+  Server,
+  Cloud,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -40,7 +42,7 @@ import packageJson from "../../../package.json";
 // Sidebar sections
 // ---------------------------------------------------------------------------
 
-type SectionId = "general" | "user" | "appearance" | "typography" | "markdown" | "editing" | "guide" | "privacy" | "data" | "about" | "updates";
+type SectionId = "general" | "user" | "appearance" | "typography" | "markdown" | "editing" | "guide" | "privacy" | "data" | "about" | "updates" | "server";
 
 const SECTIONS: { id: SectionId; label: string; icon: typeof Settings; group?: string }[] = [
   { id: "general", label: "General", icon: Palette },
@@ -53,6 +55,7 @@ const SECTIONS: { id: SectionId; label: string; icon: typeof Settings; group?: s
   { id: "privacy", label: "Privacy & Security", icon: Lock, group: "Account" },
   { id: "data", label: "Data", icon: Database, group: "Account" },
   { id: "updates", label: "Updates", icon: Timer, group: "Account" },
+  { id: "server", label: "Server", icon: Server, group: "Account" },
   { id: "about", label: "About & Contact", icon: Info },
 ];
 
@@ -2046,6 +2049,127 @@ function UpdatesSection() {
 }
 
 // ---------------------------------------------------------------------------
+// Server section
+// ---------------------------------------------------------------------------
+
+function ServerSection() {
+  const serverMode = useEditorStore((s) => s.serverMode);
+  const setServerMode = useEditorStore((s) => s.setServerMode);
+  const localServerUrl = useEditorStore((s) => s.localServerUrl);
+  const setLocalServerUrl = useEditorStore((s) => s.setLocalServerUrl);
+  const [urlInput, setUrlInput] = useState(localServerUrl);
+
+  // Keep input in sync if store changes externally
+  useEffect(() => {
+    setUrlInput(localServerUrl);
+  }, [localServerUrl]);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-sm font-semibold mb-1">Server</h3>
+        <p className="text-xs text-muted-foreground mb-3">
+          Choose whether to use the hosted cloud or connect to your own self-hosted instance.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {/* Online card */}
+        <button
+          onClick={() => setServerMode("online")}
+          className={cn(
+            "relative flex flex-col items-start rounded-xl border-2 p-4 text-left transition-all hover:scale-[1.02] overflow-hidden min-h-[140px]",
+            serverMode === "online"
+              ? "border-primary shadow-md"
+              : "border-input hover:border-muted-foreground/40"
+          )}
+        >
+          <Cloud
+            className="absolute -bottom-4 -right-4 h-28 w-28 text-muted-foreground/10 pointer-events-none"
+            strokeWidth={1}
+          />
+          <div className="space-y-1.5 z-10">
+            <div className="flex items-center gap-2">
+              <Cloud className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold">Online</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Use the hosted Markup cloud. Sign in to sync notes across all your devices.
+            </p>
+          </div>
+          {serverMode === "online" && (
+            <div className="absolute top-2.5 right-2.5 h-2 w-2 rounded-full bg-primary" />
+          )}
+        </button>
+
+        {/* Local card */}
+        <button
+          onClick={() => setServerMode("local")}
+          className={cn(
+            "relative flex flex-col items-start rounded-xl border-2 p-4 text-left transition-all hover:scale-[1.02] overflow-hidden min-h-[140px]",
+            serverMode === "local"
+              ? "border-primary shadow-md"
+              : "border-input hover:border-muted-foreground/40"
+          )}
+        >
+          <Server
+            className="absolute -bottom-4 -right-4 h-28 w-28 text-muted-foreground/10 pointer-events-none"
+            strokeWidth={1}
+          />
+          <div className="space-y-1.5 z-10">
+            <div className="flex items-center gap-2">
+              <Server className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold">Local</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Connect to your own self-hosted Markup server on your network.
+            </p>
+          </div>
+          {serverMode === "local" && (
+            <div className="absolute top-2.5 right-2.5 h-2 w-2 rounded-full bg-primary" />
+          )}
+        </button>
+      </div>
+
+      {serverMode === "local" && (
+        <div className="space-y-1.5 animate-in fade-in-0 slide-in-from-top-2 duration-200">
+          <label className="text-xs text-muted-foreground">Server URL</label>
+          <input
+            type="url"
+            value={urlInput}
+            onChange={(e) => setUrlInput(e.target.value)}
+            onBlur={() => setLocalServerUrl(urlInput)}
+            placeholder="https://192.168.1.100:3000"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring font-mono"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Enter the URL of your locally hosted Markup instance. Changes take effect on next page load.
+          </p>
+        </div>
+      )}
+
+      <Separator />
+
+      <div className="rounded-md border border-border bg-card/50 p-3 space-y-1.5">
+        <p className="text-xs font-medium">Current connection</p>
+        <div className="flex items-center gap-2">
+          {serverMode === "online" ? (
+            <Cloud className="h-3.5 w-3.5 text-primary shrink-0" />
+          ) : (
+            <Server className="h-3.5 w-3.5 text-primary shrink-0" />
+          )}
+          <span className="text-xs text-muted-foreground font-mono truncate">
+            {serverMode === "online"
+              ? (process.env.NEXT_PUBLIC_CONVEX_URL ?? "Cloud (default)")
+              : (localServerUrl || "No URL set")}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // About & Contact
 // ---------------------------------------------------------------------------
 
@@ -2228,6 +2352,7 @@ export function SettingsPanel() {
       )}
       {activeSection === "about" && <AboutSection />}
       {activeSection === "updates" && <UpdatesSection />}
+      {activeSection === "server" && <ServerSection />}
     </>
   );
 

@@ -8,6 +8,7 @@ import { WhiteboardView } from "@/components/shell/whiteboard";
 import { MindmapView } from "@/components/shell/mindmap";
 import { KanbanView } from "@/components/shell/kanban";
 import { PdfEditorView } from "@/components/shell/pdf-editor";
+import { Dashboard } from "@/components/shell/dashboard";
 
 export function MainContent() {
   const viewMode = useEditorStore((s) => s.viewMode);
@@ -131,17 +132,8 @@ export function MainContent() {
 
   if (!activeTabId || !activeTab) {
     return (
-      <main className="flex flex-1 items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-3 text-muted-foreground">
-          <p className="text-sm">Start typing or open a file…</p>
-          <p className="text-xs text-muted-foreground/60">
-            Press{" "}
-            <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px]">
-              Alt+T
-            </kbd>{" "}
-            to create a new tab
-          </p>
-        </div>
+      <main className="flex flex-1 overflow-hidden bg-background">
+        <Dashboard />
       </main>
     );
   }

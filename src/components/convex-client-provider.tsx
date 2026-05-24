@@ -10,8 +10,9 @@ import {
 } from "react";
 import { getClientAuthToken } from "@/lib/tauri";
 import { getDbProvider } from "@/lib/db-provider";
+import { useEditorStore } from "@/lib/store";
 
-const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+const defaultConvexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 
 // ---------------------------------------------------------------------------
 // Auth state shared across the app
@@ -91,6 +92,17 @@ export function AuthLoader() {
 export function ConvexClientProvider({ children }: { children: ReactNode }) {
   const provider = getDbProvider();
   const shouldUseConvex = provider === "convex";
+  const serverMode = useEditorStore((s) => s.serverMode);
+  const localServerUrl = useEditorStore((s) => s.localServerUrl);
+
+  // Resolve the active Convex URL: local override when in local mode, else cloud default
+  const convexUrl = useMemo(() => {
+    if (serverMode === "local" && localServerUrl.trim()) {
+      return localServerUrl.trim();
+    }
+    return defaultConvexUrl;
+  }, [serverMode, localServerUrl]);
+
   const convex = useMemo(() => {
     if (!shouldUseConvex || !convexUrl) return null;
     return new ConvexReactClient(convexUrl);

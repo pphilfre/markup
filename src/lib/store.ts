@@ -423,6 +423,7 @@ interface EditorState {
   deleteTab: (id: string) => void;
   openTab: (id: string) => void;
   switchTab: (id: string) => void;
+  goToDashboard: () => void;
   syncLocalTabToOnline: (localTabId: string) => void;
   updateContent: (id: string, content: string) => void;
   updateTitle: (id: string, title: string) => void;
@@ -453,6 +454,12 @@ interface EditorState {
   // Local file sync (Tauri)
   localSyncFolder: string | null;
   setLocalSyncFolder: (folder: string | null) => void;
+
+  // Server connection mode
+  serverMode: "online" | "local";
+  localServerUrl: string;
+  setServerMode: (mode: "online" | "local") => void;
+  setLocalServerUrl: (url: string) => void;
 
   // Editor helpers — smart, multi-line aware
   insertSnippet: (snippet: string) => void;
@@ -645,6 +652,8 @@ interface PersistedState {
   tagColors: Record<string, string>;
   zoomLevel: number;
   localSyncFolder: string | null;
+  serverMode?: "online" | "local";
+  localServerUrl?: string;
 }
 
 async function saveToStorage(state: PersistedState) {
@@ -686,6 +695,8 @@ export const useEditorStore = create<EditorState>()(
     tagColors: {},
     zoomLevel: 100,
     localSyncFolder: null,
+    serverMode: "online" as "online" | "local",
+    localServerUrl: "",
 
     setEditorView: (view) => set({ editorView: view }),
     setInlineTextarea: (el) => set({ inlineTextarea: el }),
@@ -1107,16 +1118,12 @@ export const useEditorStore = create<EditorState>()(
           tagColors: saved.tagColors ?? {},
           zoomLevel: saved.zoomLevel ?? 100,
           localSyncFolder: saved.localSyncFolder ?? null,
+          serverMode: saved.serverMode ?? "online",
+          localServerUrl: saved.localServerUrl ?? "",
           _hydrated: true,
         });
       } else {
-        const tab = newTab();
-        set({
-          tabs: [tab],
-          openTabIds: [tab.id],
-          activeTabId: tab.id,
-          _hydrated: true,
-        });
+        set({ _hydrated: true });
       }
     },
 
@@ -1194,6 +1201,8 @@ export const useEditorStore = create<EditorState>()(
 
       set({ openTabIds: nextOpen, activeTabId: nextActive });
     },
+
+    goToDashboard: () => set({ activeTabId: null }),
 
     deleteTab: (id) => {
       const { tabs, openTabIds, activeTabId } = get();
@@ -1472,6 +1481,9 @@ export const useEditorStore = create<EditorState>()(
 
     setLocalSyncFolder: (folder) => set({ localSyncFolder: folder }),
 
+    setServerMode: (mode) => set({ serverMode: mode }),
+    setLocalServerUrl: (url) => set({ localServerUrl: url }),
+
     // Raw snippet insert
     insertSnippet: (snippet) => {
       const { editorView } = get();
@@ -1716,6 +1728,8 @@ useEditorStore.subscribe(
     tagColors: s.tagColors,
     zoomLevel: s.zoomLevel,
     localSyncFolder: s.localSyncFolder,
+    serverMode: s.serverMode,
+    localServerUrl: s.localServerUrl,
   }),
   (slice) => {
     if (persistTimeout) clearTimeout(persistTimeout);
