@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { FolderOpen, LogIn, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { FolderOpen, LogIn, ChevronLeft, ChevronRight, Check, Cloud, Server } from "lucide-react";
 import { EditorGuideContent } from "@/components/shell/editor-guide-content";
 
 const FIRST_RUN_STORAGE_KEY = "markup-first-run-tutorial-complete";
@@ -53,6 +53,10 @@ export function FirstRunDialog() {
   const toggleTheme = useEditorStore((s) => s.toggleTheme);
   const localSyncFolder = useEditorStore((s) => s.localSyncFolder);
   const setLocalSyncFolder = useEditorStore((s) => s.setLocalSyncFolder);
+  const serverMode = useEditorStore((s) => s.serverMode);
+  const setServerMode = useEditorStore((s) => s.setServerMode);
+  const localServerUrl = useEditorStore((s) => s.localServerUrl);
+  const setLocalServerUrl = useEditorStore((s) => s.setLocalServerUrl);
   const { isAuthenticated, isLoading: authLoading } = useAuthState();
 
   const [dismissed, setDismissed] = useState(() => {
@@ -61,6 +65,7 @@ export function FirstRunDialog() {
   });
   const [step, setStep] = useState(0);
   const [stepDirection, setStepDirection] = useState<1 | -1>(1);
+  const [localUrlInput, setLocalUrlInput] = useState(localServerUrl);
 
   useEffect(() => {
     const onReplayTutorial = () => {
@@ -68,12 +73,16 @@ export function FirstRunDialog() {
       setStep(0);
       setDismissed(false);
     };
-
     document.addEventListener(REPLAY_TUTORIAL_EVENT, onReplayTutorial);
     return () => document.removeEventListener(REPLAY_TUTORIAL_EVENT, onReplayTutorial);
   }, []);
 
-  const stepCount = 4;
+  // Keep local input in sync if store value changes externally
+  useEffect(() => {
+    setLocalUrlInput(localServerUrl);
+  }, [localServerUrl]);
+
+  const stepCount = 5;
   const shouldShow = hydrated && !dismissed;
 
   const markComplete = useCallback(() => {
@@ -86,12 +95,8 @@ export function FirstRunDialog() {
       updateSettings({ themeMode: mode });
       const lightModes: Settings["themeMode"][] = ["light", "solarized-light", "catppuccin-latte", "gruvbox-light", "everforest-light", "uwu"];
       const darkModes: Settings["themeMode"][] = ["dark", "nord-dark", "catppuccin-mocha", "gruvbox-dark", "tokyo-night"];
-      if (lightModes.includes(mode) && theme === "dark") {
-        toggleTheme();
-      }
-      if (darkModes.includes(mode) && theme === "light") {
-        toggleTheme();
-      }
+      if (lightModes.includes(mode) && theme === "dark") toggleTheme();
+      if (darkModes.includes(mode) && theme === "light") toggleTheme();
       if (mode === "system") {
         const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
         if (prefersDark && theme === "light") toggleTheme();
@@ -113,9 +118,10 @@ export function FirstRunDialog() {
   }, [setLocalSyncFolder]);
 
   const stepTitle = useMemo(() => {
-    if (step === 0) return "Welcome to Markup";
-    if (step === 1) return "Configure your writing setup";
-    if (step === 2) return "Markdown quick tour";
+    if (step === 0) return "Choose your connection";
+    if (step === 1) return "Welcome to Markup";
+    if (step === 2) return "Configure your writing setup";
+    if (step === 3) return "Markdown quick tour";
     return "Keybind quick tour";
   }, [step]);
 
@@ -127,10 +133,11 @@ export function FirstRunDialog() {
         <DialogHeader>
           <DialogTitle>{stepTitle}</DialogTitle>
           <DialogDescription>
-            {step === 0 && "Set up essentials in under a minute. You can change anything later in Settings."}
-            {step === 1 && "Choose your theme and typography baseline so the editor feels right immediately."}
-            {step === 2 && "Review markdown syntax patterns used throughout the app."}
-            {step === 3 && "Review keyboard shortcuts for faster editing and navigation."}
+            {step === 0 && "Pick how Markup connects to its backend. You can change this later in Settings → Server."}
+            {step === 1 && "Set up essentials in under a minute. You can change anything later in Settings."}
+            {step === 2 && "Choose your theme and typography baseline so the editor feels right immediately."}
+            {step === 3 && "Review markdown syntax patterns used throughout the app."}
+            {step === 4 && "Review keyboard shortcuts for faster editing and navigation."}
           </DialogDescription>
         </DialogHeader>
 
@@ -142,132 +149,222 @@ export function FirstRunDialog() {
               stepDirection > 0 ? "slide-in-from-right-4" : "slide-in-from-left-4"
             )}
           >
-          {step === 0 && (
-            <div className="space-y-4 h-full">
-              <div className="rounded-md border border-border bg-card/50 p-4 space-y-3">
-                <h4 className="text-sm font-semibold">Optional sign-in</h4>
+
+            {/* ── Step 0: Server mode selection ── */}
+            {step === 0 && (
+              <div className="space-y-4">
                 <p className="text-xs text-muted-foreground">
-                  Sign in to sync your notes across devices. You can skip now and sign in later.
+                  Connect to the hosted cloud service, or point Markup at your own self-hosted server.
                 </p>
-                {!authLoading && (
-                  isAuthenticated ? (
-                    <div className="inline-flex items-center gap-2 rounded-md bg-primary/10 px-3 py-2 text-xs text-primary">
-                      <Check className="h-3.5 w-3.5" />
-                      Signed in
+
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Online card */}
+                  <button
+                    onClick={() => setServerMode("online")}
+                    className={cn(
+                      "relative flex flex-col items-start rounded-xl border-2 p-5 text-left transition-all hover:scale-[1.02] overflow-hidden min-h-[160px]",
+                      serverMode === "online"
+                        ? "border-primary shadow-md"
+                        : "border-input hover:border-muted-foreground/40"
+                    )}
+                  >
+                    <Cloud
+                      className="absolute -bottom-5 -right-5 h-32 w-32 text-muted-foreground/10 pointer-events-none"
+                      strokeWidth={1}
+                    />
+                    <div className="space-y-2 z-10">
+                      <div className="flex items-center gap-2">
+                        <Cloud className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-semibold">Online</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Use the hosted Markup cloud. Sign in to sync notes across all your devices automatically.
+                      </p>
                     </div>
-                  ) : (
-                    <Button size="sm" onClick={() => signIn(() => window.location.reload())} className="gap-2">
-                      <LogIn className="h-4 w-4" />
-                      Sign in
-                    </Button>
-                  )
+                    {serverMode === "online" && (
+                      <div className="absolute top-3 right-3 h-2 w-2 rounded-full bg-primary" />
+                    )}
+                  </button>
+
+                  {/* Local card */}
+                  <button
+                    onClick={() => setServerMode("local")}
+                    className={cn(
+                      "relative flex flex-col items-start rounded-xl border-2 p-5 text-left transition-all hover:scale-[1.02] overflow-hidden min-h-[160px]",
+                      serverMode === "local"
+                        ? "border-primary shadow-md"
+                        : "border-input hover:border-muted-foreground/40"
+                    )}
+                  >
+                    <Server
+                      className="absolute -bottom-5 -right-5 h-32 w-32 text-muted-foreground/10 pointer-events-none"
+                      strokeWidth={1}
+                    />
+                    <div className="space-y-2 z-10">
+                      <div className="flex items-center gap-2">
+                        <Server className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-semibold">Local</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Connect to your own self-hosted Markup server running on your network.
+                      </p>
+                    </div>
+                    {serverMode === "local" && (
+                      <div className="absolute top-3 right-3 h-2 w-2 rounded-full bg-primary" />
+                    )}
+                  </button>
+                </div>
+
+                {serverMode === "local" && (
+                  <div className="space-y-1.5 animate-in fade-in-0 slide-in-from-top-2 duration-200">
+                    <label className="text-xs text-muted-foreground">Server URL</label>
+                    <input
+                      type="url"
+                      value={localUrlInput}
+                      onChange={(e) => setLocalUrlInput(e.target.value)}
+                      onBlur={() => setLocalServerUrl(localUrlInput)}
+                      placeholder="https://192.168.1.100:3000"
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring font-mono"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Enter the URL of your locally hosted Markup instance.
+                    </p>
+                  </div>
                 )}
               </div>
+            )}
 
-              {isTauri() && (
+            {/* ── Step 1: Sign-in + local sync folder ── */}
+            {step === 1 && (
+              <div className="space-y-4 h-full">
                 <div className="rounded-md border border-border bg-card/50 p-4 space-y-3">
-                  <h4 className="text-sm font-semibold">Local file sync folder</h4>
+                  <h4 className="text-sm font-semibold">Optional sign-in</h4>
                   <p className="text-xs text-muted-foreground">
-                    Keep a local mirror of your files for backup and desktop access.
+                    Sign in to sync your notes across devices. You can skip now and sign in later.
                   </p>
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" variant="outline" onClick={chooseSyncFolder} className="gap-2">
-                      <FolderOpen className="h-4 w-4" />
-                      {localSyncFolder ? "Change folder" : "Choose folder"}
-                    </Button>
-                    {localSyncFolder && (
-                      <span className="text-[11px] text-muted-foreground truncate">{localSyncFolder}</span>
-                    )}
+                  {!authLoading && (
+                    isAuthenticated ? (
+                      <div className="inline-flex items-center gap-2 rounded-md bg-primary/10 px-3 py-2 text-xs text-primary">
+                        <Check className="h-3.5 w-3.5" />
+                        Signed in
+                      </div>
+                    ) : (
+                      <Button size="sm" onClick={() => signIn(() => window.location.reload())} className="gap-2">
+                        <LogIn className="h-4 w-4" />
+                        Sign in
+                      </Button>
+                    )
+                  )}
+                </div>
+
+                {isTauri() && (
+                  <div className="rounded-md border border-border bg-card/50 p-4 space-y-3">
+                    <h4 className="text-sm font-semibold">Local file sync folder</h4>
+                    <p className="text-xs text-muted-foreground">
+                      Keep a local mirror of your files for backup and desktop access.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="outline" onClick={chooseSyncFolder} className="gap-2">
+                        <FolderOpen className="h-4 w-4" />
+                        {localSyncFolder ? "Change folder" : "Choose folder"}
+                      </Button>
+                      {localSyncFolder && (
+                        <span className="text-[11px] text-muted-foreground truncate">{localSyncFolder}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Step 2: Theme + font ── */}
+            {step === 2 && (
+              <div className="space-y-4 h-full">
+                <div>
+                  <h4 className="text-sm font-semibold mb-2">Theme</h4>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {TUTORIAL_THEMES.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => handleThemeModeChange(option.value)}
+                        className={cn(
+                          "relative rounded-lg border-2 p-2 text-left transition-all hover:scale-[1.02]",
+                          settings.themeMode === option.value
+                            ? "border-primary shadow-sm"
+                            : "border-input hover:border-muted-foreground/40"
+                        )}
+                      >
+                        <div
+                          className="mb-2 h-10 rounded overflow-hidden flex"
+                          style={{ background: option.preview.bg }}
+                        >
+                          <div className="w-1/4 h-full" style={{ background: option.preview.sidebar }} />
+                          <div className="flex-1 p-1 space-y-1">
+                            <div className="h-1.5 rounded-full w-3/4" style={{ background: option.preview.text, opacity: 0.7 }} />
+                            <div className="h-1.5 rounded-full w-1/2" style={{ background: option.preview.accent }} />
+                            <div className="h-1.5 rounded-full w-2/3" style={{ background: option.preview.text, opacity: 0.4 }} />
+                          </div>
+                        </div>
+                        <p className="text-xs font-medium leading-none">{option.label}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{option.description}</p>
+                        {settings.themeMode === option.value && (
+                          <div className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary" />
+                        )}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              )}
-            </div>
-          )}
 
-          {step === 1 && (
-            <div className="space-y-4 h-full">
-              <div>
-                <h4 className="text-sm font-semibold mb-2">Theme</h4>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {TUTORIAL_THEMES.map((option) => (
-                    <button
-                      key={option.value}
-                      onClick={() => handleThemeModeChange(option.value)}
-                      className={cn(
-                        "relative rounded-lg border-2 p-2 text-left transition-all hover:scale-[1.02]",
-                        settings.themeMode === option.value
-                          ? "border-primary shadow-sm"
-                          : "border-input hover:border-muted-foreground/40"
-                      )}
-                    >
-                      <div
-                        className="mb-2 h-10 rounded overflow-hidden flex"
-                        style={{ background: option.preview.bg }}
+                <div>
+                  <h4 className="text-sm font-semibold mb-2">Code editor font</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {QUICK_FONTS.map((option) => (
+                      <button
+                        key={option.label}
+                        onClick={() => updateSettings({ fontFamily: option.value })}
+                        className={cn(
+                          "rounded-md border px-3 py-2 text-left text-xs transition-colors",
+                          settings.fontFamily === option.value
+                            ? "border-primary bg-primary/10 text-foreground"
+                            : "border-input bg-background text-muted-foreground hover:text-foreground"
+                        )}
                       >
-                        <div className="w-1/4 h-full" style={{ background: option.preview.sidebar }} />
-                        <div className="flex-1 p-1 space-y-1">
-                          <div className="h-1.5 rounded-full w-3/4" style={{ background: option.preview.text, opacity: 0.7 }} />
-                          <div className="h-1.5 rounded-full w-1/2" style={{ background: option.preview.accent }} />
-                          <div className="h-1.5 rounded-full w-2/3" style={{ background: option.preview.text, opacity: 0.4 }} />
-                        </div>
-                      </div>
-                      <p className="text-xs font-medium leading-none">{option.label}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{option.description}</p>
-                      {settings.themeMode === option.value && (
-                        <div className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary" />
-                      )}
-                    </button>
-                  ))}
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-semibold mb-2">Font size</h4>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range"
+                      min={12}
+                      max={22}
+                      step={1}
+                      value={settings.fontSize}
+                      onChange={(e) => updateSettings({ fontSize: Number(e.target.value) })}
+                      className="flex-1 h-1.5 accent-primary cursor-pointer"
+                    />
+                    <span className="text-xs text-muted-foreground w-12 text-right tabular-nums">
+                      {settings.fontSize}px
+                    </span>
+                  </div>
                 </div>
               </div>
+            )}
 
-              <div>
-                <h4 className="text-sm font-semibold mb-2">Code editor font</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {QUICK_FONTS.map((option) => (
-                    <button
-                      key={option.label}
-                      onClick={() => updateSettings({ fontFamily: option.value })}
-                      className={cn(
-                        "rounded-md border px-3 py-2 text-left text-xs transition-colors",
-                        settings.fontFamily === option.value
-                          ? "border-primary bg-primary/10 text-foreground"
-                          : "border-input bg-background text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+            {/* ── Step 3: Markdown guide ── */}
+            {step === 3 && (
+              <EditorGuideContent compact className="pr-1" showMarkdownSection showKeybindsSection={false} />
+            )}
 
-              <div>
-                <h4 className="text-sm font-semibold mb-2">Font size</h4>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={12}
-                    max={22}
-                    step={1}
-                    value={settings.fontSize}
-                    onChange={(e) => updateSettings({ fontSize: Number(e.target.value) })}
-                    className="flex-1 h-1.5 accent-primary cursor-pointer"
-                  />
-                  <span className="text-xs text-muted-foreground w-12 text-right tabular-nums">
-                    {settings.fontSize}px
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
+            {/* ── Step 4: Keybind guide ── */}
+            {step === 4 && (
+              <EditorGuideContent compact className="pr-1" showMarkdownSection={false} showKeybindsSection />
+            )}
 
-          {step === 2 && (
-            <EditorGuideContent compact className="pr-1" showMarkdownSection showKeybindsSection={false} />
-          )}
-
-          {step === 3 && (
-            <EditorGuideContent compact className="pr-1" showMarkdownSection={false} showKeybindsSection />
-          )}
           </div>
         </div>
 

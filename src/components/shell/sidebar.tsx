@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from "react";
 import {
   FileText,
+  Home,
   List,
   ListOrdered,
   Heading,
@@ -69,6 +70,7 @@ export function Sidebar() {
   const compactMode = useEditorStore((s) => s.settings.compactMode);
   const showIcons = useEditorStore((s) => s.settings.showIconsInSidebar);
   const sidebarPosition = useEditorStore((s) => s.settings.sidebarPosition);
+  const goToDashboard = useEditorStore((s) => s.goToDashboard);
 
   const btnSize = compactMode ? "h-7 w-7" : "h-8 w-8";
   const iconSize = compactMode ? "h-3.5 w-3.5" : "h-4 w-4";
@@ -111,14 +113,19 @@ export function Sidebar() {
       className="relative flex h-full flex-col items-center border-r border-border bg-card py-2"
       style={{ width: `var(--sidebar-drag-width, ${sidebarWidth}px)` }}
     >
-      {/* App icon */}
+      {/* Home button — click to go to dashboard */}
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className={`mb-1 ${btnSize}`}>
-            <FileText className={iconSize} />
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`mb-1 ${btnSize}`}
+            onClick={() => goToDashboard()}
+          >
+            <Home className={iconSize} />
           </Button>
         </TooltipTrigger>
-        <TooltipContent side={tooltipSide}>Markup</TooltipContent>
+        <TooltipContent side={tooltipSide}>Home</TooltipContent>
       </Tooltip>
 
       <Separator className="my-1 w-6" />
