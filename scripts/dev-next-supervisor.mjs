@@ -1,6 +1,10 @@
-const fs = require("node:fs");
-const { spawn } = require("node:child_process");
-const path = require("node:path");
+import fs from "node:fs";
+import { spawn } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const workspaceRoot = path.join(__dirname, "..");
 const nextCliPath = path.join(__dirname, "..", "node_modules", "next", "dist", "bin", "next");

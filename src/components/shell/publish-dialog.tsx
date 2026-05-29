@@ -50,6 +50,7 @@ export function PublishDialog({ open, onOpenChange, tabId }: PublishDialogProps)
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const targetTabId = tabId ?? activeTabId;
   const tab = tabs.find((t) => t.id === targetTabId);
+  const tabTitle = tab?.title ?? null;
 
   const existingSite = useDbQuery(
     "sites.getByOwnerTab",
@@ -68,13 +69,13 @@ export function PublishDialog({ open, onOpenChange, tabId }: PublishDialogProps)
 
   useEffect(() => {
     if (!open) return;
-    const initial = existingSite?.slug ?? (tab ? normalizeSlug(tab.title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/, "")) : "");
+    const initial = existingSite?.slug ?? (tabTitle ? normalizeSlug(tabTitle.replace(/\.(md|canvas|mindmap|kanban|pdf)$/, "")) : "");
     queueMicrotask(() => {
       setSlugInput(initial);
       setError(null);
       setCopied(false);
     });
-  }, [open, existingSite?.slug, tab?.title]);
+  }, [open, existingSite?.slug, tabTitle]);
 
   const siteUrl = existingSite?.slug ? `${getSiteOrigin()}/sites/${existingSite.slug}` : null;
 

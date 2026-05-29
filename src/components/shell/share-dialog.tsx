@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useDbMutation, useDbQuery } from "@/lib/db-hooks";
 import { useAuthState } from "@/components/convex-client-provider";
 import { signIn } from "@/lib/tauri";
-import { useEditorStore, type ViewMode } from "@/lib/store";
+import { useEditorStore } from "@/lib/store";
 import { isTauri } from "@/lib/tauri";
 import { writeClipboardText } from "@/lib/clipboard";
 import {
@@ -17,7 +17,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,

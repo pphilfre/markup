@@ -64,33 +64,29 @@ export function SelectionToolbar() {
     };
   }, [editorView, updateFromEditor]);
 
-  useEffect(() => {
-    if (editorView && editorView.hasFocus) return;
-    if (!inlineSelection || !inlineTextarea) {
-      setVisible(false);
-      return;
-    }
-    if (inlineSelection.from === inlineSelection.to) {
-      setVisible(false);
-      return;
-    }
+  const inlinePosition = useMemo<ToolbarPosition | null>(() => {
+    if (editorView && editorView.hasFocus) return null;
+    if (!inlineSelection || !inlineTextarea) return null;
+    if (inlineSelection.from === inlineSelection.to) return null;
 
     const rect = inlineTextarea.getBoundingClientRect();
     const x = clamp(rect.left + rect.width - 8, 16, window.innerWidth - 16);
     const y = clamp(rect.top - 8, 16, window.innerHeight - 16);
-    setPosition({ x, y });
-    setVisible(true);
+    return { x, y };
   }, [editorView, inlineSelection, inlineTextarea]);
 
-  const style = useMemo<CSSProperties | undefined>(() => {
-    if (!position) return undefined;
-    return {
-      left: position.x,
-      top: position.y,
-    };
-  }, [position]);
+  const showEditorPosition = Boolean(visible && position && editorView?.hasFocus);
+  const activePosition = showEditorPosition ? position : inlinePosition;
 
-  if (!visible || !position) return null;
+  const style = useMemo<CSSProperties | undefined>(() => {
+    if (!activePosition) return undefined;
+    return {
+      left: activePosition.x,
+      top: activePosition.y,
+    };
+  }, [activePosition]);
+
+  if (!activePosition) return null;
 
   return (
     <div

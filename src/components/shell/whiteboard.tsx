@@ -5,7 +5,6 @@ import {
   useEffect,
   useState,
   useCallback,
-  useMemo,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
@@ -806,7 +805,6 @@ export function WhiteboardView() {
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
   const updateContent = useEditorStore((s) => s.updateContent);
-  const switchTab = useEditorStore((s) => s.switchTab);
 
   // Canvas transform state
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
@@ -820,6 +818,7 @@ export function WhiteboardView() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [canvasSettings, setCanvasSettings] =
     useState<CanvasSettings>(DEFAULT_SETTINGS);
+  const [linkedTabIds, setLinkedTabIds] = useState<string[]>([]);
 
   // ── Tab-based persistence ──────────────────────────────────────────────
   const hydratedRef = useRef(false);
@@ -903,7 +902,6 @@ export function WhiteboardView() {
   // Context menu
   const [contextMenu, setContextMenu] = useState<Point | null>(null);
   const [clipboard, setClipboard] = useState<WhiteboardElement[]>([]);
-  const [linkedTabIds, setLinkedTabIds] = useState<string[]>([]);
   const hasSelection = elements.some((el) => el.selected);
 
   useEffect(() => {
@@ -933,7 +931,7 @@ export function WhiteboardView() {
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [elements, canvasSettings, activeTabId, updateContent]);
+  }, [elements, canvasSettings, linkedTabIds, activeTabId, updateContent]);
 
   // ── Undo/Redo ─────────────────────────────────────────────────────────
 
@@ -1357,7 +1355,7 @@ export function WhiteboardView() {
   );
 
   const handlePointerUp = useCallback(
-    (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    () => {
       if (isPanningRef.current) {
         isPanningRef.current = false;
         return;

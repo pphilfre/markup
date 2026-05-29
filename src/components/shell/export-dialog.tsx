@@ -8,7 +8,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -61,12 +60,6 @@ const FORMAT_EXT: Record<ExportFormat, string> = {
 /** Strip known note extensions from a title */
 function stripNoteExt(title: string): string {
   return title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/, "");
-}
-
-/** Ensure the filename has the correct extension for the chosen format */
-function withFormatExt(name: string, format: ExportFormat): string {
-  const base = name.replace(/\.(md|json|html|pdf|canvas|mindmap|kanban)$/, "");
-  return base + FORMAT_EXT[format];
 }
 
 // ---------------------------------------------------------------------------
@@ -193,7 +186,6 @@ const ADMONITION_META: Record<string, { icon: string; label: string }> = {
 function markdownToRichHtml(md: string): string {
   // Collect footnote definitions
   const footnotes: Record<string, string> = {};
-  let fnCounter = 0;
   const fnOrder: string[] = [];
 
   // Extract footnote definitions [^id]: text
@@ -235,7 +227,6 @@ function markdownToRichHtml(md: string): string {
   html = html.replace(/(?<!~)~([^~\n]+)~(?!~)/g, "<sub>$1</sub>");
   html = html.replace(/\[\^([^\]]+)\]/g, (_m, id) => {
     if (!fnOrder.includes(id)) fnOrder.push(id);
-    fnCounter++;
     const num = fnOrder.indexOf(id) + 1;
     return `<sup><a href="#fn-${id}" id="fnref-${id}">[${num}]</a></sup>`;
   });
@@ -296,7 +287,7 @@ function markdownToRichHtml(md: string): string {
 
   // Append footnotes section
   if (fnOrder.length > 0) {
-    const fnItems = fnOrder.map((id, i) => {
+    const fnItems = fnOrder.map((id) => {
       const text = footnotes[id] ?? "";
       return `<li id="fn-${id}">${text} <a href="#fnref-${id}">↩</a></li>`;
     }).join("\n");

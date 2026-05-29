@@ -126,7 +126,7 @@ export const save = mutation({
     if (existing) {
       // Filter out undefined values from data to avoid overwriting with null/undefined
       const patchData = Object.fromEntries(
-        Object.entries(data).filter(([_, v]) => v !== undefined)
+        Object.entries(data).filter(([, v]) => v !== undefined)
       );
       await ctx.db.patch(existing._id, patchData);
     } else {

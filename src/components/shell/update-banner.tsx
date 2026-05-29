@@ -11,7 +11,6 @@ import {
   getUpdateState,
   subscribeToUpdateState,
   checkOnStartup,
-  type UpdateStatus,
 } from "@/lib/tauri-updater";
 import { isTauri } from "@/lib/tauri";
 

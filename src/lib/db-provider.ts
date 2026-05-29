@@ -8,7 +8,6 @@ function normalizeDbProvider(value?: string | null): DbProvider {
   if (normalized === "postgres") return "postgres";
   if (normalized === "convex" || !normalized) return DEFAULT_PROVIDER;
 
-  // eslint-disable-next-line no-console
   console.warn(
     `[DB] ${PROVIDER_ENV_KEY}=${value ?? ""} is not recognized. Falling back to ${DEFAULT_PROVIDER}.`
   );

@@ -27,7 +27,6 @@ const PdfAnnotator = dynamic<PdfAnnotatorProps>(
     // Style and worker URL are resolved inside the dynamic import so Turbopack
     // does not attempt to resolve these optional packages during the static build.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-implied-eval
       await import(/* webpackIgnore: true */ _pdfStylePkg as string);
     } catch {
       // Style is optional; ignore if the package is not installed.
@@ -355,7 +354,7 @@ export function PdfEditorView() {
 
       return body.storageId;
     },
-    [activeTabId, generateUploadUrl, upsertPdfFile, userId]
+    [activeTabId, generateUploadUrl, upsertPdfFile, userId, isPostgresProvider]
   );
 
   const importPdfFile = useCallback(

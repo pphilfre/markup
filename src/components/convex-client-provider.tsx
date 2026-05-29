@@ -113,13 +113,12 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
     if (!convexUrl) {
       // This is especially important in the Tauri build, where missing env
       // variables can silently break sync.
-      // eslint-disable-next-line no-console
       console.error(
         "[Convex] NEXT_PUBLIC_CONVEX_URL is not set. Convex sync is disabled. " +
           "Set NEXT_PUBLIC_CONVEX_URL to your Convex deployment URL in the environment used for this build."
       );
     }
-  }, [shouldUseConvex]);
+  }, [shouldUseConvex, convexUrl]);
 
   if (!shouldUseConvex) {
     return (

@@ -5,11 +5,9 @@ import {
   useEffect,
   useState,
   useCallback,
-  useMemo,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
-  Plus,
   Trash2,
   Download,
   ZoomIn,
@@ -25,8 +23,6 @@ import {
   Circle,
   Hexagon,
   GitBranch,
-  Copy,
-  Clipboard,
   Layers,
   ArrowUp,
   ArrowDown,
@@ -734,7 +730,6 @@ export function MindmapView() {
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
   const updateContent = useEditorStore((s) => s.updateContent);
-  const switchTab = useEditorStore((s) => s.switchTab);
 
   // Canvas transform
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
@@ -775,13 +770,6 @@ export function MindmapView() {
   // Context menu
   const [contextMenu, setContextMenu] = useState<Point | null>(null);
   const hasSelection = nodes.some((n) => n.selected);
-  const selectedLinkId = useMemo(() => {
-    const selected = nodes.filter((n) => n.selected);
-    if (selected.length === 0) return null;
-    const linkId = selected[0].linkTabId;
-    if (!linkId) return null;
-    return selected.every((n) => n.linkTabId === linkId) ? linkId : null;
-  }, [nodes]);
   useEffect(() => {
     const check = () => setIsDark(document.documentElement.classList.contains("dark"));
     check();
@@ -824,7 +812,7 @@ export function MindmapView() {
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [nodes, connections, settings, activeTabId, updateContent]);
+  }, [nodes, connections, settings, linkedTabIds, activeTabId, updateContent]);
 
   // ── Undo/Redo ───────────────────────────────────────────────────────
 
@@ -1241,7 +1229,7 @@ export function MindmapView() {
         );
       }
     },
-    [activeTool, pan, zoom, snap]
+    [activeTool, pan, zoom, nodes, snap]
   );
 
   const handlePointerUp = useCallback(
@@ -1306,7 +1294,7 @@ export function MindmapView() {
       drawingRef.current = false;
       dragNodeRef.current = null;
     },
-    [activeTool, pan, zoom, pushUndo, isDark]
+    [activeTool, pan, zoom, isDark]
   );
 
   const handleContextMenu = useCallback(

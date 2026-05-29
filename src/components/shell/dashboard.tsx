@@ -236,7 +236,6 @@ export function Dashboard() {
 
   // Recently opened (preserve openTabIds order, most recent first)
   const recentTabs = useMemo(() => {
-    const openSet = new Set(openTabIds);
     return [...openTabIds]
       .reverse()
       .map((id) => workspaceTabs.find((t) => t.id === id))
@@ -275,6 +274,7 @@ export function Dashboard() {
             {/* Avatar */}
             <div className="relative shrink-0">
               {avatarUrl ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   src={avatarUrl}
                   alt={displayName}

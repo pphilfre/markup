@@ -2,7 +2,6 @@
 
 import { useState, useRef, useCallback } from "react";
 import {
-  FileText,
   Home,
   List,
   ListOrdered,
@@ -10,7 +9,7 @@ import {
   Quote,
   Code2,
   Link,
-  Image,
+  Image as ImageIcon,
   Table,
   CheckSquare,
   Bold,
@@ -331,7 +330,7 @@ export function Sidebar() {
               onClick={() => insertSnippet("![alt]($SEL)")}
               className={`${btnSize} text-muted-foreground hover:text-foreground`}
             >
-              <Image className={iconSize} />
+              <ImageIcon className={iconSize} />
             </Button>
           </TooltipTrigger>
           <TooltipContent side={tooltipSide} className="flex items-center">
@@ -379,9 +378,10 @@ export function Sidebar() {
                     className={`${btnSize} text-muted-foreground hover:text-foreground`}
                   >
                     {user?.profilePictureUrl ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
                       <img
                         src={user.profilePictureUrl}
-                        alt=""
+                        alt={[user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.email || "User profile"}
                         className="h-5 w-5 rounded-full"
                       />
                     ) : (
