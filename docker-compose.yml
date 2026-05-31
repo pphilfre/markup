@@ -20,6 +20,9 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_DB_PROVIDER: postgres
+        NEXT_PUBLIC_DISTRIBUTION: docker
+        NEXT_PUBLIC_DOCKER_UPDATE_URL: ${NEXT_PUBLIC_DOCKER_UPDATE_URL}
+        NEXT_PUBLIC_DOCKER_UPDATE_DOCS_URL: ${NEXT_PUBLIC_DOCKER_UPDATE_DOCS_URL}
     restart: unless-stopped
     depends_on:
       db:

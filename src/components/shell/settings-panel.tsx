@@ -29,13 +29,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { apiBase, getClientAuthToken, openExternal, signOut, isTauri } from "@/lib/tauri";
+import { apiBase, getClientAuthToken, openExternal, signOut, isDocker, isTauri } from "@/lib/tauri";
 import { useEditorStore, DEFAULT_SETTINGS, type Settings as SettingsType } from "@/lib/store";
 import { useIsMobile } from "@/lib/use-mobile";
 import { EditorGuideContent } from "@/components/shell/editor-guide-content";
 import { REPLAY_TUTORIAL_EVENT } from "@/components/shell/first-run-dialog";
 import { WorkOsWidgets, UserProfile, UserSessions, UserSecurity } from "@workos-inc/widgets";
 import { getUpdateState, subscribeToUpdateState, downloadUpdate, installUpdate } from "@/lib/tauri-updater";
+import { checkForDockerUpdate, getDockerUpdateDocsUrl, getDockerUpdateState, subscribeToDockerUpdateState } from "@/lib/docker-updater";
 import packageJson from "../../../package.json";
 
 // ---------------------------------------------------------------------------
@@ -1901,18 +1902,29 @@ function AppearanceSection({
 }
 
 // ---------------------------------------------------------------------------
-// Updates section (Tauri only)
+// Updates section
 // ---------------------------------------------------------------------------
 
 function UpdatesSection() {
   const [updateState, setUpdateState] = useState(getUpdateState());
+  const [dockerUpdateState, setDockerUpdateState] = useState(getDockerUpdateState());
+  const isTauriEnv = isTauri();
+  const isDockerEnv = isDocker();
 
   useEffect(() => {
+    if (!isTauriEnv) return;
     const unsub = subscribeToUpdateState(() => setUpdateState(getUpdateState()));
     return unsub;
-  }, []);
+  }, [isTauriEnv]);
+
+  useEffect(() => {
+    if (!isDockerEnv) return;
+    const unsub = subscribeToDockerUpdateState(() => setDockerUpdateState(getDockerUpdateState()));
+    return unsub;
+  }, [isDockerEnv]);
 
   const { status, info, error, downloadProgress } = updateState;
+  const { status: dockerStatus, info: dockerInfo, error: dockerError } = dockerUpdateState;
   const currentVersion = packageJson.version;
 
   const statusLabel: Record<string, string> = {
@@ -1925,13 +1937,23 @@ function UpdatesSection() {
     error: `Error: ${error}`,
   };
 
+  const dockerStatusLabel: Record<string, string> = {
+    idle: "Not checked",
+    checking: "Checking for updates…",
+    "up-to-date": "You're up to date",
+    available: `Docker update available: v${dockerInfo?.version}`,
+    error: `Error: ${dockerError}`,
+  };
+
   return (
     <div className="space-y-5">
       <div>
         <h3 className="text-sm font-semibold mb-1">Updates</h3>
         <p className="text-xs text-muted-foreground mb-3">
-          {isTauri()
+          {isTauriEnv
             ? "Manage application updates"
+            : isDockerEnv
+            ? "Check for Docker image updates"
             : "Updates are managed automatically on the web."}
         </p>
       </div>
@@ -1942,7 +1964,7 @@ function UpdatesSection() {
           <span className="text-xs font-medium font-mono bg-muted px-1.5 py-0.5 rounded">v{currentVersion}</span>
         </div>
 
-        {isTauri() && (
+        {isTauriEnv && (
           <>
             <Separator />
             <div className="space-y-2">
@@ -1994,9 +2016,34 @@ function UpdatesSection() {
             </div>
           </>
         )}
+
+        {isDockerEnv && (
+          <>
+            <Separator />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Status</span>
+                <span className={cn(
+                  "text-xs font-medium",
+                  dockerStatus === "up-to-date" && "text-green-400",
+                  dockerStatus === "available" && "text-yellow-400",
+                  dockerStatus === "error" && "text-destructive",
+                )}>
+                  {dockerStatusLabel[dockerStatus] ?? dockerStatus}
+                </span>
+              </div>
+
+              {dockerInfo?.body && (
+                <p className="text-[11px] text-muted-foreground border-t border-border pt-2">
+                  {dockerInfo.body}
+                </p>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
-      {isTauri() ? (
+      {isTauriEnv ? (
         <>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -2037,6 +2084,37 @@ function UpdatesSection() {
 
           <p className="text-[11px] text-muted-foreground">
             Updates are checked automatically on startup and downloaded in the background.
+          </p>
+        </>
+      ) : isDockerEnv ? (
+        <>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs gap-1.5"
+              disabled={dockerStatus === "checking"}
+              onClick={() => checkForDockerUpdate()}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Check for Updates
+            </Button>
+
+            {dockerStatus === "available" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs gap-1.5"
+                onClick={() => openExternal(getDockerUpdateDocsUrl())}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Update Instructions
+              </Button>
+            )}
+          </div>
+
+          <p className="text-[11px] text-muted-foreground">
+            Docker updates require pulling the latest image and restarting the container.
           </p>
         </>
       ) : (

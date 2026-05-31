@@ -12,6 +12,11 @@ export function isTauri(): boolean {
   return "__TAURI_INTERNALS__" in window;
 }
 
+/** Whether we are running the Docker distribution build. */
+export function isDocker(): boolean {
+  return process.env.NEXT_PUBLIC_DISTRIBUTION === "docker" && !isTauri();
+}
+
 const DEPLOYED_URL = "https://markup.freddiephilpot.dev";
 const DESKTOP_TOKEN_KEY = "desktop_token";
 const DESKTOP_USER_KEY = "desktop_user";

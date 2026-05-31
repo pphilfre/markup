@@ -19,6 +19,12 @@ COPY . .
 # Accept public env vars as build args so Next.js can bake them into the bundle
 ARG NEXT_PUBLIC_DB_PROVIDER=postgres
 ENV NEXT_PUBLIC_DB_PROVIDER=$NEXT_PUBLIC_DB_PROVIDER
+ARG NEXT_PUBLIC_DISTRIBUTION=docker
+ENV NEXT_PUBLIC_DISTRIBUTION=$NEXT_PUBLIC_DISTRIBUTION
+ARG NEXT_PUBLIC_DOCKER_UPDATE_URL
+ENV NEXT_PUBLIC_DOCKER_UPDATE_URL=$NEXT_PUBLIC_DOCKER_UPDATE_URL
+ARG NEXT_PUBLIC_DOCKER_UPDATE_DOCS_URL
+ENV NEXT_PUBLIC_DOCKER_UPDATE_DOCS_URL=$NEXT_PUBLIC_DOCKER_UPDATE_DOCS_URL
 
 # Generate Prisma client (dummy DATABASE_URL satisfies schema validation at build time)
 RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" node node_modules/prisma/build/index.js generate

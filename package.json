@@ -46,7 +46,7 @@
     "@fabianlars/tauri-plugin-oauth": "^2.0.0",
     "@prisma/client": "^5.22.0",
     "@tanstack/react-query": "^5.96.1",
-    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
     "@tauri-apps/plugin-dialog": "^2.6.0",
     "@tauri-apps/plugin-fs": "^2.4.5",
@@ -92,7 +92,7 @@
   "@tauri-apps/plugin-updater": "^2.10.0",
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@tauri-apps/cli": "^2.10.1",
+    "@tauri-apps/cli": "^2.11.2",
     "@types/file-saver": "^2.0.7",
     "@types/katex": "^0.16.8",
     "@types/node": "^20",

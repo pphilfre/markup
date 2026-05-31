@@ -214,6 +214,18 @@ Deploy as a standard Next.js application (e.g. Vercel), with:
 
 Use the Tauri build scripts after setting up the Rust/Tauri toolchain.
 
+### Docker Updates
+
+The Docker build can check for newer releases and surface an in-app notification.
+When an update is available, pull the latest image (or rebuild) and restart the container.
+
+You can customize the update check URLs by setting these build args:
+
+```bash
+NEXT_PUBLIC_DOCKER_UPDATE_URL=https://raw.githubusercontent.com/pphilfre/markup/main/version.json
+NEXT_PUBLIC_DOCKER_UPDATE_DOCS_URL=https://github.com/pphilfre/markup#docker-updates
+```
+
 ---
 
 ## License
