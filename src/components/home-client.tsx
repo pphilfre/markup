@@ -12,6 +12,7 @@ import { SharedNoteViewer } from "@/components/shell/shared-note-viewer";
 import { FirstRunDialog } from "@/components/shell/first-run-dialog";
 import { DesktopDebugNotice } from "@/components/shell/desktop-debug-notice";
 import { NewFileTemplateDialog } from "@/components/shell/new-file-template-dialog";
+import { AiChatPanel, AiChatToggleButton } from "@/components/shell/ai-chat-panel";
 import { getTabWorkspaceId, useEditorStore } from "@/lib/store";
 import { useGlobalKeybinds } from "@/lib/keybinds";
 import { useIsMobile } from "@/lib/use-mobile";
@@ -174,6 +175,8 @@ export function HomeClient() {
         <MainContent />
       </div>
       {sidebarPosition === "right" && sidebarElements}
+      <AiChatPanel />
+      <AiChatToggleButton />
     </div>
   );
 }

@@ -923,6 +923,36 @@ body > .rt-BaseDialogOverlay .rt-BaseDialogContent,
   opacity: 0.5;
   position: relative;
 }
+
+/* ── AI chat panel ─────────────────────────────────────────────────────── */
+.ai-chat-markdown .markdown-body {
+  margin: 0 !important;
+  max-width: none !important;
+  padding: 0 !important;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.ai-chat-markdown .markdown-body > *:first-child {
+  margin-top: 0;
+}
+.ai-chat-markdown .markdown-body > *:last-child {
+  margin-bottom: 0;
+}
+
+@keyframes ai-chat-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.ai-chat-skeleton {
+  background: linear-gradient(90deg, oklch(0.88 0 0 / 45%), oklch(0.88 0 0 / 75%), oklch(0.88 0 0 / 45%));
+  background-size: 200% 100%;
+  animation: ai-chat-shimmer 1.6s ease-in-out infinite;
+}
+
+.dark .ai-chat-skeleton {
+  background: linear-gradient(90deg, oklch(0.3 0 0 / 55%), oklch(0.38 0 0 / 75%), oklch(0.3 0 0 / 55%));
+}
 [data-checkbox-style="minimal"] .markdown-body input[type="checkbox"]:checked {
   opacity: 1;
   border-color: var(--accent-color, #7c3aed);

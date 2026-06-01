@@ -53,6 +53,7 @@ import { KanbanView } from "@/components/shell/kanban";
 import { PdfEditorView } from "@/components/shell/pdf-editor";
 import { NewFileTemplateDialog } from "@/components/shell/new-file-template-dialog";
 import { FirstRunDialog } from "@/components/shell/first-run-dialog";
+import { AiChatMobileModal } from "@/components/shell/ai-chat-panel";
 import { useAuthState } from "@/components/convex-client-provider";
 import { signIn, signOut } from "@/lib/tauri";
 import {
@@ -721,6 +722,7 @@ export function MobileLayout() {
       <FirstRunDialog />
       <NewFileTemplateDialog />
       <PublishDialog open={publishOpen} onOpenChange={setPublishOpen} />
+      <AiChatMobileModal />
 
       {/* Keep formatting controls reachable while typing on mobile keyboards */}
       {showTopFormattingBar && <MobileFormattingBar placement="top" />}
