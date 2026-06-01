@@ -101,7 +101,7 @@ function mapModels(payload: unknown): OpenRouterModel[] {
     : [];
 
   return models
-    .map((model) => {
+    .map((model): OpenRouterModel | null => {
       const record = model as Record<string, unknown>;
       const id = typeof record.id === "string" ? record.id : "";
       if (!id) return null;
