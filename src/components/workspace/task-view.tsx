@@ -449,7 +449,7 @@ export function TaskDrawer() {
         if (!open) select(null);
       }}
     >
-      <DialogContent className="workspace-task-drawer" showCloseButton>
+      <DialogContent className="workspace-task-drawer translate-x-0 translate-y-0" showCloseButton>
         {task && <TaskDetails key={task.id} task={task} />}
       </DialogContent>
     </Dialog>

@@ -176,7 +176,7 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
       />
       <Dialog open={navigationOpen} onOpenChange={setNavigationOpen}>
         <DialogContent
-          className="workspace-mobile-navigation"
+          className="workspace-mobile-navigation translate-x-0 translate-y-0"
           showCloseButton={false}
         >
           <DialogHeader className="sr-only">

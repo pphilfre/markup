@@ -638,6 +638,8 @@
   translate: none !important;
 }
 .workspace-mobile-navigation {
+  --tw-translate-x: 0px !important;
+  --tw-translate-y: 0px !important;
   translate: none !important;
   transform: none !important;
   top: 0 !important;
