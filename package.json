@@ -12,6 +12,8 @@
     "build:tauri": "npm run sync-version && node scripts/tauri-build.js",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --test tests/*.test.cjs",
+    "typecheck": "tsc --noEmit",
     "tauri": "tauri",
     "tauri:dev": "npm-run-all --parallel dev:convex tauri:dev:only",
     "tauri:dev:only": "tauri dev",
@@ -27,6 +29,9 @@
     "dompurify": "3.4.0",
     "fast-uri": "3.1.2",
     "brace-expansion": "5.0.6",
+    "minimatch@3": {
+      "brace-expansion": "2.1.7"
+    },
     "hono": "^4.12.18",
     "ip-address": "10.2.0",
     "postcss": "8.5.15",

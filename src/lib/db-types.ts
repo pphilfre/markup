@@ -22,6 +22,7 @@ export type DbProfile = {
 };
 
 export type DbWorkspace = {
+  projectData?: string | null;
   userId: string;
   activeTabId?: string | null;
   openTabIds?: string[];

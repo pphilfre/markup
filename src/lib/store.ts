@@ -1,6 +1,10 @@
+import { applyLinePrefix } from "./markdown-format";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import { EditorView } from "@codemirror/view";
+import { projectSlice, type ProjectSlice } from "./project-actions";
+import { applyBoardContent, defaultDocumentMeta, migrateProjectData, parseProjectData, type DocumentSnapshot, type ProjectData, type Navigation } from "./projects";
+import { setLocalSaveState } from "./save-state";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -242,15 +246,15 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
-  fontSize: 14,
+  fontSize: 16,
   lineHeight: 1.7,
   tabSize: 2,
   editorMargin: 24,
-  accentColor: "#7c3aed",
+  accentColor: "#3559c7",
   hideMdExtensions: false,
   // Typography
   letterSpacing: 0,
-  maxLineWidth: 0,
+  maxLineWidth: 76,
   showInvisibleCharacters: false,
   // Markdown
   autoCloseBrackets: true,
@@ -270,7 +274,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cursorAnimation: "smooth",
   multiCursorSupport: true,
   // Appearance - Theme
-  themeMode: "dark",
+  themeMode: "system",
   customThemeColors: {},
   // Appearance - UI
   sidebarPosition: "left",
@@ -279,7 +283,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showIconsInSidebar: true,
   showFileExtensions: true,
   iconTheme: "default",
-  promptForTemplateOnNewFile: true,
+  promptForTemplateOnNewFile: false,
   // Appearance - Editor Look
   codeBlockTheme: "github",
   headingStyle: "default",
@@ -351,7 +355,9 @@ export const WORKSPACE_PRESETS: Array<{
   },
 ];
 
-interface EditorState {
+export interface EditorState extends ProjectSlice {
+  documentHistory: Record<string, DocumentSnapshot[]>;
+  restoreSnapshot: (documentId: string, snapshotId: string) => void;
   tabs: Tab[];
   openTabIds: string[]; // IDs of tabs visible in the tab bar
   activeTabId: string | null;
@@ -476,6 +482,7 @@ interface EditorState {
 // ---------------------------------------------------------------------------
 
 let tabCounter = 0;
+const createdDocumentIds = new Map<string, number>();
 
 function newTab(
   folderId: string | null = null,
@@ -484,6 +491,8 @@ function newTab(
   workspaceId: string = DEFAULT_PROFILE_ID
 ): Tab {
   tabCounter += 1;
+  const documentId = crypto.randomUUID();
+  createdDocumentIds.set(documentId, Date.now());
   const template = getTemplate(templateId);
   const prefix =
     noteType === "whiteboard"
@@ -497,7 +506,7 @@ function newTab(
       : template.titlePrefix;
   const ext = noteType === "whiteboard" ? ".canvas" : noteType === "mindmap" ? ".mindmap" : noteType === "kanban" ? ".kanban" : noteType === "pdf" ? ".pdf" : ".md";
   return {
-    id: crypto.randomUUID(),
+    id: documentId,
     title: `${prefix}-${tabCounter}${ext}`,
     content: noteType === "note"
       ? template.content
@@ -517,18 +526,7 @@ function newTab(
                     title: "To Do",
                     color: "#2563eb",
                     wipLimit: null,
-                    cards: [
-                      {
-                        id: crypto.randomUUID(),
-                        title: "Set board goal",
-                        description: "Define what this board tracks.",
-                        labels: ["planning"],
-                        dueDate: null,
-                        priority: "medium",
-                        completed: false,
-                        createdAt: Date.now(),
-                      },
-                    ],
+                    cards: [],
                   },
                   {
                     id: "in-progress",
@@ -555,15 +553,6 @@ function newTab(
     noteType,
     origin: "online",
   };
-}
-
-/** Derive a title from the first heading or first non-empty line. */
-function deriveTitle(content: string): string | null {
-  const firstLine = content.split("\n").find((l) => l.trim().length > 0);
-  if (!firstLine) return null;
-  const heading = firstLine.match(/^#{1,6}\s+(.+)/);
-  if (heading) return heading[1].slice(0, 30);
-  return null;
 }
 
 function getNoteLinkTitle(tab: Tab): string {
@@ -638,6 +627,9 @@ export function getTabWorkspaceId(tab: Pick<Tab, "workspaceId">): string {
 // ---------------------------------------------------------------------------
 
 interface PersistedState {
+  projectData: ProjectData;
+  navigation: Navigation;
+  documentHistory: Record<string, DocumentSnapshot[]>;
   tabs: Tab[];
   openTabIds: string[];
   activeTabId: string | null;
@@ -673,6 +665,17 @@ async function loadFromStorage(): Promise<PersistedState | null> {
 
 export const useEditorStore = create<EditorState>()(
   subscribeWithSelector((set, get) => ({
+    ...projectSlice(set, get),
+    documentHistory: {},
+    restoreSnapshot: (documentId, snapshotId) => {
+      const s = get(), tab = s.tabs.find((tab) => tab.id === documentId);
+      const snapshot = s.documentHistory[documentId]?.find((entry) => entry.id === snapshotId);
+      if (!tab || !snapshot) return;
+      const safety: DocumentSnapshot = { id: crypto.randomUUID(), title: tab.title, content: tab.content, savedAt: Date.now(), reason: "restore" };
+      set({ documentHistory: { ...s.documentHistory, [documentId]: [safety, ...s.documentHistory[documentId]].slice(0, 10) } });
+      get().updateContent(documentId, snapshot.content);
+      get().renameTab(documentId, snapshot.title);
+    },
     tabs: [],
     openTabIds: [],
     activeTabId: null,
@@ -824,6 +827,12 @@ export const useEditorStore = create<EditorState>()(
 
         return {
           tabs: nextTabs,
+          projectData: {
+            ...s.projectData,
+            documents: { ...s.projectData.documents, [tabId]: { ...(s.projectData.documents[tabId] ?? defaultDocumentMeta(tabId)), projectId: null, updatedAt: Date.now() } },
+            boards: s.projectData.boards[tabId] ? { ...s.projectData.boards, [tabId]: { ...s.projectData.boards[tabId], projectId: null, workspaceId, updatedAt: Date.now() } } : s.projectData.boards,
+            tasks: Object.fromEntries(Object.entries(s.projectData.tasks).map(([id, task]) => [id, task.boardId === tabId ? { ...task, workspaceId, projectId: null, updatedAt: Date.now() } : task])),
+          },
           openTabIds: nextOpenTabIds,
           activeTabId: nextActiveTabId,
         };
@@ -962,6 +971,14 @@ export const useEditorStore = create<EditorState>()(
 
       set({
         profiles: next,
+        navigation: { page: "home", projectId: null },
+        projectData: {
+          ...get().projectData,
+          projects: Object.fromEntries(Object.entries(get().projectData.projects).map(([key, project]) => [key, project.workspaceId === id ? { ...project, workspaceId: fallbackId, updatedAt: Date.now() } : project])),
+          tasks: Object.fromEntries(Object.entries(get().projectData.tasks).map(([key, task]) => [key, task.workspaceId === id ? { ...task, workspaceId: fallbackId, updatedAt: Date.now() } : task])),
+          boards: Object.fromEntries(Object.entries(get().projectData.boards).map(([key, board]) => [key, board.workspaceId === id ? { ...board, workspaceId: fallbackId, updatedAt: Date.now() } : board])),
+          trash: Object.fromEntries(Object.entries(get().projectData.trash).map(([key, entry]) => [key, getTabWorkspaceId(entry.document) === id ? { ...entry, document: { ...entry.document, workspaceId: fallbackId }, updatedAt: Date.now() } : entry])),
+        },
         tabs: get().tabs.map((tab) => (getTabWorkspaceId(tab) === id ? { ...tab, workspaceId: fallbackId } : tab)),
         activeProfileId: fallbackId,
         workspaceSettings: nextWorkspaceSettings,
@@ -1015,7 +1032,7 @@ export const useEditorStore = create<EditorState>()(
 
         const tab = newTab(folderId, "note", "blank", s.activeProfileId);
         const vm =
-          s.viewMode === "preview" || s.viewMode === "whiteboard" || s.viewMode === "mindmap" || s.viewMode === "kanban" || s.viewMode === "pdf"
+          s.viewMode === "graph" || s.viewMode === "preview" || s.viewMode === "whiteboard" || s.viewMode === "mindmap" || s.viewMode === "kanban" || s.viewMode === "pdf"
             ? "editor"
             : s.viewMode;
 
@@ -1032,7 +1049,7 @@ export const useEditorStore = create<EditorState>()(
         const folderId = s.newTabTemplateFolderId ?? null;
         const tab = newTab(folderId, "note", templateId, s.activeProfileId);
         const vm =
-          s.viewMode === "preview" || s.viewMode === "whiteboard" || s.viewMode === "mindmap" || s.viewMode === "kanban" || s.viewMode === "pdf"
+          s.viewMode === "graph" || s.viewMode === "preview" || s.viewMode === "whiteboard" || s.viewMode === "mindmap" || s.viewMode === "kanban" || s.viewMode === "pdf"
             ? "editor"
             : s.viewMode;
 
@@ -1051,7 +1068,12 @@ export const useEditorStore = create<EditorState>()(
     // ── Hydrate ────────────────────────────────────────────────────────
     hydrate: async () => {
       const saved = await loadFromStorage();
-      if (saved && saved.tabs.length > 0) {
+      if (saved) {
+        // Preserve the untouched legacy snapshot before the first domain migration.
+        if (!saved.projectData) {
+          const { get: read, set: write } = await import("idb-keyval");
+          if (!(await read("markup-backup-before-projects-v1"))) await write("markup-backup-before-projects-v1", saved);
+        }
         const maxNum = saved.tabs.reduce((max, t) => {
           const m = t.title.match(/-(\d+)\.(md|canvas|mindmap|kanban|pdf)$/i);
           return m ? Math.max(max, parseInt(m[1], 10)) : max;
@@ -1099,11 +1121,14 @@ export const useEditorStore = create<EditorState>()(
             .map((tab) => tab.id)
         );
         const normalizedOpenTabIds = (saved.openTabIds ?? normalizedTabs.map((t) => t.id)).filter((tabId) => workspaceTabIds.has(tabId));
-        const normalizedActiveTabId = saved.activeTabId && workspaceTabIds.has(saved.activeTabId)
+        const normalizedActiveTabId = saved.activeTabId === null ? null : saved.activeTabId && workspaceTabIds.has(saved.activeTabId)
           ? saved.activeTabId
           : (normalizedOpenTabIds[0] ?? null);
 
         set({
+          projectData: migrateProjectData(parseProjectData(saved.projectData), normalizedTabs),
+          navigation: saved.navigation ?? { page: "home", projectId: null },
+          documentHistory: saved.documentHistory ?? {},
           tabs: normalizedTabs,
           openTabIds: normalizedOpenTabIds,
           activeTabId: normalizedActiveTabId,
@@ -1131,7 +1156,7 @@ export const useEditorStore = create<EditorState>()(
       const tab = newTab(folderId, "note", "blank", get().activeProfileId);
       set((s) => {
         // Reset viewMode to editor for note-type tabs
-        const vm = (s.viewMode === "preview" || s.viewMode === "whiteboard" || s.viewMode === "mindmap" || s.viewMode === "kanban" || s.viewMode === "pdf") ? "editor" : s.viewMode;
+        const vm = (s.viewMode === "graph" || s.viewMode === "preview" || s.viewMode === "whiteboard" || s.viewMode === "mindmap" || s.viewMode === "kanban" || s.viewMode === "pdf") ? "editor" : s.viewMode;
         return {
           tabs: [...s.tabs, tab],
           openTabIds: [...s.openTabIds, tab.id],
@@ -1202,10 +1227,13 @@ export const useEditorStore = create<EditorState>()(
       set({ openTabIds: nextOpen, activeTabId: nextActive });
     },
 
-    goToDashboard: () => set({ activeTabId: null }),
+    goToDashboard: () => get().navigate("home"),
 
     deleteTab: (id) => {
-      const { tabs, openTabIds, activeTabId } = get();
+      const { tabs, openTabIds, activeTabId, projectData } = get();
+      const document = tabs.find((tab) => tab.id === id);
+      if (!document) return;
+      const now = Date.now();
       const next = tabs.filter((t) => t.id !== id);
       const nextOpen = openTabIds.filter((tid) => tid !== id);
 
@@ -1219,7 +1247,9 @@ export const useEditorStore = create<EditorState>()(
         }
       }
 
-      set({ tabs: next, openTabIds: nextOpen, activeTabId: nextActive });
+      set({ tabs: next, openTabIds: nextOpen, activeTabId: nextActive,
+        projectData: { ...projectData, trash: { ...projectData.trash, [id]: { id, document, deletedAt: now, updatedAt: now } } },
+      });
     },
 
     openTab: (id) => {
@@ -1242,13 +1272,16 @@ export const useEditorStore = create<EditorState>()(
         else if (nt === "mindmap") vm = "mindmap";
         else if (nt === "kanban") vm = "kanban";
         else if (nt === "pdf") vm = "pdf";
-        else if (vm === "whiteboard" || vm === "mindmap" || vm === "kanban" || vm === "pdf") vm = "editor";
+        else if (vm === "graph" || vm === "whiteboard" || vm === "mindmap" || vm === "kanban" || vm === "pdf") vm = "editor";
 
         const baseOpenTabs = s.openTabIds.filter((tabId) => workspaceTabIds.has(tabId));
         const nextOpenTabIds = baseOpenTabs.includes(id) ? baseOpenTabs : [...baseOpenTabs, id];
 
         return {
           activeProfileId: nextActiveProfileId,
+          navigation: { page: tab.noteType === "note" ? "notes" : "resources", projectId: s.projectData.documents[id]?.projectId ?? null },
+          selectedTaskId: null,
+          projectData: { ...s.projectData, documents: { ...s.projectData.documents, [id]: { ...(s.projectData.documents[id] ?? defaultDocumentMeta(id)), lastOpenedAt: Date.now() } } },
           settings: s.workspaceSettings[nextActiveProfileId] ?? s.settings,
           openTabIds: nextOpenTabIds,
           activeTabId: id,
@@ -1276,13 +1309,16 @@ export const useEditorStore = create<EditorState>()(
       else if (nt === "mindmap") vm = "mindmap";
       else if (nt === "kanban") vm = "kanban";
       else if (nt === "pdf") vm = "pdf";
-      else if (vm === "whiteboard" || vm === "mindmap" || vm === "kanban" || vm === "pdf") vm = "editor";
+      else if (vm === "graph" || vm === "whiteboard" || vm === "mindmap" || vm === "kanban" || vm === "pdf") vm = "editor";
 
       const baseOpenTabs = s.openTabIds.filter((tabId) => workspaceTabIds.has(tabId));
       const nextOpenTabIds = baseOpenTabs.includes(id) ? baseOpenTabs : [...baseOpenTabs, id];
 
       return {
         activeProfileId: nextActiveProfileId,
+          navigation: { page: tab.noteType === "note" ? "notes" : "resources", projectId: s.projectData.documents[id]?.projectId ?? null },
+          selectedTaskId: null,
+          projectData: { ...s.projectData, documents: { ...s.projectData.documents, [id]: { ...(s.projectData.documents[id] ?? defaultDocumentMeta(id)), lastOpenedAt: Date.now() } } },
         settings: s.workspaceSettings[nextActiveProfileId] ?? s.settings,
         activeTabId: id,
         openTabIds: nextOpenTabIds,
@@ -1310,7 +1346,7 @@ export const useEditorStore = create<EditorState>()(
         else if (tab.noteType === "mindmap") vm = "mindmap";
         else if (tab.noteType === "kanban") vm = "kanban";
         else if (tab.noteType === "pdf") vm = "pdf";
-        else if (vm === "whiteboard" || vm === "mindmap" || vm === "kanban" || vm === "pdf") vm = "editor";
+        else if (vm === "graph" || vm === "whiteboard" || vm === "mindmap" || vm === "kanban" || vm === "pdf") vm = "editor";
 
         return {
           tabs: [...s.tabs, tab],
@@ -1320,29 +1356,26 @@ export const useEditorStore = create<EditorState>()(
         };
       }),
 
-    updateContent: (id, content) =>
-      set((s) => ({
-        tabs: s.tabs.map((t) => {
-          if (t.id !== id) return t;
-          if (t.noteType !== "note") return { ...t, content };
-          const derived = deriveTitle(content);
-          return {
-            ...t,
-            content,
-            title: derived ?? t.title,
-          };
-        }),
-      })),
+    updateContent: (id, content) => set((s) => {
+      const tab = s.tabs.find((tab) => tab.id === id);
+      if (!tab || tab.content === content) return {};
+      const now = Date.now(), meta = s.projectData.documents[id] ?? defaultDocumentMeta(id);
+      const history = s.documentHistory[id] ?? [];
+      const snapshot = tab.noteType === "note" && tab.content.length > 0 && tab.content.length <= 200_000 && (!history[0] || now - history[0].savedAt >= 60_000);
+      const projectData = tab.noteType === "kanban" ? applyBoardContent(s.projectData, { ...tab, content }) : s.projectData;
+      return {
+        tabs: s.tabs.map((tab) => tab.id === id ? { ...tab, content } : tab),
+        projectData: { ...projectData, documents: { ...projectData.documents, [id]: { ...meta, updatedAt: now } } },
+        ...(snapshot ? { documentHistory: { ...s.documentHistory, [id]: [{ id: crypto.randomUUID(), title: tab.title, content: tab.content, savedAt: now, reason: "edit" as const }, ...history].slice(0, 10) } } : {}),
+      };
+    }),
 
-    updateTitle: (id, title) =>
-      set((s) => ({
-        tabs: s.tabs.map((t) => (t.id === id ? { ...t, title } : t)),
-      })),
+    updateTitle: (id, title) => get().renameTab(id, title),
 
-    renameTab: (id, title) =>
-      set((s) => ({
-        tabs: s.tabs.map((t) => (t.id === id ? { ...t, title } : t)),
-      })),
+    renameTab: (id, title) => set((s) => ({
+      tabs: s.tabs.map((tab) => tab.id === id ? { ...tab, title } : tab),
+      projectData: { ...s.projectData, documents: { ...s.projectData.documents, [id]: { ...(s.projectData.documents[id] ?? defaultDocumentMeta(id)), updatedAt: Date.now() } } },
+    })),
 
     setTabIcon: (id, icon, color) =>
       set((s) => ({
@@ -1391,85 +1424,18 @@ export const useEditorStore = create<EditorState>()(
         ),
       })),
 
-    toggleView: () =>
-      set((s) => {
-        const cycle: ViewMode[] = ["editor", "split", "preview", "inline", "graph", "whiteboard", "mindmap", "kanban", "pdf"];
-        const idx = cycle.indexOf(s.viewMode);
-        return { viewMode: cycle[(idx + 1) % cycle.length] };
-      }),
-
+    toggleView: () => {
+      const s = get(), tab = s.tabs.find((tab) => tab.id === s.activeTabId);
+      if (!tab || tab.noteType !== "note") return;
+      const cycle: ViewMode[] = ["editor", "inline", "split", "preview"];
+      set({ viewMode: cycle[(cycle.indexOf(s.viewMode) + 1) % cycle.length] });
+    },
     setViewMode: (mode) => {
-      const activeTab = (() => {
-        const s = useEditorStore.getState();
-        return s.tabs.find((t) => t.id === s.activeTabId);
-      })();
-
-      // Note-oriented modes should never try to render non-note content.
-      // If a canvas/mindmap/etc. tab is active, create a fresh note tab first.
-      if ((mode === "editor" || mode === "split" || mode === "preview" || mode === "inline") && activeTab && activeTab.noteType !== "note") {
-        const tab = newTab(activeTab.folderId ?? null, "note", "blank", getTabWorkspaceId(activeTab));
-        set((s) => ({
-          tabs: [...s.tabs, tab],
-          openTabIds: [...s.openTabIds, tab.id],
-          activeTabId: tab.id,
-          viewMode: mode,
-        }));
-        return;
-      }
-
-      // When switching to whiteboard/mindmap, create a new file if the active tab
-      // is not already that type — never overwrite an existing file.
-      if (mode === "whiteboard") {
-        if (!activeTab || activeTab.noteType !== "whiteboard") {
-          const tab = newTab(activeTab?.folderId ?? null, "whiteboard", "blank", activeTab ? getTabWorkspaceId(activeTab) : useEditorStore.getState().activeProfileId);
-          set((s) => ({
-            tabs: [...s.tabs, tab],
-            openTabIds: [...s.openTabIds, tab.id],
-            activeTabId: tab.id,
-            viewMode: "whiteboard" as ViewMode,
-          }));
-          return;
-        }
-      }
-      if (mode === "mindmap") {
-        if (!activeTab || activeTab.noteType !== "mindmap") {
-          const tab = newTab(activeTab?.folderId ?? null, "mindmap", "blank", activeTab ? getTabWorkspaceId(activeTab) : useEditorStore.getState().activeProfileId);
-          set((s) => ({
-            tabs: [...s.tabs, tab],
-            openTabIds: [...s.openTabIds, tab.id],
-            activeTabId: tab.id,
-            viewMode: "mindmap" as ViewMode,
-          }));
-          return;
-        }
-      }
-      if (mode === "kanban") {
-        if (!activeTab || activeTab.noteType !== "kanban") {
-          const tab = newTab(activeTab?.folderId ?? null, "kanban", "blank", activeTab ? getTabWorkspaceId(activeTab) : useEditorStore.getState().activeProfileId);
-          set((s) => ({
-            tabs: [...s.tabs, tab],
-            openTabIds: [...s.openTabIds, tab.id],
-            activeTabId: tab.id,
-            viewMode: "kanban" as ViewMode,
-          }));
-          return;
-        }
-      }
-      if (mode === "pdf") {
-        if (!activeTab || activeTab.noteType !== "pdf") {
-          const tab = newTab(activeTab?.folderId ?? null, "pdf", "blank", activeTab ? getTabWorkspaceId(activeTab) : useEditorStore.getState().activeProfileId);
-          set((s) => ({
-            tabs: [...s.tabs, tab],
-            openTabIds: [...s.openTabIds, tab.id],
-            activeTabId: tab.id,
-            viewMode: "pdf" as ViewMode,
-          }));
-          return;
-        }
-      }
-      // For note-type views, if the active tab is a canvas/mindmap, don't change it —
-      // just update the viewMode so the next note tab will use it.
-      set({ viewMode: mode });
+      const tab = get().tabs.find((tab) => tab.id === get().activeTabId);
+      if (mode === "graph") { set({ viewMode: mode }); return; }
+      if (!tab) return;
+      if (tab.noteType === "note" && ["editor", "inline", "split", "preview"].includes(mode)) set({ viewMode: mode });
+      else if (tab.noteType === mode) set({ viewMode: mode });
     },
 
     toggleTheme: () =>
@@ -1544,13 +1510,7 @@ export const useEditorStore = create<EditorState>()(
         const lines: string[] = [];
         for (let i = startLine.number; i <= endLine.number; i++) {
           const line = state.doc.line(i);
-          if (prefix === "1. ") {
-            lines.push(`${i - startLine.number + 1}. ${line.text}`);
-          } else if (prefix === "- [ ] ") {
-            lines.push(`- [ ] ${line.text}`);
-          } else {
-            lines.push(`${prefix}${line.text}`);
-          }
+          lines.push(applyLinePrefix(line.text, prefix, i - startLine.number));
         }
 
         const replacement = lines.join("\n");
@@ -1572,12 +1532,7 @@ export const useEditorStore = create<EditorState>()(
       if (lineIndex < 0 || lineIndex >= lines.length) return;
 
       const line = lines[lineIndex] ?? "";
-      const nextLine =
-        prefix === "1. "
-          ? `1. ${line}`
-          : prefix === "- [ ] "
-          ? `- [ ] ${line}`
-          : `${prefix}${line}`;
+      const nextLine = applyLinePrefix(line, prefix);
 
       lines[lineIndex] = nextLine;
       s.updateContent(tab.id, lines.join("\n"));
@@ -1597,7 +1552,7 @@ export const useEditorStore = create<EditorState>()(
       const target = s.tabs.find((t) => t.id === tabId);
       if (!target) return;
 
-      const linkText = `[[${getNoteLinkTitle(target)}]]`;
+      const linkText = `[${getNoteLinkTitle(target).replace(/[\[\]]/g, "") }](#note/${encodeURIComponent(target.id)})`;
 
       if (s.editorView) {
         const { from, to } = s.editorView.state.selection.main;
@@ -1711,31 +1666,63 @@ export const useEditorStore = create<EditorState>()(
 // ---------------------------------------------------------------------------
 
 let persistTimeout: ReturnType<typeof setTimeout> | null = null;
+let pendingSave: Promise<void> = Promise.resolve();
+let saveRevision = 0;
 
-useEditorStore.subscribe(
-  (s) => ({
-    tabs: s.tabs,
-    openTabIds: s.openTabIds,
-    activeTabId: s.activeTabId,
-    viewMode: s.viewMode,
-    theme: s.theme,
-    folders: s.folders,
-    settings: s.settings,
-    workspaceSettings: s.workspaceSettings,
-    fileTreeOpen: s.fileTreeOpen,
-    profiles: s.profiles,
-    activeProfileId: s.activeProfileId,
-    tagColors: s.tagColors,
-    zoomLevel: s.zoomLevel,
-    localSyncFolder: s.localSyncFolder,
-    serverMode: s.serverMode,
-    localServerUrl: s.localServerUrl,
-  }),
-  (slice) => {
-    if (persistTimeout) clearTimeout(persistTimeout);
-    persistTimeout = setTimeout(() => {
-      saveToStorage(slice);
-    }, 300);
-  },
-  { equalityFn: (a, b) => a === b }
-);
+export function flushLocalSave() {
+  if (persistTimeout) clearTimeout(persistTimeout);
+  persistTimeout = null;
+  const s = useEditorStore.getState();
+  if (!s._hydrated) return pendingSave;
+  const revision = ++saveRevision;
+  const slice: PersistedState = {
+    projectData: s.projectData, navigation: s.navigation, documentHistory: s.documentHistory,
+    tabs: s.tabs, openTabIds: s.openTabIds, activeTabId: s.activeTabId, viewMode: s.viewMode,
+    theme: s.theme, folders: s.folders, settings: s.settings, workspaceSettings: s.workspaceSettings,
+    fileTreeOpen: s.fileTreeOpen, profiles: s.profiles, activeProfileId: s.activeProfileId,
+    tagColors: s.tagColors, zoomLevel: s.zoomLevel, localSyncFolder: s.localSyncFolder,
+    serverMode: s.serverMode, localServerUrl: s.localServerUrl,
+  };
+  setLocalSaveState({ status: "saving", error: null });
+  pendingSave = pendingSave.catch(() => {}).then(() => saveToStorage(slice)).then(() => {
+    if (revision === saveRevision) setLocalSaveState({ status: "saved", savedAt: Date.now(), error: null });
+  }).catch((error: unknown) => {
+    setLocalSaveState({ status: "error", error: error instanceof Error ? error.message : "Device storage is unavailable." });
+    throw error;
+  });
+  return pendingSave;
+}
+
+// Metadata is reconciled after imports and remote hydration as well as normal creation.
+useEditorStore.subscribe((state, previous) => {
+  if (!state._hydrated) return;
+  let projectData = state.projectData;
+  if (state.tabs !== previous.tabs) {
+    projectData = migrateProjectData(projectData, state.tabs);
+    for (const tab of state.tabs) {
+      const createdAt = createdDocumentIds.get(tab.id);
+      if (createdAt) {
+        createdDocumentIds.delete(tab.id);
+        projectData = { ...projectData, documents: { ...projectData.documents, [tab.id]: { ...projectData.documents[tab.id], createdAt, updatedAt: createdAt, projectId: state.navigation.projectId } } };
+        if (projectData.boards[tab.id]) projectData = { ...projectData, boards: { ...projectData.boards, [tab.id]: { ...projectData.boards[tab.id], projectId: state.navigation.projectId } } };
+      }
+    }
+  }
+  if (state.activeTabId && state.activeTabId !== previous.activeTabId) {
+    const meta = projectData.documents[state.activeTabId] ?? defaultDocumentMeta(state.activeTabId);
+    projectData = { ...projectData, documents: { ...projectData.documents, [state.activeTabId]: { ...meta, lastOpenedAt: Date.now() } } };
+  }
+  if (projectData !== state.projectData) useEditorStore.setState({ projectData });
+});
+
+useEditorStore.subscribe((s, previous) => {
+  if (!s._hydrated || (s.tabs === previous.tabs && s.projectData === previous.projectData && s.navigation === previous.navigation && s.openTabIds === previous.openTabIds && s.activeTabId === previous.activeTabId && s.settings === previous.settings && s.profiles === previous.profiles && s.folders === previous.folders && s.viewMode === previous.viewMode && s.theme === previous.theme && s.documentHistory === previous.documentHistory && s.workspaceSettings === previous.workspaceSettings && s.fileTreeOpen === previous.fileTreeOpen && s.activeProfileId === previous.activeProfileId && s.tagColors === previous.tagColors && s.zoomLevel === previous.zoomLevel && s.localSyncFolder === previous.localSyncFolder && s.serverMode === previous.serverMode && s.localServerUrl === previous.localServerUrl)) return;
+  if (persistTimeout) clearTimeout(persistTimeout);
+  saveRevision += 1;
+  setLocalSaveState({ status: "saving", error: null });
+  persistTimeout = setTimeout(() => { void flushLocalSave().catch(() => {}); }, 200);
+});
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", () => { void flushLocalSave().catch(() => {}); });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") void flushLocalSave().catch(() => {}); });
+}

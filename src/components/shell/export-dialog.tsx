@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
-import { useEditorStore } from "@/lib/store";
+import { getTabWorkspaceId, useEditorStore } from "@/lib/store";
 import { isTauri } from "@/lib/tauri";
 import {
   Dialog,
@@ -346,7 +346,9 @@ function printContent(
 }
 
 export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
-  const tabs = useEditorStore((s) => s.tabs);
+  const allTabs = useEditorStore((s) => s.tabs);
+  const workspaceId = useEditorStore((s) => s.activeProfileId);
+  const tabs = useMemo(() => allTabs.filter((tab) => getTabWorkspaceId(tab) === workspaceId), [allTabs, workspaceId]);
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const activeTab = tabs.find((t) => t.id === activeTabId);
 

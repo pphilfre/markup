@@ -27,6 +27,7 @@ interface KanbanCard {
 }
 
 interface KanbanColumn {
+  status?: "todo" | "in-progress" | "done";
   id: string;
   title: string;
   color: string;
@@ -67,18 +68,7 @@ const DEFAULT_BOARD: KanbanBoardData = {
       title: "To Do",
       color: "#2563eb",
       wipLimit: null,
-      cards: [
-        {
-          id: crypto.randomUUID(),
-          title: "Set board goal",
-          description: "Define what this board tracks.",
-          labels: ["planning"],
-          dueDate: null,
-          priority: "medium",
-          completed: false,
-          createdAt: Date.now(),
-        },
-      ],
+      cards: [],
     },
     {
       id: "in-progress",
@@ -143,6 +133,7 @@ function normalizeColumn(column: unknown, index: number): KanbanColumn | null {
     : [];
 
   return {
+    status: source.status,
     id: typeof source.id === "string" ? source.id : crypto.randomUUID(),
     title: typeof source.title === "string" && source.title.trim() ? source.title : `Column ${index + 1}`,
     color:
@@ -188,7 +179,7 @@ function sanitizeBoard(raw: Partial<KanbanBoardData>): KanbanBoardData {
 function findDoneColumn(columns: KanbanColumn[]): KanbanColumn | null {
   return (
     columns.find((column) =>
-      column.id === "done" || /done|complete/i.test(column.title)
+      column.status ? column.status === "done" : column.id === "done" || /done|complete/i.test(column.title)
     ) ?? null
   );
 }
@@ -231,9 +222,8 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
 
 function pastelFromHex(hex: string): string {
   const rgb = hexToRgb(hex);
-  if (!rgb) return "hsl(var(--card))";
-  const mix = (channel: number) => Math.round(channel * 0.22 + 255 * 0.78);
-  return `rgb(${mix(rgb.r)} ${mix(rgb.g)} ${mix(rgb.b)})`;
+  if (!rgb) return "var(--card)";
+  return `color-mix(in srgb, ${hex} 9%, var(--card))`;
 }
 
 function displayTabName(title: string): string {
@@ -495,7 +485,7 @@ export function KanbanView() {
           adjustedTargetIndex
         )
       );
-      nextColumns[targetIndexCol].cards.splice(normalizedTargetIndex, 0, card);
+      nextColumns[targetIndexCol].cards.splice(normalizedTargetIndex, 0, { ...card, completed: (targetColumn.status ?? (targetColumn.id === "done" ? "done" : "todo")) === "done" });
 
       commit({ ...board, columns: nextColumns });
     },
@@ -510,7 +500,9 @@ export function KanbanView() {
       if (!card) return;
 
       if (!nextCompleted) {
-        updateCard(columnId, cardId, { completed: false });
+        const target = board.columns.find((column) => column.status !== "done" && column.id !== "done");
+        if (target && target.id !== columnId) moveCardTo(columnId, cardId, target.id, target.cards.length);
+        else updateCard(columnId, cardId, { completed: false });
         return;
       }
 
@@ -528,6 +520,7 @@ export function KanbanView() {
         doneColumn = {
           id: crypto.randomUUID(),
           title: "Done",
+          status: "done",
           color: "#16a34a",
           wipLimit: null,
           cards: [],
@@ -541,7 +534,7 @@ export function KanbanView() {
 
       commit({ ...board, columns: ensureAtLeastOneColumn(nextColumns) });
     },
-    [board, commit, updateCard]
+    [board, commit, updateCard, moveCardTo]
   );
 
   const moveColumnTo = useCallback(

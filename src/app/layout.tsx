@@ -21,12 +21,12 @@ const SITE_URL = "https://markup.freddiephilpot.dev";
 const SITE_NAME = "Markup";
 const IS_DEV = process.env.NODE_ENV === "development";
 const SITE_DESCRIPTION =
-  "A fast, keyboard-first markdown editor built for speed. Write, preview, and export markdown with split view, syntax highlighting, spotlight search, and a distraction-free interface.";
+  "A keyboard-first Markdown workspace with live preview, connected notes, tasks, whiteboards, mind maps, and local or cloud sync.";
 
 export const metadata: Metadata = {
   // ── Core ──────────────────────────────────────────────────────────────
   title: {
-    default: "Markup — Fast, Keyboard-First Markdown Editor",
+    default: "Markup — Keyboard-first Markdown workspace",
     template: "%s | Markup",
   },
   description: SITE_DESCRIPTION,

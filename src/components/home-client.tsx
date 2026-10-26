@@ -1,27 +1,25 @@
 "use client";
 
-import { Sidebar, TabBar, MainContent, FileTree } from "@/components/shell";
+import { AppShell } from "@/components/workspace/app-shell";
+import { FirstRunDialog } from "@/components/shell/first-run-dialog";
 import { LinkPicker } from "@/components/editor";
-import { SpotlightSearch } from "@/components/shell/spotlight-search";
 import { SettingsPanel } from "@/components/shell/settings-panel";
 import { ThemeSync } from "@/components/theme-provider";
-import { MobileLayout } from "@/components/shell/mobile-layout";
 import { DatabaseSync } from "@/lib/database-sync";
 import { TauriFileSync } from "@/lib/tauri-file-sync";
 import { SharedNoteViewer } from "@/components/shell/shared-note-viewer";
-import { FirstRunDialog } from "@/components/shell/first-run-dialog";
 import { DesktopDebugNotice } from "@/components/shell/desktop-debug-notice";
 import { NewFileTemplateDialog } from "@/components/shell/new-file-template-dialog";
-import { AiChatPanel, AiChatToggleButton } from "@/components/shell/ai-chat-panel";
+import { AiChatPanel } from "@/components/shell/ai-chat-panel";
 import { getTabWorkspaceId, useEditorStore } from "@/lib/store";
 import { useGlobalKeybinds } from "@/lib/keybinds";
-import { useIsMobile } from "@/lib/use-mobile";
 import { useEffect, useState, useCallback, useRef } from "react";
 
 /**
  * Root application shell that hydrates editor state and selects mobile/desktop layout.
  */
 export function HomeClient() {
+  const [loadError, setLoadError] = useState<string | null>(null);
   const hydrated = useEditorStore((s) => s._hydrated);
   const hydrate = useEditorStore((s) => s.hydrate);
   const openTab = useEditorStore((s) => s.openTab);
@@ -29,8 +27,6 @@ export function HomeClient() {
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const activeProfileId = useEditorStore((s) => s.activeProfileId);
   const zoomLevel = useEditorStore((s) => s.zoomLevel);
-  const isMobile = useIsMobile();
-  const sidebarPosition = useEditorStore((s) => s.settings.sidebarPosition);
   const compactMode = useEditorStore((s) => s.settings.compactMode);
 
   useEffect(() => {
@@ -126,7 +122,7 @@ export function HomeClient() {
 
   // Hydrate from IndexedDB on mount
   useEffect(() => {
-    hydrate();
+    hydrate().catch((error: unknown) => setLoadError(error instanceof Error ? error.message : "Device storage could not be opened."));
   }, [hydrate]);
 
   // Register global keyboard shortcuts
@@ -140,43 +136,22 @@ export function HomeClient() {
   if (!hydrated) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
-        <p className="text-muted-foreground text-sm">Loading…</p>
+        {loadError ? <div className="max-w-md px-6 text-center"><h1 className="text-lg font-medium">Your workspace could not be loaded</h1><p className="mt-3 text-sm text-muted-foreground">{loadError}</p><p className="mt-2 text-sm text-muted-foreground">Your saved data has not been replaced.</p><button className="mt-5 rounded-md border px-4 py-2 text-sm" onClick={() => { setLoadError(null); hydrate().catch((error: unknown) => setLoadError(error instanceof Error ? error.message : "Storage is still unavailable.")); }}>Try again</button></div> : <p className="text-muted-foreground text-sm">Loading…</p>}
       </div>
     );
   }
 
-  // Mobile layout — completely rearranged for small screens
-  if (isMobile) {
-    return <MobileLayout />;
-  }
-
-  // Desktop layout — respects appearance settings
-  const sidebarElements = (
-    <>
-      <Sidebar />
-      <FileTree />
-    </>
-  );
-
   return (
-    <div id="markup-app-root" className={`flex h-screen overflow-hidden${compactMode ? " compact-mode" : ""}`}>
+    <div id="markup-app-root" className={`h-screen overflow-hidden${compactMode ? " compact-mode" : ""}`}>
       <ThemeSync />
       <DatabaseSync />
       <TauriFileSync />
       <DesktopDebugNotice />
-      <FirstRunDialog />
-      <SpotlightSearch />
       <SettingsPanel />
+      <FirstRunDialog />
       <NewFileTemplateDialog />
       <LinkPicker />
-      {sidebarPosition === "left" && sidebarElements}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <TabBar />
-        <MainContent />
-      </div>
-      {sidebarPosition === "right" && sidebarElements}
-      <AiChatPanel />
-      <AiChatToggleButton />
+      <AppShell><AiChatPanel /></AppShell>
     </div>
   );
 }

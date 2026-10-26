@@ -1,4 +1,5 @@
 "use client";
+import { useFramePointer } from "@/lib/use-frame-pointer";
 
 import {
   useRef,
@@ -39,9 +40,26 @@ import { useEditorStore } from "@/lib/store";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
-type NodeType = "header" | "main" | "sub" | "rect" | "ellipse" | "diamond" | "text";
+type NodeType =
+  | "header"
+  | "main"
+  | "sub"
+  | "rect"
+  | "ellipse"
+  | "diamond"
+  | "text";
 
-type MindmapTool = "select" | "pan" | "addHeader" | "addMain" | "addSub" | "connect" | "addRect" | "addEllipse" | "addDiamond" | "addText";
+type MindmapTool =
+  | "select"
+  | "pan"
+  | "addHeader"
+  | "addMain"
+  | "addSub"
+  | "connect"
+  | "addRect"
+  | "addEllipse"
+  | "addDiamond"
+  | "addText";
 
 interface Point {
   x: number;
@@ -94,7 +112,10 @@ const DEFAULT_SETTINGS: MindmapSettings = {
   defaultTextColor: "#ffffff",
 };
 
-const NODE_DEFAULTS: Record<NodeType, { width: number; height: number; fontSize: number; fontWeight: string }> = {
+const NODE_DEFAULTS: Record<
+  NodeType,
+  { width: number; height: number; fontSize: number; fontWeight: string }
+> = {
   header: { width: 180, height: 52, fontSize: 18, fontWeight: "700" },
   main: { width: 150, height: 42, fontSize: 14, fontWeight: "600" },
   sub: { width: 130, height: 34, fontSize: 12, fontWeight: "400" },
@@ -106,7 +127,12 @@ const NODE_DEFAULTS: Record<NodeType, { width: number; height: number; fontSize:
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-function screenToCanvas(sx: number, sy: number, pan: Point, zoom: number): Point {
+function screenToCanvas(
+  sx: number,
+  sy: number,
+  pan: Point,
+  zoom: number,
+): Point {
   return { x: (sx - pan.x) / zoom, y: (sy - pan.y) / zoom };
 }
 
@@ -120,13 +146,18 @@ function hitTestNode(node: MindmapNode, cx: number, cy: number): boolean {
 }
 
 function getResizeHandleMetrics() {
-  if (typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches) {
+  if (
+    typeof window !== "undefined" &&
+    window.matchMedia("(pointer: coarse)").matches
+  ) {
     return { size: 16, tolerance: 8 };
   }
   return { size: 10, tolerance: 4 };
 }
 
-function getResizeHandles(node: MindmapNode): { id: string; x: number; y: number }[] {
+function getResizeHandles(
+  node: MindmapNode,
+): { id: string; x: number; y: number }[] {
   const w = node.width;
   const h = node.height;
   return [
@@ -141,7 +172,11 @@ function getResizeHandles(node: MindmapNode): { id: string; x: number; y: number
   ];
 }
 
-function hitTestResizeHandle(node: MindmapNode, cx: number, cy: number): string | null {
+function hitTestResizeHandle(
+  node: MindmapNode,
+  cx: number,
+  cy: number,
+): string | null {
   const handles = getResizeHandles(node);
   const { size, tolerance } = getResizeHandleMetrics();
   const hs = size / 2 + tolerance;
@@ -174,7 +209,7 @@ function getNodeCenter(node: MindmapNode): Point {
 
 function getConnectionEndpoints(
   from: MindmapNode,
-  to: MindmapNode
+  to: MindmapNode,
 ): { x1: number; y1: number; x2: number; y2: number } {
   const fc = getNodeCenter(from);
   const tc = getNodeCenter(to);
@@ -195,7 +230,7 @@ function hitTestConnection(
   nodes: MindmapNode[],
   cx: number,
   cy: number,
-  tolerance = 8
+  tolerance = 8,
 ): boolean {
   const from = nodes.find((n) => n.id === conn.fromId);
   const to = nodes.find((n) => n.id === conn.toId);
@@ -222,7 +257,7 @@ function drawGrid(
   width: number,
   height: number,
   gridSize: number,
-  isDark: boolean
+  isDark: boolean,
 ) {
   ctx.save();
   ctx.strokeStyle = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)";
@@ -263,7 +298,9 @@ function drawNode(ctx: CanvasRenderingContext2D, node: MindmapNode) {
       node.y + node.height / 2,
       node.width / 2,
       node.height / 2,
-      0, 0, Math.PI * 2
+      0,
+      0,
+      Math.PI * 2,
     );
     ctx.fillStyle = node.color;
     ctx.fill();
@@ -283,7 +320,13 @@ function drawNode(ctx: CanvasRenderingContext2D, node: MindmapNode) {
   } else {
     // Rounded rect (header, main, sub, rect)
     ctx.beginPath();
-    ctx.roundRect(node.x, node.y, node.width, node.height, node.type === "rect" ? 4 : radius);
+    ctx.roundRect(
+      node.x,
+      node.y,
+      node.width,
+      node.height,
+      node.type === "rect" ? 4 : radius,
+    );
     ctx.fillStyle = node.color;
     ctx.fill();
   }
@@ -295,7 +338,13 @@ function drawNode(ctx: CanvasRenderingContext2D, node: MindmapNode) {
     ctx.lineWidth = 2;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
-    ctx.roundRect(node.x - 3, node.y - 3, node.width + 6, node.height + 6, radius + 2);
+    ctx.roundRect(
+      node.x - 3,
+      node.y - 3,
+      node.width + 6,
+      node.height + 6,
+      radius + 2,
+    );
     ctx.stroke();
     ctx.setLineDash([]);
   }
@@ -310,7 +359,10 @@ function drawNode(ctx: CanvasRenderingContext2D, node: MindmapNode) {
   let displayText = node.text;
   const measured = ctx.measureText(displayText);
   if (measured.width > maxWidth) {
-    while (ctx.measureText(displayText + "…").width > maxWidth && displayText.length > 0) {
+    while (
+      ctx.measureText(displayText + "…").width > maxWidth &&
+      displayText.length > 0
+    ) {
       displayText = displayText.slice(0, -1);
     }
     displayText += "…";
@@ -322,10 +374,15 @@ function drawNode(ctx: CanvasRenderingContext2D, node: MindmapNode) {
 function drawConnection(
   ctx: CanvasRenderingContext2D,
   conn: MindmapConnection,
-  nodes: MindmapNode[]
+  nodes: MindmapNode[],
+  index?: Map<string, MindmapNode>,
 ) {
-  const from = nodes.find((n) => n.id === conn.fromId);
-  const to = nodes.find((n) => n.id === conn.toId);
+  const from = index
+    ? index.get(conn.fromId)
+    : nodes.find((n) => n.id === conn.fromId);
+  const to = index
+    ? index.get(conn.toId)
+    : nodes.find((n) => n.id === conn.toId);
   if (!from || !to) return;
 
   const { x1, y1, x2, y2 } = getConnectionEndpoints(from, to);
@@ -357,12 +414,12 @@ function drawConnection(
   ctx.moveTo(x2, y2);
   ctx.lineTo(
     x2 - headLen * Math.cos(angle - Math.PI / 7),
-    y2 - headLen * Math.sin(angle - Math.PI / 7)
+    y2 - headLen * Math.sin(angle - Math.PI / 7),
   );
   ctx.moveTo(x2, y2);
   ctx.lineTo(
     x2 - headLen * Math.cos(angle + Math.PI / 7),
-    y2 - headLen * Math.sin(angle + Math.PI / 7)
+    y2 - headLen * Math.sin(angle + Math.PI / 7),
   );
   ctx.stroke();
 
@@ -386,14 +443,21 @@ function MindmapSettingsPanel({
   if (!open) return null;
 
   const colorPresets = [
-    "#7c3aed", "#8b5cf6", "#3b82f6", "#06b6d4",
-    "#14b8a6", "#22c55e", "#eab308", "#f97316",
-    "#ef4444", "#ec4899", "#6366f1", "#94a3b8",
+    "#7c3aed",
+    "#8b5cf6",
+    "#3b82f6",
+    "#06b6d4",
+    "#14b8a6",
+    "#22c55e",
+    "#eab308",
+    "#f97316",
+    "#ef4444",
+    "#ec4899",
+    "#6366f1",
+    "#94a3b8",
   ];
 
-  const textColorPresets = [
-    "#ffffff", "#000000", "#e2e8f0", "#1e293b",
-  ];
+  const textColorPresets = ["#ffffff", "#000000", "#e2e8f0", "#1e293b"];
 
   const bgOptions = [
     { label: "Transparent", value: "transparent" },
@@ -416,7 +480,9 @@ function MindmapSettingsPanel({
 
       {/* Default Header Color */}
       <div className="space-y-1.5">
-        <label className="text-[11px] text-muted-foreground">Header Node Color</label>
+        <label className="text-[11px] text-muted-foreground">
+          Header Node Color
+        </label>
         <div className="flex flex-wrap gap-1.5">
           {colorPresets.map((c) => (
             <button
@@ -424,7 +490,9 @@ function MindmapSettingsPanel({
               onClick={() => onChange({ defaultHeaderColor: c })}
               className={cn(
                 "h-5 w-5 rounded-full border-2 transition-transform hover:scale-110",
-                settings.defaultHeaderColor === c ? "border-blue-500 scale-110" : "border-transparent"
+                settings.defaultHeaderColor === c
+                  ? "border-blue-500 scale-110"
+                  : "border-transparent",
               )}
               style={{ background: c }}
             />
@@ -434,7 +502,9 @@ function MindmapSettingsPanel({
 
       {/* Default Main Color */}
       <div className="space-y-1.5">
-        <label className="text-[11px] text-muted-foreground">Main Node Color</label>
+        <label className="text-[11px] text-muted-foreground">
+          Main Node Color
+        </label>
         <div className="flex flex-wrap gap-1.5">
           {colorPresets.map((c) => (
             <button
@@ -442,7 +512,9 @@ function MindmapSettingsPanel({
               onClick={() => onChange({ defaultMainColor: c })}
               className={cn(
                 "h-5 w-5 rounded-full border-2 transition-transform hover:scale-110",
-                settings.defaultMainColor === c ? "border-blue-500 scale-110" : "border-transparent"
+                settings.defaultMainColor === c
+                  ? "border-blue-500 scale-110"
+                  : "border-transparent",
               )}
               style={{ background: c }}
             />
@@ -452,7 +524,9 @@ function MindmapSettingsPanel({
 
       {/* Default Sub Color */}
       <div className="space-y-1.5">
-        <label className="text-[11px] text-muted-foreground">Sub Node Color</label>
+        <label className="text-[11px] text-muted-foreground">
+          Sub Node Color
+        </label>
         <div className="flex flex-wrap gap-1.5">
           {colorPresets.map((c) => (
             <button
@@ -460,7 +534,9 @@ function MindmapSettingsPanel({
               onClick={() => onChange({ defaultSubColor: c })}
               className={cn(
                 "h-5 w-5 rounded-full border-2 transition-transform hover:scale-110",
-                settings.defaultSubColor === c ? "border-blue-500 scale-110" : "border-transparent"
+                settings.defaultSubColor === c
+                  ? "border-blue-500 scale-110"
+                  : "border-transparent",
               )}
               style={{ background: c }}
             />
@@ -478,7 +554,9 @@ function MindmapSettingsPanel({
               onClick={() => onChange({ defaultTextColor: c })}
               className={cn(
                 "h-5 w-5 rounded-full border-2 transition-transform hover:scale-110",
-                settings.defaultTextColor === c ? "border-blue-500 scale-110" : "border-transparent"
+                settings.defaultTextColor === c
+                  ? "border-blue-500 scale-110"
+                  : "border-transparent",
               )}
               style={{ background: c }}
             />
@@ -498,7 +576,7 @@ function MindmapSettingsPanel({
                 "h-5 w-5 rounded-full border-2 transition-transform hover:scale-110",
                 settings.backgroundColor === opt.value
                   ? "border-blue-500 scale-110"
-                  : "border-muted-foreground/30"
+                  : "border-muted-foreground/30",
               )}
               style={{
                 background:
@@ -519,13 +597,13 @@ function MindmapSettingsPanel({
           onClick={() => onChange({ showGrid: !settings.showGrid })}
           className={cn(
             "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors",
-            settings.showGrid ? "bg-primary" : "bg-muted"
+            settings.showGrid ? "bg-primary" : "bg-muted",
           )}
         >
           <span
             className={cn(
               "pointer-events-none block h-2.5 w-2.5 rounded-full bg-background shadow-sm transition-transform",
-              settings.showGrid ? "translate-x-3" : "translate-x-0.5"
+              settings.showGrid ? "translate-x-3" : "translate-x-0.5",
             )}
           />
         </button>
@@ -538,13 +616,13 @@ function MindmapSettingsPanel({
           onClick={() => onChange({ snapToGrid: !settings.snapToGrid })}
           className={cn(
             "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors",
-            settings.snapToGrid ? "bg-primary" : "bg-muted"
+            settings.snapToGrid ? "bg-primary" : "bg-muted",
           )}
         >
           <span
             className={cn(
               "pointer-events-none block h-2.5 w-2.5 rounded-full bg-background shadow-sm transition-transform",
-              settings.snapToGrid ? "translate-x-3" : "translate-x-0.5"
+              settings.snapToGrid ? "translate-x-3" : "translate-x-0.5",
             )}
           />
         </button>
@@ -575,10 +653,22 @@ function NodeEditPopover({
   }, []);
 
   const colorPresets = [
-    "#7c3aed", "#8b5cf6", "#3b82f6", "#06b6d4",
-    "#14b8a6", "#22c55e", "#eab308", "#f97316",
-    "#ef4444", "#ec4899", "#6366f1", "#94a3b8",
-    "#1e293b", "#334155", "#64748b", "#e2e8f0",
+    "#7c3aed",
+    "#8b5cf6",
+    "#3b82f6",
+    "#06b6d4",
+    "#14b8a6",
+    "#22c55e",
+    "#eab308",
+    "#f97316",
+    "#ef4444",
+    "#ec4899",
+    "#6366f1",
+    "#94a3b8",
+    "#1e293b",
+    "#334155",
+    "#64748b",
+    "#e2e8f0",
   ];
 
   return (
@@ -588,8 +678,15 @@ function NodeEditPopover({
       onPointerDown={(e) => e.stopPropagation()}
     >
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-semibold text-muted-foreground capitalize">{node.type} Node</span>
-        <button onClick={onClose} className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted">✕</button>
+        <span className="text-[11px] font-semibold text-muted-foreground capitalize">
+          {node.type} Node
+        </span>
+        <button
+          onClick={onClose}
+          className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted"
+        >
+          ✕
+        </button>
       </div>
       <input
         ref={inputRef}
@@ -613,7 +710,9 @@ function NodeEditPopover({
               onClick={() => onUpdate({ color: c })}
               className={cn(
                 "h-4 w-4 rounded-full border-2 transition-transform hover:scale-110",
-                node.color === c ? "border-blue-500 scale-110" : "border-transparent"
+                node.color === c
+                  ? "border-blue-500 scale-110"
+                  : "border-transparent",
               )}
               style={{ background: c }}
             />
@@ -623,13 +722,24 @@ function NodeEditPopover({
       <div className="space-y-1">
         <label className="text-[10px] text-muted-foreground">Text Color</label>
         <div className="flex flex-wrap gap-1">
-          {["#ffffff", "#000000", "#e2e8f0", "#1e293b", "#f97316", "#ef4444", "#22c55e", "#3b82f6"].map((c) => (
+          {[
+            "#ffffff",
+            "#000000",
+            "#e2e8f0",
+            "#1e293b",
+            "#f97316",
+            "#ef4444",
+            "#22c55e",
+            "#3b82f6",
+          ].map((c) => (
             <button
               key={c}
               onClick={() => onUpdate({ textColor: c })}
               className={cn(
                 "h-4 w-4 rounded-full border-2 transition-transform hover:scale-110",
-                node.textColor === c ? "border-blue-500 scale-110" : "border-transparent"
+                node.textColor === c
+                  ? "border-blue-500 scale-110"
+                  : "border-transparent",
               )}
               style={{ background: c }}
             />
@@ -699,22 +809,39 @@ function MindmapContextMenu({
       style={{ left: position.x, top: position.y }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <MindmapContextMenuItem onClick={onDuplicate} onClose={onClose} disabled={!hasSelection}>
+      <MindmapContextMenuItem
+        onClick={onDuplicate}
+        onClose={onClose}
+        disabled={!hasSelection}
+      >
         <Layers className="h-3.5 w-3.5" /> Duplicate
       </MindmapContextMenuItem>
       <div className="my-1 h-px bg-border" />
-      <MindmapContextMenuItem onClick={onBringToFront} onClose={onClose} disabled={!hasSelection}>
+      <MindmapContextMenuItem
+        onClick={onBringToFront}
+        onClose={onClose}
+        disabled={!hasSelection}
+      >
         <ArrowUp className="h-3.5 w-3.5" /> Bring to Front
       </MindmapContextMenuItem>
-      <MindmapContextMenuItem onClick={onSendToBack} onClose={onClose} disabled={!hasSelection}>
+      <MindmapContextMenuItem
+        onClick={onSendToBack}
+        onClose={onClose}
+        disabled={!hasSelection}
+      >
         <ArrowDown className="h-3.5 w-3.5" /> Send to Back
       </MindmapContextMenuItem>
       <div className="my-1 h-px bg-border" />
       <MindmapContextMenuItem onClick={onSelectAll} onClose={onClose}>
         <MousePointer2 className="h-3.5 w-3.5" /> Select All
       </MindmapContextMenuItem>
-      <MindmapContextMenuItem onClick={onDelete} onClose={onClose} disabled={!hasSelection}>
-        <Trash2 className="h-3.5 w-3.5 text-destructive" /> <span className="text-destructive">Delete</span>
+      <MindmapContextMenuItem
+        onClick={onDelete}
+        onClose={onClose}
+        disabled={!hasSelection}
+      >
+        <Trash2 className="h-3.5 w-3.5 text-destructive" />{" "}
+        <span className="text-destructive">Delete</span>
       </MindmapContextMenuItem>
     </div>
   );
@@ -728,7 +855,9 @@ export function MindmapView() {
 
   // Tab-based persistence
   const activeTabId = useEditorStore((s) => s.activeTabId);
-  const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
+  const activeTab = useEditorStore((s) =>
+    s.tabs.find((t) => t.id === s.activeTabId),
+  );
   const updateContent = useEditorStore((s) => s.updateContent);
 
   // Canvas transform
@@ -742,8 +871,12 @@ export function MindmapView() {
   const [linkedTabIds, setLinkedTabIds] = useState<string[]>([]);
 
   // Undo
-  const [undoStack, setUndoStack] = useState<{ nodes: MindmapNode[]; connections: MindmapConnection[] }[]>([]);
-  const [redoStack, setRedoStack] = useState<{ nodes: MindmapNode[]; connections: MindmapConnection[] }[]>([]);
+  const [undoStack, setUndoStack] = useState<
+    { nodes: MindmapNode[]; connections: MindmapConnection[] }[]
+  >([]);
+  const [redoStack, setRedoStack] = useState<
+    { nodes: MindmapNode[]; connections: MindmapConnection[] }[]
+  >([]);
 
   // Interaction state
   const drawingRef = useRef(false);
@@ -752,13 +885,29 @@ export function MindmapView() {
   const dragOffsetRef = useRef<Point>({ x: 0, y: 0 });
   const dragNodeRef = useRef<MindmapNode | null>(null);
   const connectFromRef = useRef<string | null>(null);
-  const [connectPreview, setConnectPreview] = useState<{ fromId: string; toX: number; toY: number } | null>(null);
+  const [connectPreview, setConnectPreview] = useState<{
+    fromId: string;
+    toX: number;
+    toY: number;
+  } | null>(null);
 
   // Resize state
-  const resizingRef = useRef<{ nodeId: string; handle: string; startX: number; startY: number; startW: number; startH: number; startNodeX: number; startNodeY: number } | null>(null);
+  const resizingRef = useRef<{
+    nodeId: string;
+    handle: string;
+    startX: number;
+    startY: number;
+    startW: number;
+    startH: number;
+    startNodeX: number;
+    startNodeY: number;
+  } | null>(null);
 
   // Edit overlay
-  const [editNode, setEditNode] = useState<{ node: MindmapNode; screenPos: Point } | null>(null);
+  const [editNode, setEditNode] = useState<{
+    node: MindmapNode;
+    screenPos: Point;
+  } | null>(null);
 
   // Settings
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -771,10 +920,14 @@ export function MindmapView() {
   const [contextMenu, setContextMenu] = useState<Point | null>(null);
   const hasSelection = nodes.some((n) => n.selected);
   useEffect(() => {
-    const check = () => setIsDark(document.documentElement.classList.contains("dark"));
+    const check = () =>
+      setIsDark(document.documentElement.classList.contains("dark"));
     check();
     const obs = new MutationObserver(check);
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    obs.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
     return () => obs.disconnect();
   }, []);
 
@@ -790,14 +943,17 @@ export function MindmapView() {
     try {
       const data = JSON.parse(activeTab.content);
       if (data.nodes && Array.isArray(data.nodes)) setNodes(data.nodes);
-      if (data.connections && Array.isArray(data.connections)) setConnections(data.connections);
+      if (data.connections && Array.isArray(data.connections))
+        setConnections(data.connections);
       if (data.settings && typeof data.settings === "object") {
         setSettings((prev) => ({ ...prev, ...data.settings }));
       }
       if (Array.isArray(data.linkedTabIds)) {
         setLinkedTabIds(data.linkedTabIds);
       }
-    } catch { /* ignore parse errors */ }
+    } catch {
+      /* ignore parse errors */
+    }
   }, [activeTab]);
 
   // Debounced save to tab content
@@ -806,7 +962,12 @@ export function MindmapView() {
     if (!activeTabId) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
-      const data = JSON.stringify({ nodes, connections, settings, linkedTabIds });
+      const data = JSON.stringify({
+        nodes,
+        connections,
+        settings,
+        linkedTabIds,
+      });
       updateContent(activeTabId, data);
     }, 800);
     return () => {
@@ -854,13 +1015,27 @@ export function MindmapView() {
     const duped = selectedNodes.map((n) => {
       const newId = crypto.randomUUID();
       idMap.set(n.id, newId);
-      return { ...n, id: newId, x: n.x + offset, y: n.y + offset, selected: true };
+      return {
+        ...n,
+        id: newId,
+        x: n.x + offset,
+        y: n.y + offset,
+        selected: true,
+      };
     });
     // Also duplicate connections between selected nodes
     const dupedConns = connections
       .filter((c) => idMap.has(c.fromId) && idMap.has(c.toId))
-      .map((c) => ({ ...c, id: crypto.randomUUID(), fromId: idMap.get(c.fromId) as string, toId: idMap.get(c.toId) as string }));
-    setNodes((prev) => [...prev.map((n) => ({ ...n, selected: false })), ...duped]);
+      .map((c) => ({
+        ...c,
+        id: crypto.randomUUID(),
+        fromId: idMap.get(c.fromId) as string,
+        toId: idMap.get(c.toId) as string,
+      }));
+    setNodes((prev) => [
+      ...prev.map((n) => ({ ...n, selected: false })),
+      ...duped,
+    ]);
     setConnections((prev) => [...prev, ...dupedConns]);
   }, [nodes, connections, pushUndo]);
 
@@ -871,7 +1046,12 @@ export function MindmapView() {
     pushUndo();
     const removedIds = new Set(selectedNodes.map((n) => n.id));
     setNodes((prev) => prev.filter((n) => !n.selected));
-    setConnections((prev) => prev.filter((c) => !c.selected && !removedIds.has(c.fromId) && !removedIds.has(c.toId)));
+    setConnections((prev) =>
+      prev.filter(
+        (c) =>
+          !c.selected && !removedIds.has(c.fromId) && !removedIds.has(c.toId),
+      ),
+    );
   }, [nodes, connections, pushUndo]);
 
   const handleBringToFront = useCallback(() => {
@@ -897,15 +1077,17 @@ export function MindmapView() {
   }, []);
 
   const handleLinkBoard = useCallback(() => {
-    document.dispatchEvent(new CustomEvent("open-link-picker", {
-      detail: {
-        title: "Link board",
-        description: "Link this mindmap to a file.",
-        onPick: (tabId: string) => {
-          setLinkedTabIds((prev) => Array.from(new Set([...prev, tabId])));
+    document.dispatchEvent(
+      new CustomEvent("open-link-picker", {
+        detail: {
+          title: "Link board",
+          description: "Link this mindmap to a file.",
+          onPick: (tabId: string) => {
+            setLinkedTabIds((prev) => Array.from(new Set([...prev, tabId])));
+          },
         },
-      },
-    }));
+      }),
+    );
   }, []);
 
   // ── Snap ────────────────────────────────────────────────────────────
@@ -915,7 +1097,7 @@ export function MindmapView() {
       if (!settings.snapToGrid) return val;
       return Math.round(val / settings.gridSize) * settings.gridSize;
     },
-    [settings.snapToGrid, settings.gridSize]
+    [settings.snapToGrid, settings.gridSize],
   );
 
   // ── Add node ────────────────────────────────────────────────────────
@@ -933,17 +1115,27 @@ export function MindmapView() {
               ? settings.defaultSubColor
               : type === "text"
                 ? "transparent"
-                : isDark ? "#334155" : "#e2e8f0";
+                : isDark
+                  ? "#334155"
+                  : "#e2e8f0";
 
-      const textColor = type === "text"
-        ? (isDark ? "#e2e8f0" : "#1e293b")
-        : settings.defaultTextColor;
+      const textColor =
+        type === "text"
+          ? isDark
+            ? "#e2e8f0"
+            : "#1e293b"
+          : settings.defaultTextColor;
 
-      const defaultText = type === "header" ? "Header"
-        : type === "main" ? "Topic"
-        : type === "sub" ? "Detail"
-        : type === "text" ? "Text"
-        : "";
+      const defaultText =
+        type === "header"
+          ? "Header"
+          : type === "main"
+            ? "Topic"
+            : type === "sub"
+              ? "Detail"
+              : type === "text"
+                ? "Text"
+                : "";
 
       const node: MindmapNode = {
         id: crypto.randomUUID(),
@@ -958,20 +1150,27 @@ export function MindmapView() {
       };
       setNodes((prev) => [...prev, node]);
     },
-    [pushUndo, snap, settings, isDark]
+    [pushUndo, snap, settings, isDark],
   );
 
   // ── Keyboard shortcuts ──────────────────────────────────────────────
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      )
+        return;
 
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         undo();
       }
-      if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        (e.key === "y" || (e.key === "z" && e.shiftKey))
+      ) {
         e.preventDefault();
         redo();
       }
@@ -985,8 +1184,11 @@ export function MindmapView() {
           setNodes((prev) => prev.filter((n) => !n.selected));
           setConnections((prev) =>
             prev.filter(
-              (c) => !c.selected && !removedIds.has(c.fromId) && !removedIds.has(c.toId)
-            )
+              (c) =>
+                !c.selected &&
+                !removedIds.has(c.fromId) &&
+                !removedIds.has(c.toId),
+            ),
           );
         }
       }
@@ -1003,19 +1205,19 @@ export function MindmapView() {
 
   // ── Zoom ────────────────────────────────────────────────────────────
 
-  const handleZoom = useCallback(
-    (delta: number, cx?: number, cy?: number) => {
-      setZoom((prev) => {
-        const newZoom = Math.min(5, Math.max(0.1, prev + delta));
-        if (cx !== undefined && cy !== undefined) {
-          const scale = newZoom / prev;
-          setPan((p) => ({ x: cx - (cx - p.x) * scale, y: cy - (cy - p.y) * scale }));
-        }
-        return newZoom;
-      });
-    },
-    []
-  );
+  const handleZoom = useCallback((delta: number, cx?: number, cy?: number) => {
+    setZoom((prev) => {
+      const newZoom = Math.min(5, Math.max(0.1, prev + delta));
+      if (cx !== undefined && cy !== undefined) {
+        const scale = newZoom / prev;
+        setPan((p) => ({
+          x: cx - (cx - p.x) * scale,
+          y: cy - (cy - p.y) * scale,
+        }));
+      }
+      return newZoom;
+    });
+  }, []);
 
   const resetView = useCallback(() => {
     setPan({ x: 0, y: 0 });
@@ -1062,11 +1264,23 @@ export function MindmapView() {
         return;
       }
 
-      if (activeTool === "addHeader" || activeTool === "addMain" || activeTool === "addSub" ||
-          activeTool === "addRect" || activeTool === "addEllipse" || activeTool === "addDiamond" || activeTool === "addText") {
+      if (
+        activeTool === "addHeader" ||
+        activeTool === "addMain" ||
+        activeTool === "addSub" ||
+        activeTool === "addRect" ||
+        activeTool === "addEllipse" ||
+        activeTool === "addDiamond" ||
+        activeTool === "addText"
+      ) {
         const typeMap: Record<string, NodeType> = {
-          addHeader: "header", addMain: "main", addSub: "sub",
-          addRect: "rect", addEllipse: "ellipse", addDiamond: "diamond", addText: "text",
+          addHeader: "header",
+          addMain: "main",
+          addSub: "sub",
+          addRect: "rect",
+          addEllipse: "ellipse",
+          addDiamond: "diamond",
+          addText: "text",
         };
         addNode(typeMap[activeTool], cp.x, cp.y);
         setActiveTool("select");
@@ -1117,8 +1331,12 @@ export function MindmapView() {
           const node = nodes[i];
           if (!node.selected) {
             pushUndo();
-            setNodes((prev) => prev.map((n) => ({ ...n, selected: n.id === node.id })));
-            setConnections((prev) => prev.map((c) => ({ ...c, selected: false })));
+            setNodes((prev) =>
+              prev.map((n) => ({ ...n, selected: n.id === node.id })),
+            );
+            setConnections((prev) =>
+              prev.map((c) => ({ ...c, selected: false })),
+            );
           }
           dragNodeRef.current = node;
           dragOffsetRef.current = { x: cp.x - node.x, y: cp.y - node.y };
@@ -1130,7 +1348,9 @@ export function MindmapView() {
       for (let i = connections.length - 1; i >= 0; i--) {
         if (hitTestConnection(connections[i], nodes, cp.x, cp.y)) {
           pushUndo();
-          setConnections((prev) => prev.map((c) => ({ ...c, selected: c.id === connections[i].id })));
+          setConnections((prev) =>
+            prev.map((c) => ({ ...c, selected: c.id === connections[i].id })),
+          );
           setNodes((prev) => prev.map((n) => ({ ...n, selected: false })));
           drawingRef.current = false;
           return;
@@ -1143,13 +1363,16 @@ export function MindmapView() {
       dragNodeRef.current = null;
       drawingRef.current = false;
     },
-    [activeTool, pan, zoom, nodes, connections, addNode, pushUndo]
+    [activeTool, pan, zoom, nodes, connections, addNode, pushUndo],
   );
 
   const handlePointerMove = useCallback(
     (e: ReactPointerEvent<HTMLCanvasElement>) => {
       if (isPanningRef.current) {
-        setPan({ x: e.clientX - panStartRef.current.x, y: e.clientY - panStartRef.current.y });
+        setPan({
+          x: e.clientX - panStartRef.current.x,
+          y: e.clientY - panStartRef.current.y,
+        });
         return;
       }
 
@@ -1167,7 +1390,16 @@ export function MindmapView() {
               if (nodes[i].selected) {
                 const handle = hitTestResizeHandle(nodes[i], cp.x, cp.y);
                 if (handle) {
-                  const cursors: Record<string, string> = { nw: "nwse-resize", se: "nwse-resize", ne: "nesw-resize", sw: "nesw-resize", n: "ns-resize", s: "ns-resize", e: "ew-resize", w: "ew-resize" };
+                  const cursors: Record<string, string> = {
+                    nw: "nwse-resize",
+                    se: "nwse-resize",
+                    ne: "nesw-resize",
+                    sw: "nesw-resize",
+                    n: "ns-resize",
+                    s: "ns-resize",
+                    e: "ew-resize",
+                    w: "ew-resize",
+                  };
                   cursor = cursors[handle] || "";
                   break;
                 }
@@ -1188,7 +1420,11 @@ export function MindmapView() {
 
       // Connection preview
       if (activeTool === "connect" && connectFromRef.current) {
-        setConnectPreview({ fromId: connectFromRef.current, toX: cp.x, toY: cp.y });
+        setConnectPreview({
+          fromId: connectFromRef.current,
+          toX: cp.x,
+          toY: cp.y,
+        });
         return;
       }
 
@@ -1197,7 +1433,16 @@ export function MindmapView() {
         const r = resizingRef.current;
         const dx = cp.x - r.startX;
         const dy = cp.y - r.startY;
-        const cursors: Record<string, string> = { nw: "nwse-resize", se: "nwse-resize", ne: "nesw-resize", sw: "nesw-resize", n: "ns-resize", s: "ns-resize", e: "ew-resize", w: "ew-resize" };
+        const cursors: Record<string, string> = {
+          nw: "nwse-resize",
+          se: "nwse-resize",
+          ne: "nesw-resize",
+          sw: "nesw-resize",
+          n: "ns-resize",
+          s: "ns-resize",
+          e: "ew-resize",
+          w: "ew-resize",
+        };
         if (canvas) canvas.style.cursor = cursors[r.handle] || "";
         setNodes((prev) =>
           prev.map((n) => {
@@ -1208,11 +1453,23 @@ export function MindmapView() {
             let newH = r.startH;
             const h = r.handle;
             if (h.includes("e")) newW = Math.max(40, r.startW + dx);
-            if (h.includes("w")) { newW = Math.max(40, r.startW - dx); newX = r.startNodeX + (r.startW - newW); }
+            if (h.includes("w")) {
+              newW = Math.max(40, r.startW - dx);
+              newX = r.startNodeX + (r.startW - newW);
+            }
             if (h.includes("s")) newH = Math.max(20, r.startH + dy);
-            if (h.includes("n")) { newH = Math.max(20, r.startH - dy); newY = r.startNodeY + (r.startH - newH); }
-            return { ...n, x: snap(newX), y: snap(newY), width: snap(newW), height: snap(newH) };
-          })
+            if (h.includes("n")) {
+              newH = Math.max(20, r.startH - dy);
+              newY = r.startNodeY + (r.startH - newH);
+            }
+            return {
+              ...n,
+              x: snap(newX),
+              y: snap(newY),
+              width: snap(newW),
+              height: snap(newH),
+            };
+          }),
         );
         return;
       }
@@ -1223,14 +1480,14 @@ export function MindmapView() {
         const nx = snap(cp.x - dragOffsetRef.current.x);
         const ny = snap(cp.y - dragOffsetRef.current.y);
         setNodes((prev) =>
-          prev.map((n) =>
-            n.id === dragging.id ? { ...n, x: nx, y: ny } : n
-          )
+          prev.map((n) => (n.id === dragging.id ? { ...n, x: nx, y: ny } : n)),
         );
       }
     },
-    [activeTool, pan, zoom, nodes, snap]
+    [activeTool, pan, zoom, nodes, snap],
   );
+
+  const framePointer = useFramePointer(handlePointerMove);
 
   const handlePointerUp = useCallback(
     (e: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -1268,7 +1525,7 @@ export function MindmapView() {
                   const exists = currentConns.some(
                     (c) =>
                       (c.fromId === fromId && c.toId === targetId) ||
-                      (c.fromId === targetId && c.toId === fromId)
+                      (c.fromId === targetId && c.toId === fromId),
                   );
                   if (exists) return currentConns;
                   return [
@@ -1294,7 +1551,7 @@ export function MindmapView() {
       drawingRef.current = false;
       dragNodeRef.current = null;
     },
-    [activeTool, pan, zoom, isDark]
+    [activeTool, pan, zoom, isDark],
   );
 
   const handleContextMenu = useCallback(
@@ -1307,7 +1564,7 @@ export function MindmapView() {
         y: Math.min(e.clientY - rect.top, rect.height - 250),
       });
     },
-    []
+    [],
   );
 
   const handleDoubleClick = useCallback(
@@ -1338,7 +1595,7 @@ export function MindmapView() {
         addNode("main", cp.x, cp.y);
       }
     },
-    [pan, zoom, nodes, activeTool, addNode]
+    [pan, zoom, nodes, activeTool, addNode],
   );
 
   // ── Export ──────────────────────────────────────────────────────────
@@ -1346,7 +1603,10 @@ export function MindmapView() {
   const exportAsImage = useCallback(() => {
     if (nodes.length === 0) return;
 
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
     for (const node of nodes) {
       if (node.x < minX) minX = node.x;
       if (node.y < minY) minY = node.y;
@@ -1374,7 +1634,11 @@ export function MindmapView() {
 
     // Draw connections first
     for (const conn of connections) {
-      drawConnection(ctx, { ...conn, selected: false }, nodes.map((n) => ({ ...n, selected: false })));
+      drawConnection(
+        ctx,
+        { ...conn, selected: false },
+        nodes.map((n) => ({ ...n, selected: false })),
+      );
     }
     // Draw nodes
     for (const node of nodes) {
@@ -1410,7 +1674,7 @@ export function MindmapView() {
 
     let animId: number;
     const render = () => {
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const w = container.clientWidth;
       const h = container.clientHeight;
 
@@ -1440,8 +1704,9 @@ export function MindmapView() {
       ctx.scale(zoom, zoom);
 
       // Draw connections
+      const nodeIndex = new Map(nodes.map((node) => [node.id, node]));
       for (const conn of connections) {
-        drawConnection(ctx, conn, nodes);
+        drawConnection(ctx, conn, nodes, nodeIndex);
       }
 
       // Draw connection preview
@@ -1475,16 +1740,29 @@ export function MindmapView() {
       }
 
       ctx.restore();
-      animId = requestAnimationFrame(render);
     };
 
-    render();
-    return () => cancelAnimationFrame(animId);
+    const scheduleRender = () => {
+      cancelAnimationFrame(animId);
+      animId = requestAnimationFrame(render);
+    };
+    const observer = new ResizeObserver(scheduleRender);
+    observer.observe(container);
+    scheduleRender();
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(animId);
+    };
   }, [nodes, connections, connectPreview, pan, zoom, settings, isDark]);
 
   // ── Tool config ─────────────────────────────────────────────────────
 
-  const tools: { tool: MindmapTool; icon: typeof MousePointer2; label: string; shortcut: string }[] = [
+  const tools: {
+    tool: MindmapTool;
+    icon: typeof MousePointer2;
+    label: string;
+    shortcut: string;
+  }[] = [
     { tool: "select", icon: MousePointer2, label: "Select", shortcut: "V" },
     { tool: "pan", icon: Hand, label: "Pan", shortcut: "H" },
     { tool: "addHeader", icon: Hexagon, label: "Header Node", shortcut: "3" },
@@ -1499,27 +1777,41 @@ export function MindmapView() {
 
   const cursorClass = (() => {
     switch (activeTool) {
-      case "pan": return "cursor-grab active:cursor-grabbing";
-      case "select": return "cursor-default";
-      case "connect": return "cursor-crosshair";
-      default: return "cursor-crosshair";
+      case "pan":
+        return "cursor-grab active:cursor-grabbing";
+      case "select":
+        return "cursor-default";
+      case "connect":
+        return "cursor-crosshair";
+      default:
+        return "cursor-crosshair";
     }
   })();
 
   return (
-    <div ref={containerRef} className="relative flex-1 overflow-hidden bg-background">
+    <div
+      ref={containerRef}
+      className="markup-canvas relative flex-1 overflow-hidden bg-background"
+    >
       <canvas
         ref={canvasRef}
+        aria-label="Mind map canvas"
         className={cn("absolute inset-0", cursorClass)}
         onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
+        onPointerMove={framePointer.push}
+        onPointerUp={(event) => {
+          framePointer.flush();
+          handlePointerUp(event);
+        }}
+        onPointerCancel={(event) => {
+          framePointer.flush();
+          handlePointerUp(event);
+        }}
         onDoubleClick={handleDoubleClick}
         onContextMenu={handleContextMenu}
         style={{ touchAction: "none" }}
       />
 
-      
       {/* Edit node overlay */}
       {editNode && (
         <NodeEditPopover
@@ -1527,10 +1819,12 @@ export function MindmapView() {
           screenPos={editNode.screenPos}
           onUpdate={(updates) => {
             setNodes((prev) =>
-              prev.map((n) => (n.id === editNode.node.id ? { ...n, ...updates } : n))
+              prev.map((n) =>
+                n.id === editNode.node.id ? { ...n, ...updates } : n,
+              ),
             );
             setEditNode((prev) =>
-              prev ? { ...prev, node: { ...prev.node, ...updates } } : null
+              prev ? { ...prev, node: { ...prev.node, ...updates } } : null,
             );
           }}
           onClose={() => setEditNode(null)}
@@ -1557,19 +1851,26 @@ export function MindmapView() {
           <Tooltip key={tool}>
             <TooltipTrigger asChild>
               <button
+                aria-label={label}
+                aria-pressed={activeTool === tool}
                 onClick={() => setActiveTool(tool)}
                 className={cn(
                   "flex h-8 w-8 items-center justify-center rounded-md transition-colors",
                   activeTool === tool
                     ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted",
                 )}
               >
                 <Icon className="h-4 w-4" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              {label} {shortcut && <kbd className="ml-1 text-[10px] font-mono opacity-60">{shortcut}</kbd>}
+              {label}{" "}
+              {shortcut && (
+                <kbd className="ml-1 text-[10px] font-mono opacity-60">
+                  {shortcut}
+                </kbd>
+              )}
             </TooltipContent>
           </Tooltip>
         ))}
@@ -1580,6 +1881,7 @@ export function MindmapView() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Undo"
               onClick={undo}
               disabled={undoStack.length === 0}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 transition-colors"
@@ -1587,12 +1889,16 @@ export function MindmapView() {
               <Undo2 className="h-4 w-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">Undo <kbd className="ml-1 text-[10px] font-mono opacity-60">Ctrl+Z</kbd></TooltipContent>
+          <TooltipContent side="bottom">
+            Undo{" "}
+            <kbd className="ml-1 text-[10px] font-mono opacity-60">Ctrl+Z</kbd>
+          </TooltipContent>
         </Tooltip>
 
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Redo"
               onClick={redo}
               disabled={redoStack.length === 0}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 transition-colors"
@@ -1600,7 +1906,10 @@ export function MindmapView() {
               <Redo2 className="h-4 w-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">Redo <kbd className="ml-1 text-[10px] font-mono opacity-60">Ctrl+Y</kbd></TooltipContent>
+          <TooltipContent side="bottom">
+            Redo{" "}
+            <kbd className="ml-1 text-[10px] font-mono opacity-60">Ctrl+Y</kbd>
+          </TooltipContent>
         </Tooltip>
 
         <div className="mx-0.5 h-5 w-px bg-border" />
@@ -1608,6 +1917,7 @@ export function MindmapView() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Zoom in"
               onClick={() => handleZoom(0.1)}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
@@ -1624,6 +1934,7 @@ export function MindmapView() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Zoom out"
               onClick={() => handleZoom(-0.1)}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
@@ -1636,6 +1947,7 @@ export function MindmapView() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Reset view"
               onClick={resetView}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
@@ -1650,6 +1962,7 @@ export function MindmapView() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Link board"
               onClick={() => handleLinkBoard()}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
@@ -1664,6 +1977,7 @@ export function MindmapView() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Export as PNG"
               onClick={exportAsImage}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
@@ -1676,6 +1990,7 @@ export function MindmapView() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Clear canvas"
               onClick={clearCanvas}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
@@ -1688,12 +2003,13 @@ export function MindmapView() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Canvas settings"
               onClick={() => setSettingsOpen(!settingsOpen)}
               className={cn(
                 "flex h-8 w-8 items-center justify-center rounded-md transition-colors",
                 settingsOpen
                   ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted",
               )}
             >
               <Settings className="h-4 w-4" />

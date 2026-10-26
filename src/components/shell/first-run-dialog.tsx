@@ -59,10 +59,8 @@ export function FirstRunDialog() {
   const setLocalServerUrl = useEditorStore((s) => s.setLocalServerUrl);
   const { isAuthenticated, isLoading: authLoading } = useAuthState();
 
-  const [dismissed, setDismissed] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return localStorage.getItem(FIRST_RUN_STORAGE_KEY) === "true";
-  });
+  // The guide is available on request from Settings; first use starts with the workspace.
+  const [dismissed, setDismissed] = useState(true);
   const [step, setStep] = useState(0);
   const [stepDirection, setStepDirection] = useState<1 | -1>(1);
   const [localUrlInput, setLocalUrlInput] = useState(localServerUrl);

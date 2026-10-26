@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/server/prisma";
 import {
+  mergeProjectData,
+  parseProjectData,
+  serializeCloudProjectData,
+} from "@/lib/projects";
+import {
   ApiError,
   badRequest,
   assertUserIdMatch,
@@ -38,7 +43,10 @@ function ensureString(value: unknown, name: string): string {
   return value;
 }
 
-function optionalNullableString(value: unknown, name: string): string | null | undefined {
+function optionalNullableString(
+  value: unknown,
+  name: string,
+): string | null | undefined {
   if (value === undefined) return undefined;
   if (value === null) return null;
   if (typeof value === "string") return value;
@@ -52,7 +60,10 @@ function optionalString(value: unknown): string | undefined {
   return value;
 }
 
-function optionalStringArray(value: unknown, name: string): string[] | null | undefined {
+function optionalStringArray(
+  value: unknown,
+  name: string,
+): string[] | null | undefined {
   if (value === undefined) return undefined;
   if (value === null) return null;
   if (!Array.isArray(value)) {
@@ -65,19 +76,27 @@ function optionalStringArray(value: unknown, name: string): string[] | null | un
   return value as string[];
 }
 
-function stripUndefined<T extends Record<string, unknown>>(value: T): Partial<T> {
+function stripUndefined<T extends Record<string, unknown>>(
+  value: T,
+): Partial<T> {
   return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== undefined)
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
   ) as Partial<T>;
 }
 
 function handleError(error: unknown) {
   if (error instanceof ApiError) {
-    return NextResponse.json({ error: error.message }, { status: error.status });
+    return NextResponse.json(
+      { error: error.message },
+      { status: error.status },
+    );
   }
   const message = error instanceof Error ? error.message : String(error);
   console.error("[db/mutation] Unhandled error:", message, error);
-  return NextResponse.json({ error: "Internal server error." }, { status: 500 });
+  return NextResponse.json(
+    { error: "Internal server error." },
+    { status: 500 },
+  );
 }
 
 function normalizeSlug(input: string): string {
@@ -94,10 +113,14 @@ function normalizeSlug(input: string): string {
 function validateSlug(slug: string): string {
   const normalized = normalizeSlug(slug);
   if (!/^[a-z0-9-]{3,40}$/.test(normalized)) {
-    throw badRequest("Invalid site URL. Use 3-40 characters: letters, numbers, and hyphens.");
+    throw badRequest(
+      "Invalid site URL. Use 3-40 characters: letters, numbers, and hyphens.",
+    );
   }
   if (normalized === "new" || normalized === "edit" || normalized === "admin") {
-    throw badRequest("That site URL is reserved. Please choose a different one.");
+    throw badRequest(
+      "That site URL is reserved. Please choose a different one.",
+    );
   }
   return normalized;
 }
@@ -105,7 +128,10 @@ function validateSlug(slug: string): string {
 function generateShareId(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   const segment = () =>
-    Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+    Array.from(
+      { length: 4 },
+      () => chars[Math.floor(Math.random() * chars.length)],
+    ).join("");
   return `${segment()}-${segment()}`;
 }
 
@@ -139,7 +165,10 @@ export async function POST(req: NextRequest) {
         const email = requireString(args.email, "email");
         const firstName = optionalNullableString(args.firstName, "firstName");
         const lastName = optionalNullableString(args.lastName, "lastName");
-        const profilePictureUrl = optionalNullableString(args.profilePictureUrl, "profilePictureUrl");
+        const profilePictureUrl = optionalNullableString(
+          args.profilePictureUrl,
+          "profilePictureUrl",
+        );
 
         const user = await requireAuthUser(req);
         assertUserIdMatch(workosId, user);
@@ -190,8 +219,11 @@ export async function POST(req: NextRequest) {
         assertUserIdMatch(userId, user);
 
         const data: {
+          projectData?: string | null;
           activeTabId?: string | null;
-          openTabIds?: Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue;
+          openTabIds?:
+            | Prisma.NullableJsonNullValueInput
+            | Prisma.InputJsonValue;
           folders?: Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue;
           viewMode?: string | null;
           theme?: string | null;
@@ -201,42 +233,87 @@ export async function POST(req: NextRequest) {
           activeProfileId?: string | null;
         } = {};
 
-        if (args.activeTabId !== undefined) data.activeTabId = args.activeTabId === null ? null : String(args.activeTabId);
-        if (args.openTabIds !== undefined) data.openTabIds = args.openTabIds === null ? Prisma.JsonNull : (args.openTabIds as Prisma.InputJsonValue);
-        if (args.folders !== undefined) data.folders = args.folders === null ? Prisma.JsonNull : (args.folders as Prisma.InputJsonValue);
-        if (args.viewMode !== undefined) data.viewMode = args.viewMode === null ? null : String(args.viewMode);
-        if (args.theme !== undefined) data.theme = args.theme === null ? null : String(args.theme);
-        if (args.fileTreeOpen !== undefined) data.fileTreeOpen = args.fileTreeOpen === null ? null : Boolean(args.fileTreeOpen);
-        if (args.settings !== undefined) data.settings = args.settings === null ? Prisma.JsonNull : (args.settings as Prisma.InputJsonValue);
-        if (args.profiles !== undefined) data.profiles = args.profiles === null ? Prisma.JsonNull : (args.profiles as Prisma.InputJsonValue);
-        if (args.activeProfileId !== undefined) data.activeProfileId = args.activeProfileId === null ? null : String(args.activeProfileId);
+        if (args.projectData !== undefined)
+          data.projectData = optionalNullableString(
+            args.projectData,
+            "projectData",
+          );
+        if (args.activeTabId !== undefined)
+          data.activeTabId =
+            args.activeTabId === null ? null : String(args.activeTabId);
+        if (args.openTabIds !== undefined)
+          data.openTabIds =
+            args.openTabIds === null
+              ? Prisma.JsonNull
+              : (args.openTabIds as Prisma.InputJsonValue);
+        if (args.folders !== undefined)
+          data.folders =
+            args.folders === null
+              ? Prisma.JsonNull
+              : (args.folders as Prisma.InputJsonValue);
+        if (args.viewMode !== undefined)
+          data.viewMode = args.viewMode === null ? null : String(args.viewMode);
+        if (args.theme !== undefined)
+          data.theme = args.theme === null ? null : String(args.theme);
+        if (args.fileTreeOpen !== undefined)
+          data.fileTreeOpen =
+            args.fileTreeOpen === null ? null : Boolean(args.fileTreeOpen);
+        if (args.settings !== undefined)
+          data.settings =
+            args.settings === null
+              ? Prisma.JsonNull
+              : (args.settings as Prisma.InputJsonValue);
+        if (args.profiles !== undefined)
+          data.profiles =
+            args.profiles === null
+              ? Prisma.JsonNull
+              : (args.profiles as Prisma.InputJsonValue);
+        if (args.activeProfileId !== undefined)
+          data.activeProfileId =
+            args.activeProfileId === null ? null : String(args.activeProfileId);
 
-        const existing = await prisma.workspace.findUnique({
-          where: { userId },
-          select: { userId: true },
-        });
-
-        if (existing) {
-          await prisma.workspace.update({
+        await prisma.$transaction(async (tx) => {
+          // Serialize updates to an existing workspace so independent device edits merge atomically.
+          await tx.$queryRaw(
+            Prisma.sql`SELECT "id" FROM "workspaces" WHERE "userId" = ${userId} FOR UPDATE`,
+          );
+          const existing = await tx.workspace.findUnique({
             where: { userId },
-            data,
+            select: { userId: true, projectData: true },
           });
-        } else {
-          await prisma.workspace.create({
-            data: {
-              userId,
-              activeTabId: data.activeTabId ?? null,
-              openTabIds: data.openTabIds ?? [],
-              folders: data.folders ?? [],
-              viewMode: data.viewMode ?? "editor",
-              theme: data.theme ?? "dark",
-              fileTreeOpen: data.fileTreeOpen ?? true,
-              settings: data.settings ?? {},
-              profiles: data.profiles ?? [{ id: "default", name: "Personal" }],
-              activeProfileId: data.activeProfileId ?? "default",
-            },
-          });
-        }
+          if (data.projectData !== undefined)
+            data.projectData = serializeCloudProjectData(
+              mergeProjectData(
+                parseProjectData(existing?.projectData),
+                data.projectData,
+              ),
+            );
+
+          if (existing) {
+            await tx.workspace.update({
+              where: { userId },
+              data,
+            });
+          } else {
+            await tx.workspace.create({
+              data: {
+                userId,
+                projectData: data.projectData,
+                activeTabId: data.activeTabId ?? null,
+                openTabIds: data.openTabIds ?? [],
+                folders: data.folders ?? [],
+                viewMode: data.viewMode ?? "editor",
+                theme: data.theme ?? "dark",
+                fileTreeOpen: data.fileTreeOpen ?? true,
+                settings: data.settings ?? {},
+                profiles: data.profiles ?? [
+                  { id: "default", name: "Personal" },
+                ],
+                activeProfileId: data.activeProfileId ?? "default",
+              },
+            });
+          }
+        });
 
         return NextResponse.json(null);
       }
@@ -246,9 +323,10 @@ export async function POST(req: NextRequest) {
         const tabId = requireString(args.tabId, "tabId");
         const title = ensureString(args.title, "title");
         const content = ensureString(args.content, "content");
-        const folderId = args.folderId === null || typeof args.folderId === "string"
-          ? args.folderId
-          : undefined;
+        const folderId =
+          args.folderId === null || typeof args.folderId === "string"
+            ? args.folderId
+            : undefined;
 
         if (folderId === undefined) {
           throw badRequest("Invalid folderId.");
@@ -331,9 +409,11 @@ export async function POST(req: NextRequest) {
           const tabId = requireString(tabRecord.tabId, "tabId");
           const title = ensureString(tabRecord.title, "title");
           const content = ensureString(tabRecord.content, "content");
-          const folderId = tabRecord.folderId === null || typeof tabRecord.folderId === "string"
-            ? tabRecord.folderId
-            : undefined;
+          const folderId =
+            tabRecord.folderId === null ||
+            typeof tabRecord.folderId === "string"
+              ? tabRecord.folderId
+              : undefined;
 
           if (folderId === undefined) {
             throw badRequest("Invalid folderId.");
@@ -346,7 +426,10 @@ export async function POST(req: NextRequest) {
             workspaceId: optionalString(tabRecord.workspaceId),
             folderId,
             tags: optionalStringArray(tabRecord.tags, "tags"),
-            pinned: typeof tabRecord.pinned === "boolean" ? tabRecord.pinned : undefined,
+            pinned:
+              typeof tabRecord.pinned === "boolean"
+                ? tabRecord.pinned
+                : undefined,
             noteType: optionalString(tabRecord.noteType),
             customIcon: optionalString(tabRecord.customIcon),
             iconColor: optionalString(tabRecord.iconColor),
@@ -371,7 +454,8 @@ export async function POST(req: NextRequest) {
           });
 
           for (const tab of tabs) {
-            const syncTagsValue = tab.tags === null ? Prisma.JsonNull : tab.tags;
+            const syncTagsValue =
+              tab.tags === null ? Prisma.JsonNull : tab.tags;
             const syncUpdateData: Prisma.TabUpdateInput = stripUndefined({
               title: tab.title,
               content: tab.content,
@@ -419,15 +503,24 @@ export async function POST(req: NextRequest) {
         const content = ensureString(args.content, "content");
         const visibility = requireString(args.visibility, "visibility");
         const permission = requireString(args.permission, "permission");
-        const allowedUsers = optionalStringArray(args.allowedUsers, "allowedUsers") ?? [];
+        const allowedUsers =
+          optionalStringArray(args.allowedUsers, "allowedUsers") ?? [];
         const noteType = optionalString(args.noteType);
-        const whiteboardData = optionalNullableString(args.whiteboardData, "whiteboardData");
-        const mindmapData = optionalNullableString(args.mindmapData, "mindmapData");
+        const whiteboardData = optionalNullableString(
+          args.whiteboardData,
+          "whiteboardData",
+        );
+        const mindmapData = optionalNullableString(
+          args.mindmapData,
+          "mindmapData",
+        );
 
         const user = await requireAuthUser(req);
         assertUserIdMatch(ownerUserId, user);
 
-        const normalizedAllowed = allowedUsers.map((email) => normalizeEmail(email));
+        const normalizedAllowed = allowedUsers.map((email) =>
+          normalizeEmail(email),
+        );
 
         const existing = await prisma.sharedNote.findUnique({
           where: {
@@ -543,7 +636,7 @@ export async function POST(req: NextRequest) {
           }
           if (sharedNote.ownerUserId !== user.id) {
             const allowed = sharedNote.allowedUsers.map((email) =>
-              normalizeEmail(email)
+              normalizeEmail(email),
             );
             const email = normalizeEmail(user.email || "");
             if (!email || !allowed.includes(email)) {
@@ -568,7 +661,8 @@ export async function POST(req: NextRequest) {
         const tabId = requireString(args.tabId, "tabId");
         const visibility = requireString(args.visibility, "visibility");
         const permission = requireString(args.permission, "permission");
-        const allowedUsers = optionalStringArray(args.allowedUsers, "allowedUsers") ?? [];
+        const allowedUsers =
+          optionalStringArray(args.allowedUsers, "allowedUsers") ?? [];
 
         const user = await requireAuthUser(req);
         assertUserIdMatch(ownerUserId, user);
@@ -750,7 +844,10 @@ export async function POST(req: NextRequest) {
       case "whiteboards.save": {
         const userId = requireString(args.userId, "userId");
         const elements = ensureString(args.elements, "elements");
-        const canvasSettings = ensureString(args.canvasSettings, "canvasSettings");
+        const canvasSettings = ensureString(
+          args.canvasSettings,
+          "canvasSettings",
+        );
 
         const user = await requireAuthUser(req);
         assertUserIdMatch(userId, user);

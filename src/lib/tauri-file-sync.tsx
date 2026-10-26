@@ -1,4 +1,5 @@
 "use client";
+import { setFileSaveState } from "./file-save-state";
 
 import { useEffect, useRef, useCallback } from "react";
 import { useEditorStore, type Tab, type NoteType } from "@/lib/store";
@@ -55,7 +56,7 @@ async function readLocalFiles(folder: string): Promise<LocalFile[]> {
         noteType: extensionToNoteType(ext),
       });
     } catch {
-      // Skip unreadable files
+      throw new Error(`Could not read ${entryName}. Check file permissions before syncing.`);
     }
   }
   return files;
@@ -68,6 +69,7 @@ async function writeTabToFolder(folder: string, tab: Tab): Promise<void> {
 }
 
 function ensureExtension(title: string, noteType: NoteType): string {
+  title = title.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").replace(/[. ]+$/, "");
   const expectedExt = noteTypeToExtension(noteType);
   if (title.endsWith(expectedExt)) return title;
   // Remove any existing known extension before adding the right one
@@ -98,6 +100,12 @@ export function TauriFileSync() {
 
       const localFiles = await readLocalFiles(localSyncFolder);
       const tabs = useEditorStore.getState().tabs.filter((t) => t.origin === "local" && t.noteType !== "pdf");
+      const usedNames = new Set<string>();
+      for (const tab of tabs) {
+        const filename = ensureExtension(tab.title, tab.noteType).toLowerCase();
+        if (usedNames.has(filename)) throw new Error(`Two local documents use the name ${filename}. Rename one before syncing the folder.`);
+        usedNames.add(filename);
+      }
       const localFileMap = new Map(localFiles.map((f) => [f.name, f]));
       const tabFilenameMap = new Map(
         tabs.map((t) => [ensureExtension(t.title, t.noteType), t])
@@ -150,7 +158,8 @@ export function TauriFileSync() {
             await writeTabToFolder(localSyncFolder, tab);
             lastSyncedContent.current.set(filename, tab.content);
           } catch {
-            // Write failed — skip
+            setFileSaveState({ status: "error", error: "A file could not be written to the sync folder. Check the folder permissions and available disk space." });
+            return;
           }
         }
       }
@@ -178,8 +187,9 @@ export function TauriFileSync() {
       if (storeChanged) {
         useEditorStore.setState({ tabs: updatedTabs });
       }
-    } catch {
-      // Sync error — silently continue
+      setFileSaveState({ status: "saved", error: null });
+    } catch (error) {
+      setFileSaveState({ status: "error", error: error instanceof Error ? error.message : "Folder sync failed. Check that the folder is still available." });
     } finally {
       isSyncing.current = false;
     }

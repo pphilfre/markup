@@ -4,8 +4,34 @@
   <img src="https://raw.githubusercontent.com/pphilfre/markup-home/refs/heads/main/public/app.png" alt="Markup App Preview" width="100%" />
 </p>
 
-A fast, keyboard-first markdown workspace built with **Next.js**, **TypeScript**, **Prisma**, **PostgreSQL**, **WorkOS AuthKit**, and **shadcn/ui**.
-Markup combines markdown editing with advanced note tooling like split preview, graph view, whiteboards, mind maps, sharing, and local/remote sync.
+A keyboard-first Markdown workspace for connected notes, tasks, and visual thinking, built with **Next.js**, **TypeScript**, **Zustand**, **Convex or PostgreSQL**, and **WorkOS AuthKit**.
+Write with source, live editing, split preview, and the full formatting toolbar. Organise files in folders or projects, switch between task lists and full boards, and work across whiteboards, mind maps, PDFs, graph links, sharing, and local/remote sync.
+
+## Project workspace
+
+- Create projects inside existing workspaces. Existing documents retain their folders and IDs. New captures inherit the current folder or project; loose captures go to **Inbox**, with batch moves into folders and projects.
+- Manage the same tasks in List and Board views, including tasks imported from existing `.kanban` documents.
+- Choose **Task** in a note to create a linked task; selecting text first uses it as the title and description.
+- Search files, tags, note text, folders, projects, tasks, and the original commands with **Ctrl+K**. The `?` prefix still searches text only, with navigation to matching lines.
+- Close tabs without deleting files. Deleted documents and tasks go to **Trash**; documents can be restored or permanently removed with confirmation.
+- Device saves, cloud sync, and desktop folder mirroring have separate status reporting. Local Markdown history keeps up to ten snapshots on the current device; competing incoming versions can be recovered there.
+
+The first project migration saves an untouched backup under `markup-backup-before-projects-v1` in IndexedDB. Original document IDs and legacy board files are preserved. Project/task records use the versioned `projectData` workspace envelope in both backends. Local files, their board cards, tasks linked to local files, and local trash contents are excluded from cloud transport.
+
+### Upgrading an existing installation
+
+For PostgreSQL, apply the included migration with `npx prisma migrate deploy`, then regenerate the client and deploy the web build. For Convex, deploy the updated schema and workspace functions with your usual configured deployment. Deploy the backend changes before distributing the new frontend. No live database migration or production deployment is performed by the local validation commands below.
+
+```bash
+npm test
+npm run typecheck
+npm run lint
+npm run build:docker
+```
+
+`build:docker` creates the production web build without deploying Convex. `build:tauri` creates the desktop frontend export; `tauri:build -- --no-bundle` also compiles the native executable. Installer/updater signing remains part of the release workflow.
+
+The default backend is Convex; select PostgreSQL with `NEXT_PUBLIC_DB_PROVIDER=postgres`. Cloud sync and sharing require their configured service and account. Signed desktop releases and end-to-end multi-account sync require the corresponding credentials and deployment environment. The core project workflow works locally without signing in.
 
 ---
 

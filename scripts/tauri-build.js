@@ -17,6 +17,7 @@ async function main() {
     path.join(ROOT, "src", "app", "callback"),
     path.join(ROOT, "src", "app", "sites"),
     path.join(ROOT, "src", "middleware.ts"),
+    path.join(ROOT, "src", "proxy.ts"),
     path.join(ROOT, "src", "lib", "auth-actions.ts"),
   ];
 

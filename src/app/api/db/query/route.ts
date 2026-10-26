@@ -17,6 +17,7 @@ type QueryBody = {
 };
 
 const workspaceSelect = {
+  projectData: true,
   userId: true,
   activeTabId: true,
   openTabIds: true,
