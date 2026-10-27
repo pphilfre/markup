@@ -186,7 +186,8 @@ function ModelPickerPopover({
 
   useEffect(() => {
     if (!open) return undefined;
-    requestAnimationFrame(() => searchRef.current?.focus());
+    const frame = requestAnimationFrame(() => searchRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
   }, [open]);
 
   const filtered = useMemo(() => {
@@ -799,27 +800,7 @@ function AiChatPanelContent({
       <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto">
         <div className={cn("flex flex-col gap-2 px-3 pb-4 pt-3")}>
           {!messages.length && (
-            <div className="ai-empty-state">
-              <h3>Work with your notes</h3>
-              <p>
-                Attach a note, then ask for an edit, summary, or next steps.
-              </p>
-              {modelStatus === "loading" ? (
-                <p role="status">Loading available models…</p>
-              ) : (
-                <div>
-                  {[
-                    "Summarise the attached notes",
-                    "Turn the attached notes into action items",
-                    "Suggest improvements to this draft",
-                  ].map((prompt) => (
-                    <button key={prompt} onClick={() => setDraft(prompt)}>
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <ChatEmptyState modelStatus={modelStatus} setDraft={setDraft} />
           )}
           {statusNotice && <ChatStatusNotice notice={statusNotice} />}
           {modelStatus === "error" && (
@@ -1095,24 +1076,13 @@ function ChatDraftInput({
   return (
     <div className="flex items-end gap-2">
       <div className="relative flex-1">
-        <ModelPickerPopover
+        <ChatModelSelector
           models={models}
           selectedModelId={selectedModelId}
           modelStatus={modelStatus}
-          onSelect={setSelectedModelId}
-          align="start"
-          side="top"
-        >
-          <Button
-            variant="ghost"
-            size="xs"
-            className="absolute bottom-2 left-2 z-10 h-6 max-w-[200px] gap-1 px-2 text-[11px] text-muted-foreground"
-            disabled={modelStatus !== "ready" || models.length === 0}
-          >
-            <span className="truncate">{modelLabel}</span>
-            <ChevronDown className="h-3 w-3" />
-          </Button>
-        </ModelPickerPopover>
+          modelLabel={modelLabel}
+          setSelectedModelId={setSelectedModelId}
+        />
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -1166,6 +1136,73 @@ function ChatStatusNotice({ notice }: { notice: StatusNotice }) {
             </pre>
           </PopoverContent>
         </Popover>
+      )}
+    </div>
+  );
+}
+
+/** Keep the model menu and its trigger together without nesting the composer. */
+function ChatModelSelector({
+  models,
+  selectedModelId,
+  modelStatus,
+  modelLabel,
+  setSelectedModelId,
+}: {
+  models: AiChatModel[];
+  selectedModelId: string | null;
+  modelStatus: string;
+  modelLabel: string;
+  setSelectedModelId: (id: string) => void;
+}) {
+  return (
+    <ModelPickerPopover
+      models={models}
+      selectedModelId={selectedModelId}
+      modelStatus={modelStatus}
+      onSelect={setSelectedModelId}
+      align="start"
+      side="top"
+    >
+      <Button
+        variant="ghost"
+        size="xs"
+        className="absolute bottom-2 left-2 z-10 h-6 max-w-[200px] gap-1 px-2 text-[11px] text-muted-foreground"
+        disabled={modelStatus !== "ready" || models.length === 0}
+      >
+        <span className="truncate">{modelLabel}</span>
+        <ChevronDown className="h-3 w-3" />
+      </Button>
+    </ModelPickerPopover>
+  );
+}
+
+/** Offer draft prompts before the first message without coupling them to message rendering. */
+function ChatEmptyState({
+  modelStatus,
+  setDraft,
+}: {
+  modelStatus: string;
+  setDraft: (value: string) => void;
+}) {
+  return (
+    <div className="ai-empty-state">
+      <h3>Work with your notes</h3>
+      <p>Attach a note, then ask for an edit, summary, or next steps.</p>
+      {modelStatus === "loading" ? (
+        <p role="status">Loading available models…</p>
+      ) : (
+        <div>
+          {[
+            "Summarise the attached notes",
+            "Turn the attached notes into action items",
+            "Suggest improvements to this draft",
+          ].map((prompt) => (
+            <button key={prompt} onClick={() => setDraft(prompt)}>
+              {prompt}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
