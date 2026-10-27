@@ -1,4 +1,5 @@
 "use client";
+import { resolveDocumentLink } from "@/lib/document-links";
 
 import React, { useMemo, useCallback, useEffect, useRef, useState, isValidElement, cloneElement } from "react";
 import ReactMarkdown from "react-markdown";
@@ -184,7 +185,7 @@ export function MarkdownPreview({
   // Pre-process: wiki-links + emoji + highlight marks
   const processedContent = useMemo(() => {
     if (!rawContent) return "";
-    let out = rawContent.replace(/\[\[([^\]]+)\]\]/g, (_, title) => `[${title}](backlink:${encodeURIComponent(title)})`);
+    let out = rawContent.replace(/\[\[([^\]]+)\]\]/g, (_, title) => `[${title}](#wiki/${encodeURIComponent(title)})`);
     out = preprocessMarkdown(out);
     return out;
   }, [rawContent]);
@@ -264,8 +265,13 @@ export function MarkdownPreview({
 
         // Backlinks
         a: ({ href, children, ...props }) => {
-          if (href?.startsWith("backlink:")) {
-            const title = decodeURIComponent(href.slice("backlink:".length));
+          if (href?.startsWith("#note/")) {
+            const state = useEditorStore.getState();
+            const target = resolveDocumentLink(href, state.tabs, state.activeProfileId);
+            return <button type="button" disabled={!target} className="text-primary underline underline-offset-2" title={target ? target.title : "This document is not available in this workspace"} onClick={() => { if (target) useEditorStore.getState().openTab(target.id); }}>{children}</button>;
+          }
+          if (href?.startsWith("#wiki/")) {
+            const title = decodeURIComponent(href.slice("#wiki/".length));
             return (
               <button
                 onClick={(e) => { e.preventDefault(); handleBacklinkClick(title); }}

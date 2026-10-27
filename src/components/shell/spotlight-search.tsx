@@ -45,9 +45,16 @@ import {
   Timer,
   Upload,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { getTabWorkspaceId, useEditorStore, type ThemeMode } from "@/lib/store";
 import { REPLAY_TUTORIAL_EVENT } from "@/components/shell/first-run-dialog";
+import { isTaskVisible } from "@/lib/projects";
 
 // Feature definitions for non-? queries
 interface Feature {
@@ -57,7 +64,18 @@ interface Feature {
   action: () => void;
 }
 
-type SpotlightSectionId = "general" | "user" | "appearance" | "typography" | "markdown" | "editing" | "guide" | "privacy" | "data" | "about" | "updates";
+type SpotlightSectionId =
+  | "general"
+  | "user"
+  | "appearance"
+  | "typography"
+  | "markdown"
+  | "editing"
+  | "guide"
+  | "privacy"
+  | "data"
+  | "about"
+  | "updates";
 
 function useFeatures(): Feature[] {
   const wrapSelection = useEditorStore((s) => s.wrapSelection);
@@ -81,34 +99,52 @@ function useFeatures(): Feature[] {
   const settings = useEditorStore((s) => s.settings);
   const updateSettings = useEditorStore((s) => s.updateSettings);
 
-  return useMemo<Feature[]>(
-    () => {
-      const openSettingsSection = (section: SpotlightSectionId) => {
-        document.dispatchEvent(new CustomEvent("open-settings", { detail: { open: true, section } }));
-      };
+  return useMemo<Feature[]>(() => {
+    const openSettingsSection = (section: SpotlightSectionId) => {
+      document.dispatchEvent(
+        new CustomEvent("open-settings", { detail: { open: true, section } }),
+      );
+    };
 
-      const openSettingsUserTab = (userTab: "profile" | "sessions" | "security") => {
-        document.dispatchEvent(
-          new CustomEvent("open-settings", {
-            detail: { open: true, section: "user", userTab },
-          })
-        );
-      };
+    const openSettingsUserTab = (
+      userTab: "profile" | "sessions" | "security",
+    ) => {
+      document.dispatchEvent(
+        new CustomEvent("open-settings", {
+          detail: { open: true, section: "user", userTab },
+        }),
+      );
+    };
 
-      const applyThemeMode = (mode: ThemeMode) => {
-        updateSettings({ themeMode: mode });
-        const lightModes: ThemeMode[] = ["light", "solarized-light", "catppuccin-latte", "gruvbox-light", "everforest-light", "uwu"];
-        const darkModes: ThemeMode[] = ["dark", "nord-dark", "catppuccin-mocha", "gruvbox-dark", "tokyo-night"];
-        if (lightModes.includes(mode) && theme === "dark") toggleTheme();
-        if (darkModes.includes(mode) && theme === "light") toggleTheme();
-        if (mode === "system") {
-          const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-          if (prefersDark && theme === "light") toggleTheme();
-          if (!prefersDark && theme === "dark") toggleTheme();
-        }
-      };
+    const applyThemeMode = (mode: ThemeMode) => {
+      updateSettings({ themeMode: mode });
+      const lightModes: ThemeMode[] = [
+        "light",
+        "solarized-light",
+        "catppuccin-latte",
+        "gruvbox-light",
+        "everforest-light",
+        "uwu",
+      ];
+      const darkModes: ThemeMode[] = [
+        "dark",
+        "nord-dark",
+        "catppuccin-mocha",
+        "gruvbox-dark",
+        "tokyo-night",
+      ];
+      if (lightModes.includes(mode) && theme === "dark") toggleTheme();
+      if (darkModes.includes(mode) && theme === "light") toggleTheme();
+      if (mode === "system") {
+        const prefersDark = window.matchMedia(
+          "(prefers-color-scheme: dark)",
+        ).matches;
+        if (prefersDark && theme === "light") toggleTheme();
+        if (!prefersDark && theme === "dark") toggleTheme();
+      }
+    };
 
-      return [
+    return [
       {
         label: "Bold",
         keywords: ["bold", "strong", "**"],
@@ -206,28 +242,30 @@ function useFeatures(): Feature[] {
         action: () => setViewMode("graph"),
       },
       {
-        label: "Whiteboard View",
+        label: "Create whiteboard",
         keywords: ["whiteboard", "canvas", "draw"],
         icon: <PenTool className="h-4 w-4" />,
-        action: () => setViewMode("whiteboard"),
+        action: () =>
+          useEditorStore.getState().createProjectDocument("whiteboard"),
       },
       {
-        label: "Mindmap View",
+        label: "Create mind map",
         keywords: ["mindmap", "map", "nodes"],
         icon: <GitBranch className="h-4 w-4" />,
-        action: () => setViewMode("mindmap"),
+        action: () =>
+          useEditorStore.getState().createProjectDocument("mindmap"),
       },
       {
-        label: "Kanban View",
+        label: "Create task board",
         keywords: ["kanban", "board", "cards"],
         icon: <KanbanSquare className="h-4 w-4" />,
-        action: () => setViewMode("kanban"),
+        action: () => useEditorStore.getState().createProjectDocument("kanban"),
       },
       {
-        label: "PDF View",
+        label: "Create PDF document",
         keywords: ["pdf", "document", "viewer"],
         icon: <FileType className="h-4 w-4" />,
-        action: () => setViewMode("pdf"),
+        action: () => useEditorStore.getState().createProjectDocument("pdf"),
       },
       {
         label: "Cycle View Mode",
@@ -236,9 +274,15 @@ function useFeatures(): Feature[] {
         action: () => toggleView(),
       },
       {
-        label: theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode",
+        label:
+          theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode",
         keywords: ["theme", "dark", "light", "mode", "toggle"],
-        icon: theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />,
+        icon:
+          theme === "dark" ? (
+            <Sun className="h-4 w-4" />
+          ) : (
+            <Moon className="h-4 w-4" />
+          ),
         action: toggleTheme,
       },
       {
@@ -376,10 +420,13 @@ function useFeatures(): Feature[] {
         action: () => openSettingsSection("about"),
       },
       {
-        label: settings.autoCloseBrackets ? "Disable Auto-Close Brackets" : "Enable Auto-Close Brackets",
+        label: settings.autoCloseBrackets
+          ? "Disable Auto-Close Brackets"
+          : "Enable Auto-Close Brackets",
         keywords: ["markdown", "auto close", "brackets", "quotes", "settings"],
         icon: <Code2 className="h-4 w-4" />,
-        action: () => updateSettings({ autoCloseBrackets: !settings.autoCloseBrackets }),
+        action: () =>
+          updateSettings({ autoCloseBrackets: !settings.autoCloseBrackets }),
       },
       {
         label: settings.autoCloseMarkdownFormatting
@@ -387,25 +434,39 @@ function useFeatures(): Feature[] {
           : "Enable Auto-Close Markdown Formatting",
         keywords: ["markdown", "auto close", "formatting", "bold", "italic"],
         icon: <Bold className="h-4 w-4" />,
-        action: () => updateSettings({ autoCloseMarkdownFormatting: !settings.autoCloseMarkdownFormatting }),
+        action: () =>
+          updateSettings({
+            autoCloseMarkdownFormatting: !settings.autoCloseMarkdownFormatting,
+          }),
       },
       {
-        label: settings.autoFormatLists ? "Disable Auto-Format Lists" : "Enable Auto-Format Lists",
+        label: settings.autoFormatLists
+          ? "Disable Auto-Format Lists"
+          : "Enable Auto-Format Lists",
         keywords: ["markdown", "lists", "auto format", "settings"],
         icon: <ListOrdered className="h-4 w-4" />,
-        action: () => updateSettings({ autoFormatLists: !settings.autoFormatLists }),
+        action: () =>
+          updateSettings({ autoFormatLists: !settings.autoFormatLists }),
       },
       {
-        label: settings.continueListOnEnter ? "Disable Continue List on Enter" : "Enable Continue List on Enter",
+        label: settings.continueListOnEnter
+          ? "Disable Continue List on Enter"
+          : "Enable Continue List on Enter",
         keywords: ["markdown", "list", "enter", "settings"],
         icon: <List className="h-4 w-4" />,
-        action: () => updateSettings({ continueListOnEnter: !settings.continueListOnEnter }),
+        action: () =>
+          updateSettings({
+            continueListOnEnter: !settings.continueListOnEnter,
+          }),
       },
       {
-        label: settings.autoPunctuation ? "Disable Auto Punctuation" : "Enable Auto Punctuation",
+        label: settings.autoPunctuation
+          ? "Disable Auto Punctuation"
+          : "Enable Auto Punctuation",
         keywords: ["markdown", "punctuation", "double space", "settings"],
         icon: <FileText className="h-4 w-4" />,
-        action: () => updateSettings({ autoPunctuation: !settings.autoPunctuation }),
+        action: () =>
+          updateSettings({ autoPunctuation: !settings.autoPunctuation }),
       },
       {
         label: settings.suggestCorrectionsOnDoubleTap
@@ -415,26 +476,36 @@ function useFeatures(): Feature[] {
         icon: <FileText className="h-4 w-4" />,
         action: () =>
           updateSettings({
-            suggestCorrectionsOnDoubleTap: !settings.suggestCorrectionsOnDoubleTap,
+            suggestCorrectionsOnDoubleTap:
+              !settings.suggestCorrectionsOnDoubleTap,
           }),
       },
       {
-        label: settings.smartQuotes ? "Disable Smart Quotes" : "Enable Smart Quotes",
+        label: settings.smartQuotes
+          ? "Disable Smart Quotes"
+          : "Enable Smart Quotes",
         keywords: ["markdown", "quotes", "curly", "typography"],
         icon: <Quote className="h-4 w-4" />,
         action: () => updateSettings({ smartQuotes: !settings.smartQuotes }),
       },
       {
-        label: settings.smartDashes ? "Disable Smart Dashes" : "Enable Smart Dashes",
+        label: settings.smartDashes
+          ? "Disable Smart Dashes"
+          : "Enable Smart Dashes",
         keywords: ["markdown", "dashes", "em dash", "typography"],
         icon: <Strikethrough className="h-4 w-4" />,
         action: () => updateSettings({ smartDashes: !settings.smartDashes }),
       },
       {
-        label: settings.convertTabsToSpaces ? "Disable Convert Tabs to Spaces" : "Enable Convert Tabs to Spaces",
+        label: settings.convertTabsToSpaces
+          ? "Disable Convert Tabs to Spaces"
+          : "Enable Convert Tabs to Spaces",
         keywords: ["tabs", "spaces", "indent", "markdown", "settings"],
         icon: <FileText className="h-4 w-4" />,
-        action: () => updateSettings({ convertTabsToSpaces: !settings.convertTabsToSpaces }),
+        action: () =>
+          updateSettings({
+            convertTabsToSpaces: !settings.convertTabsToSpaces,
+          }),
       },
       {
         label: settings.showInvisibleCharacters
@@ -442,7 +513,10 @@ function useFeatures(): Feature[] {
           : "Show Invisible Characters",
         keywords: ["invisible", "whitespace", "tabs", "spaces", "typography"],
         icon: <Eye className="h-4 w-4" />,
-        action: () => updateSettings({ showInvisibleCharacters: !settings.showInvisibleCharacters }),
+        action: () =>
+          updateSettings({
+            showInvisibleCharacters: !settings.showInvisibleCharacters,
+          }),
       },
       {
         label: settings.highlightMatchingBrackets
@@ -450,19 +524,28 @@ function useFeatures(): Feature[] {
           : "Enable Matching Bracket Highlight",
         keywords: ["editing", "brackets", "highlight", "settings"],
         icon: <Code2 className="h-4 w-4" />,
-        action: () => updateSettings({ highlightMatchingBrackets: !settings.highlightMatchingBrackets }),
+        action: () =>
+          updateSettings({
+            highlightMatchingBrackets: !settings.highlightMatchingBrackets,
+          }),
       },
       {
-        label: settings.multiCursorSupport ? "Disable Multi-Cursor" : "Enable Multi-Cursor",
+        label: settings.multiCursorSupport
+          ? "Disable Multi-Cursor"
+          : "Enable Multi-Cursor",
         keywords: ["editing", "multi cursor", "alt click", "settings"],
         icon: <PenLine className="h-4 w-4" />,
-        action: () => updateSettings({ multiCursorSupport: !settings.multiCursorSupport }),
+        action: () =>
+          updateSettings({ multiCursorSupport: !settings.multiCursorSupport }),
       },
       {
-        label: settings.showIconsInSidebar ? "Hide Sidebar Icons" : "Show Sidebar Icons",
+        label: settings.showIconsInSidebar
+          ? "Hide Sidebar Icons"
+          : "Show Sidebar Icons",
         keywords: ["appearance", "sidebar", "icons", "settings"],
         icon: <PanelLeft className="h-4 w-4" />,
-        action: () => updateSettings({ showIconsInSidebar: !settings.showIconsInSidebar }),
+        action: () =>
+          updateSettings({ showIconsInSidebar: !settings.showIconsInSidebar }),
       },
       {
         label: "Sidebar Position: Left",
@@ -624,25 +707,39 @@ function useFeatures(): Feature[] {
         label: "Increase Font Size",
         keywords: ["typography", "font size", "increase", "larger"],
         icon: <ZoomIn className="h-4 w-4" />,
-        action: () => updateSettings({ fontSize: Math.min(24, settings.fontSize + 1) }),
+        action: () =>
+          updateSettings({ fontSize: Math.min(24, settings.fontSize + 1) }),
       },
       {
         label: "Decrease Font Size",
         keywords: ["typography", "font size", "decrease", "smaller"],
         icon: <ZoomOut className="h-4 w-4" />,
-        action: () => updateSettings({ fontSize: Math.max(10, settings.fontSize - 1) }),
+        action: () =>
+          updateSettings({ fontSize: Math.max(10, settings.fontSize - 1) }),
       },
       {
         label: "Increase Line Height",
         keywords: ["typography", "line height", "increase", "spacing"],
         icon: <ZoomIn className="h-4 w-4" />,
-        action: () => updateSettings({ lineHeight: Math.min(2.4, Number((settings.lineHeight + 0.1).toFixed(1))) }),
+        action: () =>
+          updateSettings({
+            lineHeight: Math.min(
+              2.4,
+              Number((settings.lineHeight + 0.1).toFixed(1)),
+            ),
+          }),
       },
       {
         label: "Decrease Line Height",
         keywords: ["typography", "line height", "decrease", "spacing"],
         icon: <ZoomOut className="h-4 w-4" />,
-        action: () => updateSettings({ lineHeight: Math.max(1.2, Number((settings.lineHeight - 0.1).toFixed(1))) }),
+        action: () =>
+          updateSettings({
+            lineHeight: Math.max(
+              1.2,
+              Number((settings.lineHeight - 0.1).toFixed(1)),
+            ),
+          }),
       },
       {
         label: "Set Tab Size: 2",
@@ -684,55 +781,61 @@ function useFeatures(): Feature[] {
         label: "Font Family: System Mono",
         keywords: ["typography", "font", "system mono"],
         icon: <FileText className="h-4 w-4" />,
-        action: () => updateSettings({
-          fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
-          customFontFamily: null,
-        }),
+        action: () =>
+          updateSettings({
+            fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
+            customFontFamily: null,
+          }),
       },
       {
         label: "Font Family: JetBrains Mono",
         keywords: ["typography", "font", "jetbrains mono"],
         icon: <FileText className="h-4 w-4" />,
-        action: () => updateSettings({
-          fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-          customFontFamily: null,
-        }),
+        action: () =>
+          updateSettings({
+            fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+            customFontFamily: null,
+          }),
       },
       {
         label: "Font Family: Fira Code",
         keywords: ["typography", "font", "fira code"],
         icon: <FileText className="h-4 w-4" />,
-        action: () => updateSettings({
-          fontFamily: "'Fira Code', ui-monospace, monospace",
-          customFontFamily: null,
-        }),
+        action: () =>
+          updateSettings({
+            fontFamily: "'Fira Code', ui-monospace, monospace",
+            customFontFamily: null,
+          }),
       },
       {
         label: "Font Family: Source Code Pro",
         keywords: ["typography", "font", "source code pro"],
         icon: <FileText className="h-4 w-4" />,
-        action: () => updateSettings({
-          fontFamily: "'Source Code Pro', ui-monospace, monospace",
-          customFontFamily: null,
-        }),
+        action: () =>
+          updateSettings({
+            fontFamily: "'Source Code Pro', ui-monospace, monospace",
+            customFontFamily: null,
+          }),
       },
       {
         label: "Font Family: IBM Plex Mono",
         keywords: ["typography", "font", "ibm plex mono"],
         icon: <FileText className="h-4 w-4" />,
-        action: () => updateSettings({
-          fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
-          customFontFamily: null,
-        }),
+        action: () =>
+          updateSettings({
+            fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
+            customFontFamily: null,
+          }),
       },
       {
         label: "Font Family: Sans-serif",
         keywords: ["typography", "font", "sans", "ui sans"],
         icon: <FileText className="h-4 w-4" />,
-        action: () => updateSettings({
-          fontFamily: "var(--font-geist-sans), ui-sans-serif, sans-serif",
-          customFontFamily: null,
-        }),
+        action: () =>
+          updateSettings({
+            fontFamily: "var(--font-geist-sans), ui-sans-serif, sans-serif",
+            customFontFamily: null,
+          }),
       },
       {
         label: "Account: Profile",
@@ -759,28 +862,40 @@ function useFeatures(): Feature[] {
         action: () => updateSettings({ wordWrap: !settings.wordWrap }),
       },
       {
-        label: settings.spellCheck ? "Disable Spell Check" : "Enable Spell Check",
+        label: settings.spellCheck
+          ? "Disable Spell Check"
+          : "Enable Spell Check",
         keywords: ["spell check", "spelling", "settings", "markdown"],
         icon: <FileText className="h-4 w-4" />,
         action: () => updateSettings({ spellCheck: !settings.spellCheck }),
       },
       {
-        label: settings.compactMode ? "Disable Compact Mode" : "Enable Compact Mode",
+        label: settings.compactMode
+          ? "Disable Compact Mode"
+          : "Enable Compact Mode",
         keywords: ["compact", "density", "ui", "settings", "appearance"],
         icon: <PanelLeft className="h-4 w-4" />,
         action: () => updateSettings({ compactMode: !settings.compactMode }),
       },
       {
-        label: settings.highlightCurrentLine ? "Disable Current Line Highlight" : "Enable Current Line Highlight",
+        label: settings.highlightCurrentLine
+          ? "Disable Current Line Highlight"
+          : "Enable Current Line Highlight",
         keywords: ["highlight line", "cursor line", "settings", "editing"],
         icon: <PenLine className="h-4 w-4" />,
-        action: () => updateSettings({ highlightCurrentLine: !settings.highlightCurrentLine }),
+        action: () =>
+          updateSettings({
+            highlightCurrentLine: !settings.highlightCurrentLine,
+          }),
       },
       {
-        label: settings.hideMdExtensions ? "Show .md Extensions" : "Hide .md Extensions",
+        label: settings.hideMdExtensions
+          ? "Show .md Extensions"
+          : "Hide .md Extensions",
         keywords: ["extensions", "filename", "sidebar", "settings"],
         icon: <FileText className="h-4 w-4" />,
-        action: () => updateSettings({ hideMdExtensions: !settings.hideMdExtensions }),
+        action: () =>
+          updateSettings({ hideMdExtensions: !settings.hideMdExtensions }),
       },
       {
         label: settings.promptForTemplateOnNewFile
@@ -788,13 +903,19 @@ function useFeatures(): Feature[] {
           : "Enable New File Template Prompt",
         keywords: ["template", "new file", "new note", "settings"],
         icon: <Plus className="h-4 w-4" />,
-        action: () => updateSettings({ promptForTemplateOnNewFile: !settings.promptForTemplateOnNewFile }),
+        action: () =>
+          updateSettings({
+            promptForTemplateOnNewFile: !settings.promptForTemplateOnNewFile,
+          }),
       },
       {
-        label: settings.showFileExtensions ? "Hide File Extensions" : "Show File Extensions",
+        label: settings.showFileExtensions
+          ? "Hide File Extensions"
+          : "Show File Extensions",
         keywords: ["file extensions", "sidebar", "filenames", "settings"],
         icon: <FileText className="h-4 w-4" />,
-        action: () => updateSettings({ showFileExtensions: !settings.showFileExtensions }),
+        action: () =>
+          updateSettings({ showFileExtensions: !settings.showFileExtensions }),
       },
       {
         label: "Theme Mode: Dark",
@@ -872,13 +993,8 @@ function useFeatures(): Feature[] {
         label: "Replay Tutorial",
         keywords: ["tutorial", "guide", "first run", "help"],
         icon: <RotateCcw className="h-4 w-4" />,
-        action: () => document.dispatchEvent(new CustomEvent(REPLAY_TUTORIAL_EVENT)),
-      },
-      {
-        label: "Rebuild Search Index",
-        keywords: ["search", "index", "rebuild", "settings", "data"],
-        icon: <Search className="h-4 w-4" />,
-        action: () => document.dispatchEvent(new CustomEvent("rebuild-search-index")),
+        action: () =>
+          document.dispatchEvent(new CustomEvent(REPLAY_TUTORIAL_EVENT)),
       },
       {
         label: "Import Files",
@@ -931,14 +1047,17 @@ function useFeatures(): Feature[] {
         icon: <FolderOpen className="h-4 w-4" />,
         action: () => {
           openSettingsSection("data");
-          document.dispatchEvent(new CustomEvent("settings-choose-sync-folder"));
+          document.dispatchEvent(
+            new CustomEvent("settings-choose-sync-folder"),
+          );
         },
       },
       {
         label: "Check for Updates",
         keywords: ["updates", "version", "upgrade", "download"],
         icon: <Timer className="h-4 w-4" />,
-        action: () => document.dispatchEvent(new CustomEvent("check-for-updates")),
+        action: () =>
+          document.dispatchEvent(new CustomEvent("check-for-updates")),
       },
       {
         label: "Open Organisation Panel",
@@ -950,7 +1069,8 @@ function useFeatures(): Feature[] {
         label: "Open Account Panel",
         keywords: ["account", "profile", "sessions", "security", "user"],
         icon: <User className="h-4 w-4" />,
-        action: () => document.dispatchEvent(new CustomEvent("open-user-account")),
+        action: () =>
+          document.dispatchEvent(new CustomEvent("open-user-account")),
       },
       {
         label: "Share Note",
@@ -971,30 +1091,28 @@ function useFeatures(): Feature[] {
         action: () => document.dispatchEvent(new CustomEvent("open-export")),
       },
     ];
-    },
-    [
-      wrapSelection,
-      toggleTheme,
-      setViewMode,
-      requestCreateTab,
-      createWhiteboard,
-      createMindmap,
-      createKanban,
-      createPdf,
-      createFolder,
-      closeTab,
-      toggleFileTree,
-      toggleView,
-      theme,
-      zoomLevel,
-      setZoomLevel,
-      activeTabId,
-      insertLinePrefix,
-      insertSnippet,
-      settings,
-      updateSettings,
-    ]
-  );
+  }, [
+    wrapSelection,
+    toggleTheme,
+    setViewMode,
+    requestCreateTab,
+    createWhiteboard,
+    createMindmap,
+    createKanban,
+    createPdf,
+    createFolder,
+    closeTab,
+    toggleFileTree,
+    toggleView,
+    theme,
+    zoomLevel,
+    setZoomLevel,
+    activeTabId,
+    insertLinePrefix,
+    insertSnippet,
+    settings,
+    updateSettings,
+  ]);
 }
 
 // Text search result
@@ -1006,7 +1124,10 @@ interface TextMatch {
   matchIndex: number;
 }
 
-function searchText(tabs: { id: string; title: string; content: string }[], query: string): TextMatch[] {
+function searchText(
+  tabs: { id: string; title: string; content: string }[],
+  query: string,
+): TextMatch[] {
   const lower = query.toLowerCase();
   const results: TextMatch[] = [];
 
@@ -1042,6 +1163,39 @@ export function SpotlightSearch() {
   const folders = useEditorStore((s) => s.folders);
   const switchTab = useEditorStore((s) => s.switchTab);
   const features = useFeatures();
+  const data = useEditorStore((s) => s.projectData);
+  const workspaceFeatures = useMemo<Feature[]>(
+    () => [
+      ...Object.values(data.projects)
+        .filter(
+          (project) =>
+            project.workspaceId === activeProfileId && !project.archivedAt,
+        )
+        .map((project) => ({
+          label: project.name,
+          keywords: ["project", project.description.toLowerCase()],
+          icon: <FolderOpen className="h-4 w-4" />,
+          action: () =>
+            useEditorStore.getState().navigate("overview", project.id),
+        })),
+      ...Object.values(data.tasks)
+        .filter(
+          (task) =>
+            task.workspaceId === activeProfileId && isTaskVisible(task, data),
+        )
+        .map((task) => ({
+          label: task.title,
+          keywords: [
+            "task",
+            task.description.toLowerCase(),
+            ...task.labels.map((label) => label.toLowerCase()),
+          ],
+          icon: <CheckSquare className="h-4 w-4" />,
+          action: () => useEditorStore.getState().selectTask(task.id),
+        })),
+    ],
+    [data, activeProfileId],
+  );
 
   // Listen for custom event
   useEffect(() => {
@@ -1075,21 +1229,26 @@ export function SpotlightSearch() {
   }, [open]);
 
   const isTextSearch = query.startsWith("?");
-  const textQuery = query.slice(1).trim();
+  const textQuery = (isTextSearch ? query.slice(1) : query).trim();
 
   const workspaceTabs = useMemo(
     () => tabs.filter((tab) => getTabWorkspaceId(tab) === activeProfileId),
-    [tabs, activeProfileId]
+    [tabs, activeProfileId],
   );
   const workspaceFolderIds = useMemo(
-    () => new Set(workspaceTabs.map((tab) => tab.folderId).filter((folderId): folderId is string => Boolean(folderId))),
-    [workspaceTabs]
+    () =>
+      new Set(
+        workspaceTabs
+          .map((tab) => tab.folderId)
+          .filter((folderId): folderId is string => Boolean(folderId)),
+      ),
+    [workspaceTabs],
   );
 
   const textResults = useMemo(() => {
-    if (!isTextSearch || !textQuery) return [];
+    if (!textQuery) return [];
     return searchText(workspaceTabs, textQuery);
-  }, [isTextSearch, textQuery, workspaceTabs]);
+  }, [textQuery, workspaceTabs]);
 
   // File matches: search by filename (shown in default mode when query is non-empty)
   const fileMatches = useMemo(() => {
@@ -1097,7 +1256,7 @@ export function SpotlightSearch() {
     const q = query.toLowerCase().trim();
     if (!q) return [];
     return workspaceTabs.filter((t) =>
-      t.title.toLowerCase().includes(q)
+      `${t.title} ${t.tags.join(" ")}`.toLowerCase().includes(q),
     );
   }, [query, isTextSearch, workspaceTabs]);
 
@@ -1106,8 +1265,8 @@ export function SpotlightSearch() {
     if (isTextSearch) return [];
     const q = query.toLowerCase().trim();
     if (!q) return [];
-    return folders.filter((f) =>
-      workspaceFolderIds.has(f.id) && f.name.toLowerCase().includes(q)
+    return folders.filter(
+      (f) => workspaceFolderIds.has(f.id) && f.name.toLowerCase().includes(q),
     );
   }, [query, isTextSearch, folders, workspaceFolderIds]);
 
@@ -1115,17 +1274,17 @@ export function SpotlightSearch() {
     if (isTextSearch) return [];
     const q = query.toLowerCase().trim();
     if (!q) return features;
-    return features.filter(
+    return [...workspaceFeatures, ...features].filter(
       (f) =>
         f.label.toLowerCase().includes(q) ||
-        f.keywords.some((k) => k.includes(q))
+        f.keywords.some((k) => k.includes(q)),
     );
-  }, [query, isTextSearch, features]);
+  }, [query, isTextSearch, features, workspaceFeatures]);
 
   // Combined items: files first, then folders, then features
   type ResultItem =
-    | { kind: "file"; tab: typeof tabs[0] }
-    | { kind: "folder"; folder: typeof folders[0] }
+    | { kind: "file"; tab: (typeof tabs)[0] }
+    | { kind: "folder"; folder: (typeof folders)[0] }
     | { kind: "feature"; feature: Feature }
     | { kind: "text"; match: TextMatch };
 
@@ -1135,8 +1294,14 @@ export function SpotlightSearch() {
     }
     return [
       ...fileMatches.map((tab) => ({ kind: "file" as const, tab })),
+      ...textResults
+        .slice(0, 12)
+        .map((match) => ({ kind: "text" as const, match })),
       ...folderMatches.map((folder) => ({ kind: "folder" as const, folder })),
-      ...filteredFeatures.map((feature) => ({ kind: "feature" as const, feature })),
+      ...filteredFeatures.map((feature) => ({
+        kind: "feature" as const,
+        feature,
+      })),
     ];
   }, [isTextSearch, textResults, fileMatches, folderMatches, filteredFeatures]);
 
@@ -1154,33 +1319,29 @@ export function SpotlightSearch() {
     active?.scrollIntoView({ block: "nearest" });
   }, [selectedIndex]);
 
-  const toggleFileTree = useEditorStore((s) => s.toggleFileTree);
-  const expandFolderById = useCallback(
-    () => {
-      // Focus the sidebar and open the folder — open the file tree if closed
-      const s = useEditorStore.getState();
-      if (!s.fileTreeOpen) toggleFileTree();
-    },
-    [toggleFileTree]
-  );
-
   const execute = useCallback(
     (index: number) => {
       const item = allItems[index];
-      if (!item) { setOpen(false); return; }
+      if (!item) {
+        setOpen(false);
+        return;
+      }
 
       switch (item.kind) {
         case "text": {
           switchTab(item.match.tabId);
+          useEditorStore.getState().setViewMode("editor");
           const match = item.match;
           const tryScroll = (attempts: number) => {
             const view = useEditorStore.getState().editorView;
             if (view && view.state.doc.lines >= match.lineNumber) {
               const line = view.state.doc.line(
-                Math.min(match.lineNumber, view.state.doc.lines)
+                Math.min(match.lineNumber, view.state.doc.lines),
               );
               view.dispatch({
-                selection: { anchor: line.from + Math.max(0, match.matchIndex) },
+                selection: {
+                  anchor: line.from + Math.max(0, match.matchIndex),
+                },
                 scrollIntoView: true,
               });
               requestAnimationFrame(() => view.focus());
@@ -1195,7 +1356,10 @@ export function SpotlightSearch() {
           switchTab(item.tab.id);
           break;
         case "folder":
-          expandFolderById();
+          useEditorStore.getState().navigate("files");
+          useEditorStore.setState((s) => ({
+            navigation: { ...s.navigation, folderId: item.folder.id },
+          }));
           break;
         case "feature":
           item.feature.action();
@@ -1203,7 +1367,7 @@ export function SpotlightSearch() {
       }
       setOpen(false);
     },
-    [allItems, switchTab, expandFolderById]
+    [allItems, switchTab],
   );
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -1212,7 +1376,9 @@ export function SpotlightSearch() {
       setSelectedIndex((i) => (i + 1) % Math.max(1, totalItems));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setSelectedIndex((i) => (i - 1 + Math.max(1, totalItems)) % Math.max(1, totalItems));
+      setSelectedIndex(
+        (i) => (i - 1 + Math.max(1, totalItems)) % Math.max(1, totalItems),
+      );
     } else if (e.key === "Enter") {
       e.preventDefault();
       execute(selectedIndex);
@@ -1222,18 +1388,16 @@ export function SpotlightSearch() {
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh] sm:pt-[20vh] px-3 sm:px-0"
-      onClick={() => setOpen(false)}
-    >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150" />
-
-      {/* Dialog */}
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-md rounded-lg border border-border bg-popover shadow-2xl animate-in slide-in-from-top-2 fade-in duration-150"
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent
+        className="workbench-search-dialog"
+        showCloseButton={false}
       >
+        <DialogTitle className="sr-only">Search workspace</DialogTitle>
+        <DialogDescription className="sr-only">
+          Search files, text, folders, projects, tasks, and commands. Use arrow
+          keys to choose a result.
+        </DialogDescription>
         {/* Input */}
         <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -1242,7 +1406,7 @@ export function SpotlightSearch() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Search files, features… or ?text"
+            placeholder="Search files, content, and commands…"
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
           />
           <button
@@ -1257,7 +1421,10 @@ export function SpotlightSearch() {
         </div>
 
         {/* Results list */}
-        <div ref={listRef} className="max-h-[50vh] sm:max-h-64 overflow-y-auto p-1">
+        <div
+          ref={listRef}
+          className="max-h-[min(60dvh,480px)] overflow-y-auto p-1"
+        >
           {allItems.length === 0 ? (
             <p className="px-3 py-6 text-center text-xs text-muted-foreground">
               {isTextSearch && !textQuery
@@ -1271,12 +1438,14 @@ export function SpotlightSearch() {
                 "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
                 isActive
                   ? "bg-accent text-accent-foreground"
-                  : "text-foreground hover:bg-muted"
+                  : "text-foreground hover:bg-muted",
               );
 
               switch (item.kind) {
                 case "file": {
-                  const folder = folders.find((f) => f.id === item.tab.folderId);
+                  const folder = folders.find(
+                    (f) => f.id === item.tab.folderId,
+                  );
                   return (
                     <button
                       key={`file-${item.tab.id}`}
@@ -1302,9 +1471,14 @@ export function SpotlightSearch() {
                       onClick={() => execute(i)}
                       className={cls}
                     >
-                      <FolderOpen className="h-3.5 w-3.5 shrink-0" style={{ color: item.folder.color }} />
+                      <FolderOpen
+                        className="h-3.5 w-3.5 shrink-0"
+                        style={{ color: item.folder.color }}
+                      />
                       <span className="truncate">{item.folder.name}</span>
-                      <span className="ml-auto text-[10px] text-muted-foreground/60">folder</span>
+                      <span className="ml-auto text-[10px] text-muted-foreground/60">
+                        folder
+                      </span>
                     </button>
                   );
                 case "feature":
@@ -1315,7 +1489,9 @@ export function SpotlightSearch() {
                       onClick={() => execute(i)}
                       className={cls}
                     >
-                      <span className="text-muted-foreground">{item.feature.icon}</span>
+                      <span className="text-muted-foreground">
+                        {item.feature.icon}
+                      </span>
                       <span>{item.feature.label}</span>
                     </button>
                   );
@@ -1351,16 +1527,22 @@ export function SpotlightSearch() {
         {/* Footer hint */}
         <div className="flex items-center justify-between border-t border-border px-3 py-1.5">
           <span className="text-[10px] text-muted-foreground">
-            {isTextSearch ? "Text search across all files" : "Files, folders & features"}
+            {isTextSearch
+              ? "Text search across all files"
+              : "Files, text, tasks & commands"}
           </span>
           <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-            <kbd className="rounded border border-border bg-muted px-1 py-0.5 font-mono">↑↓</kbd>
+            <kbd className="rounded border border-border bg-muted px-1 py-0.5 font-mono">
+              ↑↓
+            </kbd>
             <span>navigate</span>
-            <kbd className="rounded border border-border bg-muted px-1 py-0.5 font-mono">↵</kbd>
+            <kbd className="rounded border border-border bg-muted px-1 py-0.5 font-mono">
+              ↵
+            </kbd>
             <span>select</span>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

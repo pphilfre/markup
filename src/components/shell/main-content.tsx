@@ -2,11 +2,11 @@
 
 import { useRef, useCallback, useState } from "react";
 import { getTabWorkspaceId, useEditorStore } from "@/lib/store";
-import { MarkdownEditor, MarkdownPreview, InlineMarkdownEditor, RelatedNotesPanel, SelectionToolbar } from "@/components/editor";
+import { MarkdownEditor, MarkdownPreview, InlineMarkdownEditor, SelectionToolbar } from "@/components/editor";
 import { GraphView } from "@/components/shell/graph-view";
 import { WhiteboardView } from "@/components/shell/whiteboard";
 import { MindmapView } from "@/components/shell/mindmap";
-import { KanbanView } from "@/components/shell/kanban";
+import { BoardDocument } from "@/components/workspace/board-document";
 import { PdfEditorView } from "@/components/shell/pdf-editor";
 import { Dashboard } from "@/components/shell/dashboard";
 
@@ -117,7 +117,7 @@ export function MainContent() {
   if (activeTab?.noteType === "kanban") {
     return (
       <main className="flex flex-1 overflow-hidden bg-background">
-        <KanbanView key={activeTabId} />
+        <BoardDocument key={activeTabId} />
       </main>
     );
   }
@@ -141,16 +141,15 @@ export function MainContent() {
   if (viewMode === "split") {
     const ratio = localRatio ?? splitRatio;
     return (
-      <main ref={containerRef} className="flex flex-1 overflow-hidden bg-background" style={editorStyle}>
+      <main ref={containerRef} className="markdown-split-view flex flex-1 overflow-hidden bg-background" style={editorStyle}>
         <SelectionToolbar />
-        <div className="flex flex-col overflow-hidden" style={{ width: `${ratio * 100}%` }}>
+        <div className="markdown-split-source flex flex-col overflow-hidden" style={{ width: `${ratio * 100}%` }}>
           <MarkdownEditor onScroll={onEditorScroll} />
-          <RelatedNotesPanel />
         </div>
         {/* Resize handle */}
         <div
           onMouseDown={onSplitResizeMouseDown}
-          className="w-1 shrink-0 cursor-col-resize bg-border hover:bg-primary/40 active:bg-primary/60 transition-colors z-10"
+          className="markdown-split-handle w-1 shrink-0 cursor-col-resize bg-border hover:bg-primary/40 active:bg-primary/60 transition-colors z-10"
         />
         <div className="flex flex-col overflow-hidden flex-1">
           <MarkdownPreview id="sync-preview" onScroll={onPreviewScroll} />
@@ -165,12 +164,10 @@ export function MainContent() {
       {viewMode === "editor" ? (
         <>
           <MarkdownEditor />
-          <RelatedNotesPanel />
         </>
       ) : viewMode === "inline" ? (
         <>
           <InlineMarkdownEditor />
-          <RelatedNotesPanel />
         </>
       ) : (
         <MarkdownPreview />

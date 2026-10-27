@@ -1,4 +1,5 @@
 "use client";
+import { useFramePointer } from "@/lib/use-frame-pointer";
 
 import {
   useRef,
@@ -169,8 +170,21 @@ const DEFAULT_FILL_COLOR = "transparent";
 const DEFAULT_STROKE_WIDTH = 2;
 
 // Shapes that use width/height
-type SizedShape = "rectangle" | "ellipse" | "diamond" | "triangle" | "star" | "hexagon";
-const SIZED_SHAPES: SizedShape[] = ["rectangle", "ellipse", "diamond", "triangle", "star", "hexagon"];
+type SizedShape =
+  | "rectangle"
+  | "ellipse"
+  | "diamond"
+  | "triangle"
+  | "star"
+  | "hexagon";
+const SIZED_SHAPES: SizedShape[] = [
+  "rectangle",
+  "ellipse",
+  "diamond",
+  "triangle",
+  "star",
+  "hexagon",
+];
 
 function isSizedShape(type: string): type is SizedShape {
   return SIZED_SHAPES.includes(type as SizedShape);
@@ -182,7 +196,7 @@ function screenToCanvas(
   sx: number,
   sy: number,
   pan: Point,
-  zoom: number
+  zoom: number,
 ): Point {
   return {
     x: (sx - pan.x) / zoom,
@@ -193,9 +207,11 @@ function screenToCanvas(
 function pointInPolygon(px: number, py: number, polygon: Point[]): boolean {
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i].x, yi = polygon[i].y;
-    const xj = polygon[j].x, yj = polygon[j].y;
-    if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) {
+    const xi = polygon[i].x,
+      yi = polygon[i].y;
+    const xj = polygon[j].x,
+      yj = polygon[j].y;
+    if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) {
       inside = !inside;
     }
   }
@@ -211,7 +227,12 @@ function getDiamondPoints(x: number, y: number, w: number, h: number): Point[] {
   ];
 }
 
-function getTrianglePoints(x: number, y: number, w: number, h: number): Point[] {
+function getTrianglePoints(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): Point[] {
   return [
     { x: x + w / 2, y },
     { x: x + w, y: y + h },
@@ -241,9 +262,15 @@ function getStarPoints(x: number, y: number, w: number, h: number): Point[] {
   const points: Point[] = [];
   for (let i = 0; i < 5; i++) {
     const outerAngle = (Math.PI / 2) * -1 + (i * 2 * Math.PI) / 5;
-    points.push({ x: cx + outerRx * Math.cos(outerAngle), y: cy + outerRy * Math.sin(outerAngle) });
+    points.push({
+      x: cx + outerRx * Math.cos(outerAngle),
+      y: cy + outerRy * Math.sin(outerAngle),
+    });
     const innerAngle = outerAngle + Math.PI / 5;
-    points.push({ x: cx + innerRx * Math.cos(innerAngle), y: cy + innerRy * Math.sin(innerAngle) });
+    points.push({
+      x: cx + innerRx * Math.cos(innerAngle),
+      y: cy + innerRy * Math.sin(innerAngle),
+    });
   }
   return points;
 }
@@ -252,7 +279,7 @@ function hitTest(
   el: WhiteboardElement,
   cx: number,
   cy: number,
-  tolerance = 6
+  tolerance = 6,
 ): boolean {
   switch (el.type) {
     case "rectangle":
@@ -267,18 +294,52 @@ function hitTest(
       const ry = el.height / 2;
       const dx = cx - (el.x + rx);
       const dy = cy - (el.y + ry);
-      return (dx * dx) / ((rx + tolerance) * (rx + tolerance)) +
-        (dy * dy) / ((ry + tolerance) * (ry + tolerance)) <= 1;
+      return (
+        (dx * dx) / ((rx + tolerance) * (rx + tolerance)) +
+          (dy * dy) / ((ry + tolerance) * (ry + tolerance)) <=
+        1
+      );
     }
     case "diamond":
-      return pointInPolygon(cx, cy, getDiamondPoints(el.x - tolerance, el.y - tolerance, el.width + tolerance * 2, el.height + tolerance * 2));
+      return pointInPolygon(
+        cx,
+        cy,
+        getDiamondPoints(
+          el.x - tolerance,
+          el.y - tolerance,
+          el.width + tolerance * 2,
+          el.height + tolerance * 2,
+        ),
+      );
     case "triangle":
-      return pointInPolygon(cx, cy, getTrianglePoints(el.x - tolerance, el.y - tolerance, el.width + tolerance * 2, el.height + tolerance * 2));
+      return pointInPolygon(
+        cx,
+        cy,
+        getTrianglePoints(
+          el.x - tolerance,
+          el.y - tolerance,
+          el.width + tolerance * 2,
+          el.height + tolerance * 2,
+        ),
+      );
     case "star":
-      return cx >= el.x - tolerance && cx <= el.x + el.width + tolerance &&
-        cy >= el.y - tolerance && cy <= el.y + el.height + tolerance;
+      return (
+        cx >= el.x - tolerance &&
+        cx <= el.x + el.width + tolerance &&
+        cy >= el.y - tolerance &&
+        cy <= el.y + el.height + tolerance
+      );
     case "hexagon":
-      return pointInPolygon(cx, cy, getHexagonPoints(el.x - tolerance, el.y - tolerance, el.width + tolerance * 2, el.height + tolerance * 2));
+      return pointInPolygon(
+        cx,
+        cy,
+        getHexagonPoints(
+          el.x - tolerance,
+          el.y - tolerance,
+          el.width + tolerance * 2,
+          el.height + tolerance * 2,
+        ),
+      );
     case "line":
     case "arrow": {
       const el2 = el as LineElement | ArrowElement;
@@ -315,7 +376,12 @@ function hitTest(
 
 // ── Render helpers ────────────────────────────────────────────────────────
 
-function drawPolygon(ctx: CanvasRenderingContext2D, points: Point[], fill: string, stroke: string) {
+function drawPolygon(
+  ctx: CanvasRenderingContext2D,
+  points: Point[],
+  fill: string,
+  stroke: string,
+) {
   ctx.beginPath();
   ctx.moveTo(points[0].x, points[0].y);
   for (let i = 1; i < points.length; i++) {
@@ -349,26 +415,54 @@ function drawElement(ctx: CanvasRenderingContext2D, el: WhiteboardElement) {
       const rx = el.width / 2;
       const ry = el.height / 2;
       ctx.beginPath();
-      ctx.ellipse(el.x + rx, el.y + ry, Math.abs(rx), Math.abs(ry), 0, 0, Math.PI * 2);
+      ctx.ellipse(
+        el.x + rx,
+        el.y + ry,
+        Math.abs(rx),
+        Math.abs(ry),
+        0,
+        0,
+        Math.PI * 2,
+      );
       if (el.fillColor !== "transparent") ctx.fill();
       ctx.stroke();
       break;
     }
 
     case "diamond":
-      drawPolygon(ctx, getDiamondPoints(el.x, el.y, el.width, el.height), el.fillColor, el.strokeColor);
+      drawPolygon(
+        ctx,
+        getDiamondPoints(el.x, el.y, el.width, el.height),
+        el.fillColor,
+        el.strokeColor,
+      );
       break;
 
     case "triangle":
-      drawPolygon(ctx, getTrianglePoints(el.x, el.y, el.width, el.height), el.fillColor, el.strokeColor);
+      drawPolygon(
+        ctx,
+        getTrianglePoints(el.x, el.y, el.width, el.height),
+        el.fillColor,
+        el.strokeColor,
+      );
       break;
 
     case "star":
-      drawPolygon(ctx, getStarPoints(el.x, el.y, el.width, el.height), el.fillColor, el.strokeColor);
+      drawPolygon(
+        ctx,
+        getStarPoints(el.x, el.y, el.width, el.height),
+        el.fillColor,
+        el.strokeColor,
+      );
       break;
 
     case "hexagon":
-      drawPolygon(ctx, getHexagonPoints(el.x, el.y, el.width, el.height), el.fillColor, el.strokeColor);
+      drawPolygon(
+        ctx,
+        getHexagonPoints(el.x, el.y, el.width, el.height),
+        el.fillColor,
+        el.strokeColor,
+      );
       break;
 
     case "line":
@@ -390,12 +484,12 @@ function drawElement(ctx: CanvasRenderingContext2D, el: WhiteboardElement) {
       ctx.moveTo(el.x2, el.y2);
       ctx.lineTo(
         el.x2 - headLen * Math.cos(angle - Math.PI / 6),
-        el.y2 - headLen * Math.sin(angle - Math.PI / 6)
+        el.y2 - headLen * Math.sin(angle - Math.PI / 6),
       );
       ctx.moveTo(el.x2, el.y2);
       ctx.lineTo(
         el.x2 - headLen * Math.cos(angle + Math.PI / 6),
-        el.y2 - headLen * Math.sin(angle + Math.PI / 6)
+        el.y2 - headLen * Math.sin(angle + Math.PI / 6),
       );
       ctx.stroke();
       break;
@@ -444,7 +538,12 @@ function getElementBounds(el: WhiteboardElement): {
     case "triangle":
     case "star":
     case "hexagon":
-      return { x: el.x, y: el.y, w: (el as RectElement).width, h: (el as RectElement).height };
+      return {
+        x: el.x,
+        y: el.y,
+        w: (el as RectElement).width,
+        h: (el as RectElement).height,
+      };
     case "line":
     case "arrow": {
       const el2 = el as LineElement | ArrowElement;
@@ -459,7 +558,10 @@ function getElementBounds(el: WhiteboardElement): {
     }
     case "pen": {
       if (el.points.length === 0) return { x: el.x, y: el.y, w: 0, h: 0 };
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
       for (const p of el.points) {
         if (p.x < minX) minX = p.x;
         if (p.y < minY) minY = p.y;
@@ -485,7 +587,7 @@ function drawGrid(
   width: number,
   height: number,
   gridSize: number,
-  isDark: boolean
+  isDark: boolean,
 ) {
   ctx.save();
   ctx.strokeStyle = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)";
@@ -543,9 +645,18 @@ function WhiteboardSettingsPanel({
   ];
 
   const colorPresets = [
-    "#e2e8f0", "#94a3b8", "#ffffff", "#000000",
-    "#ef4444", "#f97316", "#eab308", "#22c55e",
-    "#3b82f6", "#8b5cf6", "#ec4899", "#14b8a6",
+    "#e2e8f0",
+    "#94a3b8",
+    "#ffffff",
+    "#000000",
+    "#ef4444",
+    "#f97316",
+    "#eab308",
+    "#22c55e",
+    "#3b82f6",
+    "#8b5cf6",
+    "#ec4899",
+    "#14b8a6",
   ];
 
   return (
@@ -562,7 +673,9 @@ function WhiteboardSettingsPanel({
 
       {/* Stroke color */}
       <div className="space-y-1.5">
-        <label className="text-[11px] text-muted-foreground">Stroke Color</label>
+        <label className="text-[11px] text-muted-foreground">
+          Stroke Color
+        </label>
         <div className="flex flex-wrap gap-1.5">
           {colorPresets.map((c) => (
             <button
@@ -570,7 +683,9 @@ function WhiteboardSettingsPanel({
               onClick={() => onStrokeColorChange(c)}
               className={cn(
                 "h-5 w-5 rounded-full border-2 transition-transform hover:scale-110",
-                strokeColor === c ? "border-blue-500 scale-110" : "border-transparent"
+                strokeColor === c
+                  ? "border-blue-500 scale-110"
+                  : "border-transparent",
               )}
               style={{ background: c }}
             />
@@ -597,10 +712,13 @@ function WhiteboardSettingsPanel({
             onClick={() => onFillColorChange("transparent")}
             className={cn(
               "h-5 w-5 rounded-full border-2 transition-transform hover:scale-110 bg-transparent",
-              fillColor === "transparent" ? "border-blue-500 scale-110" : "border-muted-foreground/30"
+              fillColor === "transparent"
+                ? "border-blue-500 scale-110"
+                : "border-muted-foreground/30",
             )}
             style={{
-              background: "repeating-conic-gradient(#808080 0% 25%, transparent 0% 50%) 50%/8px 8px",
+              background:
+                "repeating-conic-gradient(#808080 0% 25%, transparent 0% 50%) 50%/8px 8px",
             }}
             title="Transparent"
           />
@@ -610,7 +728,9 @@ function WhiteboardSettingsPanel({
               onClick={() => onFillColorChange(c)}
               className={cn(
                 "h-5 w-5 rounded-full border-2 transition-transform hover:scale-110",
-                fillColor === c ? "border-blue-500 scale-110" : "border-transparent"
+                fillColor === c
+                  ? "border-blue-500 scale-110"
+                  : "border-transparent",
               )}
               style={{ background: c }}
             />
@@ -620,7 +740,9 @@ function WhiteboardSettingsPanel({
 
       {/* Stroke width */}
       <div className="space-y-1.5">
-        <label className="text-[11px] text-muted-foreground">Stroke Width</label>
+        <label className="text-[11px] text-muted-foreground">
+          Stroke Width
+        </label>
         <div className="flex items-center gap-2">
           <input
             type="range"
@@ -631,7 +753,9 @@ function WhiteboardSettingsPanel({
             onChange={(e) => onStrokeWidthChange(Number(e.target.value))}
             className="flex-1 h-1.5 accent-primary cursor-pointer"
           />
-          <span className="text-[11px] text-muted-foreground w-6 text-right">{strokeWidth}px</span>
+          <span className="text-[11px] text-muted-foreground w-6 text-right">
+            {strokeWidth}px
+          </span>
         </div>
       </div>
 
@@ -647,7 +771,7 @@ function WhiteboardSettingsPanel({
                 "h-5 w-5 rounded-full border-2 transition-transform hover:scale-110",
                 settings.backgroundColor === opt.value
                   ? "border-blue-500 scale-110"
-                  : "border-muted-foreground/30"
+                  : "border-muted-foreground/30",
               )}
               style={{
                 background:
@@ -668,13 +792,13 @@ function WhiteboardSettingsPanel({
           onClick={() => onChange({ showGrid: !settings.showGrid })}
           className={cn(
             "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors",
-            settings.showGrid ? "bg-primary" : "bg-muted"
+            settings.showGrid ? "bg-primary" : "bg-muted",
           )}
         >
           <span
             className={cn(
               "pointer-events-none block h-2.5 w-2.5 rounded-full bg-background shadow-sm transition-transform",
-              settings.showGrid ? "translate-x-3" : "translate-x-0.5"
+              settings.showGrid ? "translate-x-3" : "translate-x-0.5",
             )}
           />
         </button>
@@ -687,13 +811,13 @@ function WhiteboardSettingsPanel({
           onClick={() => onChange({ snapToGrid: !settings.snapToGrid })}
           className={cn(
             "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors",
-            settings.snapToGrid ? "bg-primary" : "bg-muted"
+            settings.snapToGrid ? "bg-primary" : "bg-muted",
           )}
         >
           <span
             className={cn(
               "pointer-events-none block h-2.5 w-2.5 rounded-full bg-background shadow-sm transition-transform",
-              settings.snapToGrid ? "translate-x-3" : "translate-x-0.5"
+              settings.snapToGrid ? "translate-x-3" : "translate-x-0.5",
             )}
           />
         </button>
@@ -767,28 +891,53 @@ function WhiteboardContextMenu({
       style={{ left: position.x, top: position.y }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <WhiteboardContextMenuItem onClick={onCopy} onClose={onClose} disabled={!hasSelection}>
+      <WhiteboardContextMenuItem
+        onClick={onCopy}
+        onClose={onClose}
+        disabled={!hasSelection}
+      >
         <Copy className="h-3.5 w-3.5" /> Copy
       </WhiteboardContextMenuItem>
-      <WhiteboardContextMenuItem onClick={onPaste} onClose={onClose} disabled={!clipboardHasItems}>
+      <WhiteboardContextMenuItem
+        onClick={onPaste}
+        onClose={onClose}
+        disabled={!clipboardHasItems}
+      >
         <Clipboard className="h-3.5 w-3.5" /> Paste
       </WhiteboardContextMenuItem>
-      <WhiteboardContextMenuItem onClick={onDuplicate} onClose={onClose} disabled={!hasSelection}>
+      <WhiteboardContextMenuItem
+        onClick={onDuplicate}
+        onClose={onClose}
+        disabled={!hasSelection}
+      >
         <Layers className="h-3.5 w-3.5" /> Duplicate
       </WhiteboardContextMenuItem>
       <div className="my-1 h-px bg-border" />
-      <WhiteboardContextMenuItem onClick={onBringToFront} onClose={onClose} disabled={!hasSelection}>
+      <WhiteboardContextMenuItem
+        onClick={onBringToFront}
+        onClose={onClose}
+        disabled={!hasSelection}
+      >
         <ArrowUp className="h-3.5 w-3.5" /> Bring to Front
       </WhiteboardContextMenuItem>
-      <WhiteboardContextMenuItem onClick={onSendToBack} onClose={onClose} disabled={!hasSelection}>
+      <WhiteboardContextMenuItem
+        onClick={onSendToBack}
+        onClose={onClose}
+        disabled={!hasSelection}
+      >
         <ArrowDown className="h-3.5 w-3.5" /> Send to Back
       </WhiteboardContextMenuItem>
       <div className="my-1 h-px bg-border" />
       <WhiteboardContextMenuItem onClick={onSelectAll} onClose={onClose}>
         <MousePointer2 className="h-3.5 w-3.5" /> Select All
       </WhiteboardContextMenuItem>
-      <WhiteboardContextMenuItem onClick={onDelete} onClose={onClose} disabled={!hasSelection}>
-        <Trash2 className="h-3.5 w-3.5 text-destructive" /> <span className="text-destructive">Delete</span>
+      <WhiteboardContextMenuItem
+        onClick={onDelete}
+        onClose={onClose}
+        disabled={!hasSelection}
+      >
+        <Trash2 className="h-3.5 w-3.5 text-destructive" />{" "}
+        <span className="text-destructive">Delete</span>
       </WhiteboardContextMenuItem>
     </div>
   );
@@ -803,7 +952,9 @@ export function WhiteboardView() {
 
   // Tab-based persistence
   const activeTabId = useEditorStore((s) => s.activeTabId);
-  const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
+  const activeTab = useEditorStore((s) =>
+    s.tabs.find((t) => t.id === s.activeTabId),
+  );
   const updateContent = useEditorStore((s) => s.updateContent);
 
   // Canvas transform state
@@ -832,7 +983,9 @@ export function WhiteboardView() {
     try {
       const data = JSON.parse(activeTab.content);
       const nextElements =
-        data.elements && Array.isArray(data.elements) && data.elements.length > 0
+        data.elements &&
+        Array.isArray(data.elements) &&
+        data.elements.length > 0
           ? (data.elements as WhiteboardElement[])
           : null;
       const nextCanvasSettings =
@@ -841,10 +994,14 @@ export function WhiteboardView() {
           : null;
       queueMicrotask(() => {
         if (nextElements) setElements(nextElements);
-        if (nextCanvasSettings) setCanvasSettings((prev) => ({ ...prev, ...nextCanvasSettings }));
-        if (Array.isArray(data.linkedTabIds)) setLinkedTabIds(data.linkedTabIds);
+        if (nextCanvasSettings)
+          setCanvasSettings((prev) => ({ ...prev, ...nextCanvasSettings }));
+        if (Array.isArray(data.linkedTabIds))
+          setLinkedTabIds(data.linkedTabIds);
       });
-    } catch { /* ignore parse errors - might be empty/new */ }
+    } catch {
+      /* ignore parse errors - might be empty/new */
+    }
   }, [activeTab]);
 
   // Detect dark mode
@@ -964,7 +1121,8 @@ export function WhiteboardView() {
 
   const handleCopy = useCallback(() => {
     const selected = elements.filter((el) => el.selected);
-    if (selected.length > 0) setClipboard(selected.map((el) => ({ ...el, selected: false })));
+    if (selected.length > 0)
+      setClipboard(selected.map((el) => ({ ...el, selected: false })));
   }, [elements]);
 
   const handlePaste = useCallback(() => {
@@ -978,13 +1136,24 @@ export function WhiteboardView() {
       y: el.y + offset,
       selected: true,
       ...(el.type === "line" || el.type === "arrow"
-        ? { x2: (el as LineElement | ArrowElement).x2 + offset, y2: (el as LineElement | ArrowElement).y2 + offset }
+        ? {
+            x2: (el as LineElement | ArrowElement).x2 + offset,
+            y2: (el as LineElement | ArrowElement).y2 + offset,
+          }
         : {}),
       ...(el.type === "pen"
-        ? { points: (el as PenElement).points.map((p) => ({ x: p.x + offset, y: p.y + offset })) }
+        ? {
+            points: (el as PenElement).points.map((p) => ({
+              x: p.x + offset,
+              y: p.y + offset,
+            })),
+          }
         : {}),
     }));
-    setElements((prev) => [...prev.map((el) => ({ ...el, selected: false })), ...pasted as WhiteboardElement[]]);
+    setElements((prev) => [
+      ...prev.map((el) => ({ ...el, selected: false })),
+      ...(pasted as WhiteboardElement[]),
+    ]);
   }, [clipboard, pushUndo]);
 
   const handleDuplicate = useCallback(() => {
@@ -999,13 +1168,24 @@ export function WhiteboardView() {
       y: el.y + offset,
       selected: true,
       ...(el.type === "line" || el.type === "arrow"
-        ? { x2: (el as LineElement | ArrowElement).x2 + offset, y2: (el as LineElement | ArrowElement).y2 + offset }
+        ? {
+            x2: (el as LineElement | ArrowElement).x2 + offset,
+            y2: (el as LineElement | ArrowElement).y2 + offset,
+          }
         : {}),
       ...(el.type === "pen"
-        ? { points: (el as PenElement).points.map((p) => ({ x: p.x + offset, y: p.y + offset })) }
+        ? {
+            points: (el as PenElement).points.map((p) => ({
+              x: p.x + offset,
+              y: p.y + offset,
+            })),
+          }
         : {}),
     }));
-    setElements((prev) => [...prev.map((el) => ({ ...el, selected: false })), ...duped as WhiteboardElement[]]);
+    setElements((prev) => [
+      ...prev.map((el) => ({ ...el, selected: false })),
+      ...(duped as WhiteboardElement[]),
+    ]);
   }, [elements, pushUndo]);
 
   const handleDelete = useCallback(() => {
@@ -1038,15 +1218,17 @@ export function WhiteboardView() {
   }, []);
 
   const handleLinkBoard = useCallback(() => {
-    document.dispatchEvent(new CustomEvent(OPEN_LINK_PICKER_EVENT, {
-      detail: {
-        title: "Link board",
-        description: "Link this whiteboard to a file.",
-        onPick: (tabId: string) => {
-          setLinkedTabIds((prev) => Array.from(new Set([...prev, tabId])));
+    document.dispatchEvent(
+      new CustomEvent(OPEN_LINK_PICKER_EVENT, {
+        detail: {
+          title: "Link board",
+          description: "Link this whiteboard to a file.",
+          onPick: (tabId: string) => {
+            setLinkedTabIds((prev) => Array.from(new Set([...prev, tabId])));
+          },
         },
-      },
-    }));
+      }),
+    );
   }, []);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────
@@ -1106,7 +1288,16 @@ export function WhiteboardView() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [undo, redo, elements, pushUndo, handleCopy, handlePaste, handleDuplicate, handleSelectAll]);
+  }, [
+    undo,
+    redo,
+    elements,
+    pushUndo,
+    handleCopy,
+    handlePaste,
+    handleDuplicate,
+    handleSelectAll,
+  ]);
 
   // ── Zoom ──────────────────────────────────────────────────────────────
 
@@ -1124,7 +1315,7 @@ export function WhiteboardView() {
         return newZoom;
       });
     },
-    []
+    [],
   );
 
   const resetView = useCallback(() => {
@@ -1159,9 +1350,11 @@ export function WhiteboardView() {
   const snap = useCallback(
     (val: number) => {
       if (!canvasSettings.snapToGrid) return val;
-      return Math.round(val / canvasSettings.gridSize) * canvasSettings.gridSize;
+      return (
+        Math.round(val / canvasSettings.gridSize) * canvasSettings.gridSize
+      );
     },
-    [canvasSettings.snapToGrid, canvasSettings.gridSize]
+    [canvasSettings.snapToGrid, canvasSettings.gridSize],
   );
 
   // ── Pointer handlers ──────────────────────────────────────────────────
@@ -1179,7 +1372,7 @@ export function WhiteboardView() {
       const sy = e.clientY - rect.top;
       const cp = screenToCanvas(sx, sy, pan, zoom);
 
-      if (activeTool === "pan" || (e.button === 1)) {
+      if (activeTool === "pan" || e.button === 1) {
         // Middle click or pan tool
         isPanningRef.current = true;
         panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
@@ -1206,7 +1399,7 @@ export function WhiteboardView() {
             const hitId = hit.id;
             pushUndo();
             setElements((prev) =>
-              prev.map((el) => ({ ...el, selected: el.id === hitId }))
+              prev.map((el) => ({ ...el, selected: el.id === hitId })),
             );
           }
           dragOffsetRef.current = { x: cp.x - hit.x, y: cp.y - hit.y };
@@ -1257,13 +1450,33 @@ export function WhiteboardView() {
       } else {
         switch (activeTool) {
           case "line":
-            newEl = { ...baseEl, type: "line", x: snap(cp.x), y: snap(cp.y), x2: snap(cp.x), y2: snap(cp.y) };
+            newEl = {
+              ...baseEl,
+              type: "line",
+              x: snap(cp.x),
+              y: snap(cp.y),
+              x2: snap(cp.x),
+              y2: snap(cp.y),
+            };
             break;
           case "arrow":
-            newEl = { ...baseEl, type: "arrow", x: snap(cp.x), y: snap(cp.y), x2: snap(cp.x), y2: snap(cp.y) };
+            newEl = {
+              ...baseEl,
+              type: "arrow",
+              x: snap(cp.x),
+              y: snap(cp.y),
+              x2: snap(cp.x),
+              y2: snap(cp.y),
+            };
             break;
           case "pen":
-            newEl = { ...baseEl, type: "pen", x: snap(cp.x), y: snap(cp.y), points: [{ x: snap(cp.x), y: snap(cp.y) }] };
+            newEl = {
+              ...baseEl,
+              type: "pen",
+              x: snap(cp.x),
+              y: snap(cp.y),
+              points: [{ x: snap(cp.x), y: snap(cp.y) }],
+            };
             break;
           default:
             return;
@@ -1273,7 +1486,17 @@ export function WhiteboardView() {
       currentElementRef.current = newEl;
       setElements((prev) => [...prev, newEl]);
     },
-    [activeTool, pan, zoom, elements, strokeColor, fillColor, strokeWidth, snap, pushUndo]
+    [
+      activeTool,
+      pan,
+      zoom,
+      elements,
+      strokeColor,
+      fillColor,
+      strokeWidth,
+      snap,
+      pushUndo,
+    ],
   );
 
   const handlePointerMove = useCallback(
@@ -1319,7 +1542,7 @@ export function WhiteboardView() {
               };
             }
             return { ...el, x: nx, y: ny };
-          })
+          }),
         );
         return;
       }
@@ -1348,47 +1571,46 @@ export function WhiteboardView() {
             default:
               return el;
           }
-        })
+        }),
       );
     },
-    [activeTool, pan, zoom, snap]
+    [activeTool, pan, zoom, snap],
   );
 
-  const handlePointerUp = useCallback(
-    () => {
-      if (isPanningRef.current) {
-        isPanningRef.current = false;
-        return;
-      }
+  const framePointer = useFramePointer(handlePointerMove, activeTool === "pen");
 
-      // Normalize negative-sized shapes
-      if (currentElementRef.current) {
-        const cur = currentElementRef.current;
-        if (isSizedShape(cur.type)) {
-          setElements((prev) =>
-            prev.map((el) => {
-              if (el.id !== cur.id) return el;
-              const r = el as RectElement;
-              let { x, y, width, height } = r;
-              if (width < 0) {
-                x += width;
-                width = -width;
-              }
-              if (height < 0) {
-                y += height;
-                height = -height;
-              }
-              return { ...r, x, y, width, height };
-            })
-          );
-        }
-      }
+  const handlePointerUp = useCallback(() => {
+    if (isPanningRef.current) {
+      isPanningRef.current = false;
+      return;
+    }
 
-      drawingRef.current = false;
-      currentElementRef.current = null;
-    },
-    []
-  );
+    // Normalize negative-sized shapes
+    if (currentElementRef.current) {
+      const cur = currentElementRef.current;
+      if (isSizedShape(cur.type)) {
+        setElements((prev) =>
+          prev.map((el) => {
+            if (el.id !== cur.id) return el;
+            const r = el as RectElement;
+            let { x, y, width, height } = r;
+            if (width < 0) {
+              x += width;
+              width = -width;
+            }
+            if (height < 0) {
+              y += height;
+              height = -height;
+            }
+            return { ...r, x, y, width, height };
+          }),
+        );
+      }
+    }
+
+    drawingRef.current = false;
+    currentElementRef.current = null;
+  }, []);
 
   // ── Context menu handler ──────────────────────────────────────────────
 
@@ -1402,7 +1624,7 @@ export function WhiteboardView() {
         y: Math.min(e.clientY - rect.top, rect.height - 280),
       });
     },
-    []
+    [],
   );
 
   // ── Text input commit ─────────────────────────────────────────────────
@@ -1498,7 +1720,7 @@ export function WhiteboardView() {
 
     let animId: number;
     const render = () => {
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const w = container.clientWidth;
       const h = container.clientHeight;
 
@@ -1536,17 +1758,29 @@ export function WhiteboardView() {
       }
 
       ctx.restore();
-
-      animId = requestAnimationFrame(render);
     };
 
-    render();
-    return () => cancelAnimationFrame(animId);
+    const scheduleRender = () => {
+      cancelAnimationFrame(animId);
+      animId = requestAnimationFrame(render);
+    };
+    const observer = new ResizeObserver(scheduleRender);
+    observer.observe(container);
+    scheduleRender();
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(animId);
+    };
   }, [elements, pan, zoom, canvasSettings, isDark]);
 
   // ── Tool buttons config ───────────────────────────────────────────────
 
-  const tools: { tool: Tool; icon: typeof MousePointer2; label: string; shortcut: string }[] = [
+  const tools: {
+    tool: Tool;
+    icon: typeof MousePointer2;
+    label: string;
+    shortcut: string;
+  }[] = [
     { tool: "select", icon: MousePointer2, label: "Select", shortcut: "V" },
     { tool: "pan", icon: Hand, label: "Pan", shortcut: "H" },
     { tool: "rectangle", icon: Square, label: "Rectangle", shortcut: "R" },
@@ -1577,19 +1811,28 @@ export function WhiteboardView() {
   })();
 
   return (
-    <div ref={containerRef} className="relative flex-1 overflow-hidden bg-background">
+    <div
+      ref={containerRef}
+      className="markup-canvas relative flex-1 overflow-hidden bg-background"
+    >
       {/* Canvas */}
       <canvas
         ref={canvasRef}
+        aria-label="Whiteboard canvas"
         className={cn("absolute inset-0", cursorClass)}
         onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
+        onPointerMove={framePointer.push}
+        onPointerUp={() => {
+          framePointer.flush();
+          handlePointerUp();
+        }}
+        onPointerCancel={() => {
+          framePointer.flush();
+          handlePointerUp();
+        }}
         onContextMenu={handleContextMenu}
         style={{ touchAction: "none" }}
       />
-
-      
 
       {/* Text input overlay */}
       {textInput?.visible && (
@@ -1638,19 +1881,26 @@ export function WhiteboardView() {
           <Tooltip key={tool}>
             <TooltipTrigger asChild>
               <button
+                aria-label={label}
+                aria-pressed={activeTool === tool}
                 onClick={() => setActiveTool(tool)}
                 className={cn(
                   "flex h-8 w-8 items-center justify-center rounded-md transition-colors",
                   activeTool === tool
                     ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted",
                 )}
               >
                 <Icon className="h-4 w-4" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              {label} {shortcut && <kbd className="ml-1 text-[10px] font-mono opacity-60">{shortcut}</kbd>}
+              {label}{" "}
+              {shortcut && (
+                <kbd className="ml-1 text-[10px] font-mono opacity-60">
+                  {shortcut}
+                </kbd>
+              )}
             </TooltipContent>
           </Tooltip>
         ))}
@@ -1661,6 +1911,7 @@ export function WhiteboardView() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Undo"
               onClick={undo}
               disabled={undoStack.length === 0}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 transition-colors"
@@ -1668,12 +1919,16 @@ export function WhiteboardView() {
               <Undo2 className="h-4 w-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">Undo <kbd className="ml-1 text-[10px] font-mono opacity-60">Ctrl+Z</kbd></TooltipContent>
+          <TooltipContent side="bottom">
+            Undo{" "}
+            <kbd className="ml-1 text-[10px] font-mono opacity-60">Ctrl+Z</kbd>
+          </TooltipContent>
         </Tooltip>
 
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Redo"
               onClick={redo}
               disabled={redoStack.length === 0}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 transition-colors"
@@ -1681,7 +1936,10 @@ export function WhiteboardView() {
               <Redo2 className="h-4 w-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">Redo <kbd className="ml-1 text-[10px] font-mono opacity-60">Ctrl+Y</kbd></TooltipContent>
+          <TooltipContent side="bottom">
+            Redo{" "}
+            <kbd className="ml-1 text-[10px] font-mono opacity-60">Ctrl+Y</kbd>
+          </TooltipContent>
         </Tooltip>
 
         <div className="mx-0.5 h-5 w-px bg-border" />
@@ -1689,6 +1947,7 @@ export function WhiteboardView() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Zoom in"
               onClick={() => handleZoom(0.1)}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
@@ -1705,6 +1964,7 @@ export function WhiteboardView() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Zoom out"
               onClick={() => handleZoom(-0.1)}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
@@ -1717,6 +1977,7 @@ export function WhiteboardView() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Reset view"
               onClick={resetView}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
@@ -1731,6 +1992,7 @@ export function WhiteboardView() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Link board"
               onClick={() => handleLinkBoard()}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
@@ -1745,6 +2007,7 @@ export function WhiteboardView() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Export as PNG"
               onClick={exportAsImage}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
@@ -1757,6 +2020,7 @@ export function WhiteboardView() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Clear canvas"
               onClick={clearCanvas}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
@@ -1769,12 +2033,13 @@ export function WhiteboardView() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Canvas settings"
               onClick={() => setSettingsOpen(!settingsOpen)}
               className={cn(
                 "flex h-8 w-8 items-center justify-center rounded-md transition-colors",
                 settingsOpen
                   ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted",
               )}
             >
               <Settings className="h-4 w-4" />

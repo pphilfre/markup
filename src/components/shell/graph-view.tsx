@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import { useEditorStore } from "@/lib/store";
+import { extractDocumentIds } from "@/lib/document-links";
 import { extractBacklinks } from "@/components/editor/markdown-preview";
 import {
   forceSimulation,
@@ -218,7 +219,11 @@ function ToggleRow({
 export function GraphView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const tabs = useEditorStore((s) => s.tabs);
+  const allTabs = useEditorStore((s) => s.tabs);
+  const workspaceId = useEditorStore((s) => s.activeProfileId);
+  const projectId = useEditorStore((s) => s.navigation.projectId);
+  const documentMeta = useEditorStore((s) => s.projectData.documents);
+  const tabs = useMemo(() => allTabs.filter((tab) => (tab.workspaceId ?? "default") === workspaceId && (!projectId || documentMeta[tab.id]?.projectId === projectId)), [allTabs, workspaceId, projectId, documentMeta]);
   const updateContent = useEditorStore((s) => s.updateContent);
   const switchTab = useEditorStore((s) => s.switchTab);
   const theme = useEditorStore((s) => s.theme);
@@ -285,12 +290,12 @@ export function GraphView() {
 
     const graphLinks: GraphLink[] = [];
     tabs.forEach((tab) => {
-      const refs = extractBacklinks(tab.content);
+      const refs = [...extractBacklinks(tab.content), ...extractDocumentIds(tab.content)];
       refs.forEach((ref) => {
         const target = tabs.find((t) => {
           const tTitle = t.title.replace(/\.md$/, "");
           return (
-            tTitle.toLowerCase() === ref.toLowerCase() ||
+            t.id === ref || tTitle.toLowerCase() === ref.toLowerCase() ||
             t.title.toLowerCase() === ref.toLowerCase()
           );
         });

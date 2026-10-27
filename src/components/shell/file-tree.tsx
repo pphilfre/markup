@@ -2337,12 +2337,13 @@ function LocalFilesDrawer({
 }
 
 // ── Main FileTree component ───────────────────────────────────────────────
-export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobileClose?: () => void } = {}) {
+export function FileTree({ mobile, onMobileClose, embedded, projectScope }: { mobile?: boolean; onMobileClose?: () => void; embedded?: boolean; projectScope?: string } = {}) {
   const fileTreeOpen = useEditorStore((s) => s.fileTreeOpen);
   const toggleFileTree = useEditorStore((s) => s.toggleFileTree);
   const fileTreeWidth = useEditorStore((s) => s.settings.fileTreeWidth);
   const updateSettings = useEditorStore((s) => s.updateSettings);
   const tabs = useEditorStore((s) => s.tabs);
+  const documentMeta = useEditorStore((s) => s.projectData.documents);
   const activeProfileId = useEditorStore((s) => s.activeProfileId);
   const folders = useEditorStore((s) => s.folders);
   const createFolder = useEditorStore((s) => s.createFolder);
@@ -2351,7 +2352,8 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
   const createMindmap = useEditorStore((s) => s.createMindmap);
   const createKanban = useEditorStore((s) => s.createKanban);
   const createPdf = useEditorStore((s) => s.createPdf);
-  const switchTab = useEditorStore((s) => s.switchTab);
+  const selectTab = useEditorStore((s) => s.switchTab);
+  const switchTab = useCallback((id: string) => { selectTab(id); onMobileClose?.(); }, [selectTab, onMobileClose]);
   const deleteTab = useEditorStore((s) => s.deleteTab);
   const syncLocalTabToOnline = useEditorStore((s) => s.syncLocalTabToOnline);
   const moveTabToFolder = useEditorStore((s) => s.moveTabToFolder);
@@ -2364,8 +2366,8 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
   const tagColors = useEditorStore((s) => s.tagColors);
 
   const onlineTabs = useMemo(
-    () => tabs.filter((t) => t.origin !== "local" && getTabWorkspaceId(t) === activeProfileId),
-    [tabs, activeProfileId]
+    () => tabs.filter((t) => t.origin !== "local" && getTabWorkspaceId(t) === activeProfileId && (!projectScope || documentMeta[t.id]?.projectId === projectScope)),
+    [tabs, activeProfileId, projectScope, documentMeta]
   );
   const localTabs = useMemo(
     () => tabs.filter((t) => t.origin === "local" && getTabWorkspaceId(t) === activeProfileId),
@@ -2381,6 +2383,15 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
     new Set()
   );
+  const activeFolderId = tabs.find((tab) => tab.id === activeTabId)?.folderId;
+  useEffect(() => {
+    const path = new Set<string>();
+    let id = activeFolderId;
+    while(id && !path.has(id)) { path.add(id); id = folders.find((folder) => folder.id === id)?.parentId; }
+    let cancelled = false;
+    queueMicrotask(() => { if (!cancelled && path.size) setExpandedFolders((previous) => [...path].every((id) => previous.has(id)) ? previous : new Set([...previous, ...path])); });
+    return () => { cancelled = true; };
+  }, [activeFolderId, folders]);
   // null = no sort, true = A-Z, false = Z-A
   const [sortAsc, setSortAsc] = useState<boolean | null>(null);
   const [sortByType, setSortByType] = useState(false);
@@ -2534,7 +2545,7 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
   }
 
   // Uncollapse strip when file tree is closed (desktop only)
-  if (!mobile && !fileTreeOpen) {
+  if (!mobile && !fileTreeOpen && !embedded) {
     return (
       <button
         onClick={toggleFileTree}
@@ -2617,6 +2628,7 @@ export function FileTree({ mobile, onMobileClose }: { mobile?: boolean; onMobile
 
   return (
     <aside
+      data-embedded={embedded || undefined}
       className={cn("relative flex h-full flex-col border-r border-border bg-card overflow-hidden")}
       style={!mobile ? { width: `var(--filetree-drag-width, ${fileTreeWidth}px)`, maxWidth: "100vw" } : undefined}
     >

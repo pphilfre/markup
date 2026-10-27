@@ -134,6 +134,7 @@ export default defineSchema({
     settings: v.optional(settingsValidator),
     profiles: v.optional(v.array(profileValidator)),
     activeProfileId: v.optional(v.string()),
+    projectData: v.optional(v.string()),
   }).index("by_user", ["userId"]),
 
   // ── Whiteboards (one per user, stores canvas state) ────────────────
