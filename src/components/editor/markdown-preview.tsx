@@ -1,6 +1,5 @@
 "use client";
 import { resolveDocumentLink } from "@/lib/document-links";
-import { useEditorStore as linkedDocumentStore } from "@/lib/store";
 
 import React, { useMemo, useCallback, useEffect, useRef, useState, isValidElement, cloneElement } from "react";
 import ReactMarkdown from "react-markdown";
@@ -267,9 +266,9 @@ export function MarkdownPreview({
         // Backlinks
         a: ({ href, children, ...props }) => {
           if (href?.startsWith("#note/")) {
-            const state = linkedDocumentStore.getState();
+            const state = useEditorStore.getState();
             const target = resolveDocumentLink(href, state.tabs, state.activeProfileId);
-            return <button type="button" disabled={!target} className="text-primary underline underline-offset-2" title={target ? target.title : "This document is not available in this workspace"} onClick={() => { if (target) linkedDocumentStore.getState().openTab(target.id); }}>{children}</button>;
+            return <button type="button" disabled={!target} className="text-primary underline underline-offset-2" title={target ? target.title : "This document is not available in this workspace"} onClick={() => { if (target) useEditorStore.getState().openTab(target.id); }}>{children}</button>;
           }
           if (href?.startsWith("#wiki/")) {
             const title = decodeURIComponent(href.slice("#wiki/".length));

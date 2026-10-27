@@ -50,7 +50,7 @@ AI is optional: a resizable right pane on desktop and full-screen chat on phones
 
 ## Validation and release
 
-Local automated coverage includes 34 migration, task identity, custom-column, source-task, capture-folder, close/delete/restore, note-link, conflict, local-transport, heading, and pointer-frame tests. Run `npm test`, `npm run typecheck`, and `npm run lint`.
+Local automated coverage includes 41 migration, task identity, custom-column, source-task, capture-folder, close/delete/restore, note-link, conflict, local-transport, heading, pointer-frame, and Vercel build-routing tests. Run `npm test`, `npm run typecheck`, and `npm run lint`.
 
 Browser checks cover project creation, note-to-task creation, content-search line navigation, Inbox batch moves, full-board/list task identity, whiteboard shape movement, and mind-map node movement. Review the editor, navigator, settings, and menus at desktop and 390px phone widths.
 

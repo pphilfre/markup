@@ -176,6 +176,7 @@ function sanitizeBoard(raw: Partial<KanbanBoardData>): KanbanBoardData {
   };
 }
 
+/** Find the completion column, including boards imported before explicit statuses existed. */
 function findDoneColumn(columns: KanbanColumn[]): KanbanColumn | null {
   return (
     columns.find((column) =>
@@ -220,12 +221,14 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   };
 }
 
+/** Tint a board column against the active theme after validating its colour. */
 function pastelFromHex(hex: string): string {
   const rgb = hexToRgb(hex);
   if (!rgb) return "var(--card)";
   return `color-mix(in srgb, ${hex} 9%, var(--card))`;
 }
 
+/** Display a board file name without its storage-format extension. */
 function displayTabName(title: string): string {
   return title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/i, "");
 }

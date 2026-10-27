@@ -230,11 +230,22 @@ npm run sync-changes
 
 ### Web
 
-Deploy as a standard Next.js application (e.g. Vercel), with:
+The repository sets Vercel's Build Command to `npm run build:vercel`, overriding any dashboard command that wraps `npm run build` in another Convex deployment.
 
-* PostgreSQL database configured
-* Prisma migrations applied
-* All required environment variables configured
+- `npm run build` builds the frontend only (Prisma generation and Next.js).
+- `npm run build:convex` explicitly deploys Convex and builds the frontend once.
+- `npm run build:docker` remains the frontend-only Docker build alias.
+
+Vercel's entry point selects the backend workflow:
+
+| Environment | Configuration | Behaviour |
+| --- | --- | --- |
+| Production / Convex | Production `CONVEX_DEPLOY_KEY` | Deploy the backend and build once. |
+| Preview / Convex | Preview `CONVEX_DEPLOY_KEY` | Create an isolated preview backend and build once. |
+| Preview / Convex | Existing `NEXT_PUBLIC_CONVEX_URL` or production deploy key | Build against the existing backend without deploying backend changes. An explicit URL takes precedence; a standard cloud URL can otherwise be derived from the production key's public deployment name. |
+| PostgreSQL | `NEXT_PUBLIC_DB_PROVIDER=postgres` | Build without running Convex; configure the database, migrations, and account environment separately. |
+
+Scope production keys to Vercel's Production environment. For isolated PR previews, configure a [Convex Preview Deploy Key](https://docs.convex.dev/production/hosting/vercel#preview-deployments) in Vercel's Preview environment. A frontend-only preview uses the existing backend's functions and data; backend changes require a separate backend deployment or an isolated preview key. Merging to Vercel's production branch runs the production workflow, including the Convex deployment.
 
 ### Desktop
 

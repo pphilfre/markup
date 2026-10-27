@@ -345,6 +345,7 @@ function printContent(
   }, 800);
 }
 
+/** Export the current document or active workspace with format-specific options. */
 export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
   const allTabs = useEditorStore((s) => s.tabs);
   const workspaceId = useEditorStore((s) => s.activeProfileId);

@@ -123,6 +123,7 @@ function extractCompletionText(payload: unknown): ExtractionResult {
   };
 }
 
+/** Include only the notes explicitly attached to the current AI request. */
 function buildAttachmentContext(attachedNotes: Tab[], hideMd: boolean): string {
   return attachedNotes
     .map((note) => {
@@ -135,6 +136,7 @@ function buildAttachmentContext(attachedNotes: Tab[], hideMd: boolean): string {
     .join("\n\n---\n\n");
 }
 
+/** Combine the assistant instructions with the selected document context. */
 function buildSystemPrompt(attachedNotes: Tab[], hideMd: boolean): string {
   const base =
     "You are Markup AI, a helpful writing and planning assistant. Respond in Markdown.";
@@ -183,15 +185,17 @@ function ModelPickerPopover({
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) return undefined;
     requestAnimationFrame(() => searchRef.current?.focus());
   }, [open]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return models;
+    const searchQuery = query.trim().toLowerCase();
+    if (!searchQuery) return models;
     return models.filter(
-      (m) => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q),
+      (m) =>
+        m.name.toLowerCase().includes(searchQuery) ||
+        m.id.toLowerCase().includes(searchQuery),
     );
   }, [models, query]);
 
@@ -294,7 +298,7 @@ function ChatMessageBubble({
       !message.reveal ||
       message.status === "loading"
     ) {
-      return;
+      return undefined;
     }
     const text = message.content;
     let index = 0;
@@ -469,7 +473,8 @@ function AiChatPanelContent({
       .filter(Boolean) as Tab[];
   }, [attachedNoteIds, tabs]);
 
-  const activeAttached = !!activeTab && attachedNoteIds.includes(activeTab.id);
+  const activeAttached =
+    activeTab !== null && attachedNoteIds.includes(activeTab.id);
 
   const modelLabel = useMemo(() => {
     if (modelStatus === "loading") return "Loading";
@@ -506,7 +511,7 @@ function AiChatPanelContent({
     draft.trim().length > 0 &&
     sendStatus !== "sending" &&
     modelStatus === "ready" &&
-    !!selectedModelId;
+    Boolean(selectedModelId);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const container = scrollContainerRef.current;
@@ -537,9 +542,25 @@ function AiChatPanelContent({
     [updateMessage],
   );
 
-  const handleCopy = useCallback((content: string) => {
-    void navigator.clipboard.writeText(content);
-  }, []);
+  const handleAsyncError = useCallback(
+    (error: unknown) => {
+      setSendStatus("error", {
+        title: "AI request failed",
+        message:
+          error instanceof Error
+            ? error.message
+            : "The request could not be completed.",
+      });
+    },
+    [setSendStatus],
+  );
+
+  const handleCopy = useCallback(
+    (content: string) => {
+      navigator.clipboard.writeText(content).catch(handleAsyncError);
+    },
+    [handleAsyncError],
+  );
 
   // Core send logic — accepts an explicit model override and a history override for retry
   const sendRequest = useCallback(
@@ -737,8 +758,9 @@ function AiChatPanelContent({
   );
 
   useEffect(() => {
-    if (modelStatus === "idle") void ensureModels();
-  }, [ensureModels, modelStatus]);
+    if (modelStatus === "idle")
+      Promise.resolve(ensureModels()).catch(handleAsyncError);
+  }, [ensureModels, modelStatus, handleAsyncError]);
 
   return (
     <div
@@ -799,38 +821,14 @@ function AiChatPanelContent({
               )}
             </div>
           )}
-          {statusNotice && (
-            <div className="flex items-start gap-2 rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-              <span className="min-w-0 break-words">
-                {statusNotice.message}
-              </span>
-              {statusNotice.details && (
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
-                      aria-label="View status details"
-                    >
-                      <Info className="h-3 w-3" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-72 text-xs">
-                    <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-[11px] text-muted-foreground">
-                      {statusNotice.details}
-                    </pre>
-                  </PopoverContent>
-                </Popover>
-              )}
-            </div>
-          )}
+          {statusNotice && <ChatStatusNotice notice={statusNotice} />}
           {modelStatus === "error" && (
             <Button
               variant="outline"
               size="sm"
-              onClick={() => void ensureModels()}
+              onClick={() =>
+                Promise.resolve(ensureModels()).catch(handleAsyncError)
+              }
             >
               Retry connection
             </Button>
@@ -855,116 +853,38 @@ function AiChatPanelContent({
 
       {/* Input area */}
       <div className="shrink-0 border-t border-border p-3 space-y-2">
-        <div
-          className={cn(
-            "flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground",
-            dropActive && "rounded-md bg-muted/50",
-          )}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className="text-muted-foreground hover:text-foreground"
-                aria-label="Attach notes"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48">
-              <DropdownMenuItem
-                onClick={handleToggleAttachment}
-                disabled={!activeTab}
-              >
-                {activeAttached ? (
-                  <Check className="h-3.5 w-3.5" />
-                ) : (
-                  <Plus className="h-3.5 w-3.5" />
-                )}
-                {activeAttached ? "Remove active note" : "Add active note"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleOpenPicker}>
-                <FolderOpen className="h-3.5 w-3.5" />
-                Browse notes
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {attachedNotes.map((note) => (
-            <div
-              key={note.id}
-              className="flex items-center gap-1 rounded-full border border-border/60 bg-muted/20 px-2 py-1 text-[11px]"
-            >
-              <span className="max-w-[140px] truncate">
-                {getDisplayTitle(note.title, hideMd)}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={() => detachNote(note.id)}
-                aria-label={`Remove ${note.title}`}
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
-          ))}
-        </div>
-
-        <div className="flex items-end gap-2">
-          <div className="relative flex-1">
-            <ModelPickerPopover
-              models={models}
-              selectedModelId={selectedModelId}
-              modelStatus={modelStatus}
-              onSelect={setSelectedModelId}
-              align="start"
-              side="top"
-            >
-              <Button
-                variant="ghost"
-                size="xs"
-                className="absolute bottom-2 left-2 z-10 h-6 max-w-[200px] gap-1 px-2 text-[11px] text-muted-foreground"
-                disabled={modelStatus !== "ready" || models.length === 0}
-              >
-                <span className="truncate">{modelLabel}</span>
-                <ChevronDown className="h-3 w-3" />
-              </Button>
-            </ModelPickerPopover>
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void handleSend();
-                }
-              }}
-              placeholder="Ask Markup AI..."
-              rows={3}
-              className={cn(
-                "min-h-[88px] w-full resize-none rounded-md border border-border bg-background px-3 pb-10 pt-3 text-sm leading-relaxed shadow-sm outline-none focus:border-primary",
-                compact && "text-[13px]",
-              )}
-            />
-          </div>
-          <Button
-            size="icon"
-            disabled={!canSend}
-            aria-label="Send message"
-            onClick={() => void handleSend()}
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
+        <ChatAttachments
+          activeTab={activeTab}
+          activeAttached={activeAttached}
+          attachedNotes={attachedNotes}
+          hideMd={hideMd}
+          dropActive={dropActive}
+          handleDragOver={handleDragOver}
+          handleDragLeave={handleDragLeave}
+          handleDrop={handleDrop}
+          handleToggleAttachment={handleToggleAttachment}
+          handleOpenPicker={handleOpenPicker}
+          detachNote={detachNote}
+        />
+        <ChatDraftInput
+          compact={compact}
+          models={models}
+          selectedModelId={selectedModelId}
+          modelStatus={modelStatus}
+          modelLabel={modelLabel}
+          setSelectedModelId={setSelectedModelId}
+          draft={draft}
+          setDraft={setDraft}
+          handleSend={handleSend}
+          canSend={canSend}
+          handleAsyncError={handleAsyncError}
+        />
       </div>
     </div>
   );
 }
 
+/** Show AI alongside the editor on desktop, or in the phone chat dialog. */
 export function AiChatPanel() {
   const isMobile = useIsMobile();
   const panelOpen = useAiChatStore((s) => s.panelOpen);
@@ -975,7 +895,8 @@ export function AiChatPanel() {
   const startWidth = useRef(DEFAULT_PANEL_WIDTH);
 
   useEffect(() => {
-    if (!panelOpen) return;
+    if (!panelOpen) return undefined;
+    /** Close the assistant with Escape while its panel is open. */
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -993,6 +914,7 @@ export function AiChatPanel() {
       startX.current = e.clientX;
       startWidth.current = width;
 
+      /** Resize the pane within its supported width range. */
       const onMouseMove = (e: MouseEvent) => {
         if (!isDragging.current) return;
         const delta = startX.current - e.clientX;
@@ -1002,6 +924,7 @@ export function AiChatPanel() {
         );
         setWidth(next);
       };
+      /** End resizing and release the temporary pointer listeners. */
       const onMouseUp = () => {
         isDragging.current = false;
         window.removeEventListener("mousemove", onMouseMove);
@@ -1052,5 +975,198 @@ export function AiChatMobileModal() {
         <AiChatPanelContent onClose={() => setPanelOpen(false)} compact />
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Render attached note controls independently from message and model state. */
+function ChatAttachments({
+  activeTab,
+  activeAttached,
+  attachedNotes,
+  hideMd,
+  dropActive,
+  handleDragOver,
+  handleDragLeave,
+  handleDrop,
+  handleToggleAttachment,
+  handleOpenPicker,
+  detachNote,
+}: {
+  activeTab: Tab | null;
+  activeAttached: boolean;
+  attachedNotes: Tab[];
+  hideMd: boolean;
+  dropActive: boolean;
+  handleDragOver: React.DragEventHandler;
+  handleDragLeave: React.DragEventHandler;
+  handleDrop: React.DragEventHandler;
+  handleToggleAttachment: () => void;
+  handleOpenPicker: () => void;
+  detachNote: (id: string) => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground",
+        dropActive && "rounded-md bg-muted/50",
+      )}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="text-muted-foreground hover:text-foreground"
+            aria-label="Attach notes"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-48">
+          <DropdownMenuItem
+            onClick={handleToggleAttachment}
+            disabled={!activeTab}
+          >
+            {activeAttached ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : (
+              <Plus className="h-3.5 w-3.5" />
+            )}
+            {activeAttached ? "Remove active note" : "Add active note"}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleOpenPicker}>
+            <FolderOpen className="h-3.5 w-3.5" />
+            Browse notes
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {attachedNotes.map((note) => (
+        <div
+          key={note.id}
+          className="flex items-center gap-1 rounded-full border border-border/60 bg-muted/20 px-2 py-1 text-[11px]"
+        >
+          <span className="max-w-[140px] truncate">
+            {getDisplayTitle(note.title, hideMd)}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={() => detachNote(note.id)}
+            aria-label={`Remove ${note.title}`}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Keep model selection and the controlled draft in one reusable composer. */
+function ChatDraftInput({
+  compact,
+  models,
+  selectedModelId,
+  modelStatus,
+  modelLabel,
+  setSelectedModelId,
+  draft,
+  setDraft,
+  handleSend,
+  canSend,
+  handleAsyncError,
+}: {
+  compact: boolean;
+  models: AiChatModel[];
+  selectedModelId: string | null;
+  modelStatus: string;
+  modelLabel: string;
+  setSelectedModelId: (id: string) => void;
+  draft: string;
+  setDraft: (value: string) => void;
+  handleSend: () => Promise<void>;
+  canSend: boolean;
+  handleAsyncError: (error: unknown) => void;
+}) {
+  return (
+    <div className="flex items-end gap-2">
+      <div className="relative flex-1">
+        <ModelPickerPopover
+          models={models}
+          selectedModelId={selectedModelId}
+          modelStatus={modelStatus}
+          onSelect={setSelectedModelId}
+          align="start"
+          side="top"
+        >
+          <Button
+            variant="ghost"
+            size="xs"
+            className="absolute bottom-2 left-2 z-10 h-6 max-w-[200px] gap-1 px-2 text-[11px] text-muted-foreground"
+            disabled={modelStatus !== "ready" || models.length === 0}
+          >
+            <span className="truncate">{modelLabel}</span>
+            <ChevronDown className="h-3 w-3" />
+          </Button>
+        </ModelPickerPopover>
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSend().catch(handleAsyncError);
+            }
+          }}
+          placeholder="Ask Markup AI..."
+          rows={3}
+          className={cn(
+            "min-h-[88px] w-full resize-none rounded-md border border-border bg-background px-3 pb-10 pt-3 text-sm leading-relaxed shadow-sm outline-none focus:border-primary",
+            compact && "text-[13px]",
+          )}
+        />
+      </div>
+      <Button
+        size="icon"
+        disabled={!canSend}
+        aria-label="Send message"
+        onClick={() => handleSend().catch(handleAsyncError)}
+      >
+        <Send className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
+/** Show connection errors with expandable technical details. */
+function ChatStatusNotice({ notice }: { notice: StatusNotice }) {
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+      <span className="min-w-0 break-words">{notice.message}</span>
+      {notice.details && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
+              aria-label="View status details"
+            >
+              <Info className="h-3 w-3" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-72 text-xs">
+            <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-[11px] text-muted-foreground">
+              {notice.details}
+            </pre>
+          </PopoverContent>
+        </Popover>
+      )}
+    </div>
   );
 }

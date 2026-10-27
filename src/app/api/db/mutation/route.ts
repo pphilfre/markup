@@ -43,6 +43,7 @@ function ensureString(value: unknown, name: string): string {
   return value;
 }
 
+/** Preserve omitted and cleared values while rejecting non-string mutation fields. */
 function optionalNullableString(
   value: unknown,
   name: string,
@@ -60,6 +61,7 @@ function optionalString(value: unknown): string | undefined {
   return value;
 }
 
+/** Validate an optional list while retaining null as an explicit clear operation. */
 function optionalStringArray(
   value: unknown,
   name: string,
@@ -76,6 +78,7 @@ function optionalStringArray(
   return value as string[];
 }
 
+/** Build partial database updates without overwriting omitted fields. */
 function stripUndefined<T extends Record<string, unknown>>(
   value: T,
 ): Partial<T> {
@@ -84,6 +87,7 @@ function stripUndefined<T extends Record<string, unknown>>(
   ) as Partial<T>;
 }
 
+/** Expose expected API failures and keep unexpected server details out of responses. */
 function handleError(error: unknown) {
   if (error instanceof ApiError) {
     return NextResponse.json(
@@ -99,6 +103,7 @@ function handleError(error: unknown) {
   );
 }
 
+/** Convert a requested public site name into its canonical URL slug. */
 function normalizeSlug(input: string): string {
   return input
     .trim()
@@ -110,6 +115,7 @@ function normalizeSlug(input: string): string {
     .replace(/-+$/, "");
 }
 
+/** Reject unsupported or reserved public site URLs after normalization. */
 function validateSlug(slug: string): string {
   const normalized = normalizeSlug(slug);
   if (!/^[a-z0-9-]{3,40}$/.test(normalized)) {
@@ -125,8 +131,10 @@ function validateSlug(slug: string): string {
   return normalized;
 }
 
+/** Create the short identifier displayed in note-sharing links. */
 function generateShareId(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  /** Generate one of the two readable share-code segments. */
   const segment = () =>
     Array.from(
       { length: 4 },
