@@ -30,8 +30,8 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { apiBase, getClientAuthToken, openExternal, signOut, isDocker, isTauri } from "@/lib/tauri";
-import { useEditorStore, DEFAULT_SETTINGS, type Settings as SettingsType } from "@/lib/store";
-import { useIsMobile } from "@/lib/use-mobile";
+import { useEditorStore, flushLocalSave, DEFAULT_SETTINGS, type Settings as SettingsType } from "@/lib/store";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { EditorGuideContent } from "@/components/shell/editor-guide-content";
 import { REPLAY_TUTORIAL_EVENT } from "@/components/shell/first-run-dialog";
 import { WorkOsWidgets, UserProfile, UserSessions, UserSecurity } from "@workos-inc/widgets";
@@ -45,20 +45,22 @@ import packageJson from "../../../package.json";
 
 type SectionId = "general" | "user" | "appearance" | "typography" | "markdown" | "editing" | "guide" | "privacy" | "data" | "about" | "updates" | "server";
 
-const SECTIONS: { id: SectionId; label: string; icon: typeof Settings; group?: string }[] = [
-  { id: "general", label: "General", icon: Palette },
-  { id: "user", label: "User", icon: User },
-  { id: "appearance", label: "Appearance", icon: Eye },
-  { id: "typography", label: "Typography", icon: Type, group: "Editor" },
-  { id: "markdown", label: "Markdown", icon: FileText, group: "Editor" },
+const SECTIONS: { id: SectionId; label: string; icon: typeof Settings; group: string }[] = [
+  { id: "general", label: "General", icon: Palette, group: "Preferences" },
+  { id: "appearance", label: "Appearance", icon: Eye, group: "Preferences" },
   { id: "editing", label: "Editing", icon: PenTool, group: "Editor" },
-  { id: "guide", label: "Guide & Keybinds", icon: BookOpenText, group: "Editor" },
-  { id: "privacy", label: "Privacy & Security", icon: Lock, group: "Account" },
-  { id: "data", label: "Data", icon: Database, group: "Account" },
-  { id: "updates", label: "Updates", icon: Timer, group: "Account" },
-  { id: "server", label: "Server", icon: Server, group: "Account" },
-  { id: "about", label: "About & Contact", icon: Info },
+  { id: "typography", label: "Typography", icon: Type, group: "Editor" },
+  { id: "markdown", label: "Markdown & rendering", icon: FileText, group: "Editor" },
+  { id: "guide", label: "Guide & shortcuts", icon: BookOpenText, group: "Editor" },
+  { id: "user", label: "Account", icon: User, group: "Workspace & account" },
+  { id: "privacy", label: "Privacy & security", icon: Lock, group: "Workspace & account" },
+  { id: "data", label: "Files & storage", icon: Database, group: "Workspace & account" },
+  { id: "server", label: "Server", icon: Server, group: "Application" },
+  { id: "updates", label: "Updates", icon: Timer, group: "Application" },
+  { id: "about", label: "About & contact", icon: Info, group: "Application" },
 ];
+
+const SETTINGS_GROUPS = [...new Set(SECTIONS.map(({ group }) => group))];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -271,6 +273,8 @@ function GeneralSection({
           {ACCENT_PRESETS.map((c) => (
             <button
               key={c}
+              aria-label={"Accent color " + c}
+              aria-pressed={settings.accentColor === c}
               onClick={() => update({ accentColor: c })}
               className={cn(
                 "h-7 w-7 rounded-full border-2 transition-transform hover:scale-110",
@@ -293,6 +297,7 @@ function GeneralSection({
           >
             <input
               type="color"
+              aria-label="Custom accent color"
               value={settings.accentColor}
               onChange={(e) => update({ accentColor: e.target.value })}
               className="absolute inset-0 cursor-pointer opacity-0"
@@ -303,58 +308,15 @@ function GeneralSection({
 
       <Separator />
 
-      <div>
-        <h3 className="text-sm font-semibold mb-1">Quick Theme</h3>
-        <p className="text-xs text-muted-foreground mb-3">
-          Most-used theme controls without leaving General
-        </p>
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            {
-              id: "light",
-              label: "Light",
-              description: "Clean white background",
-              preview: { bg: "#ffffff", sidebar: "#f5f5f5", text: "#1a1a1a", accent: "#7c3aed" },
-            },
-            {
-              id: "dark",
-              label: "Dark",
-              description: "Classic dark theme",
-              preview: { bg: "#1a1a1a", sidebar: "#242424", text: "#e5e5e5", accent: "#7c3aed" },
-            },
-            {
-              id: "system",
-              label: "System",
-              description: "Follows OS preference",
-              preview: { bg: "#e8e8e8", sidebar: "#d0d0d0", text: "#333", accent: "#7c3aed" },
-            },
-          ].map((mode) => (
-            <button
-              key={mode.id}
-              onClick={() => handleThemeModeChange(mode.id as SettingsType["themeMode"])}
-              className={cn(
-                "relative rounded-lg border-2 p-2 text-left transition-all hover:scale-[1.02]",
-                settings.themeMode === mode.id
-                  ? "border-primary shadow-sm"
-                  : "border-input hover:border-muted-foreground/40"
-              )}
-            >
-              <div
-                className="mb-2 h-10 rounded overflow-hidden flex"
-                style={{ background: mode.preview.bg }}
-              >
-                <div className="w-1/4 h-full" style={{ background: mode.preview.sidebar }} />
-                <div className="flex-1 p-1 space-y-1">
-                  <div className="h-1.5 rounded-full w-3/4" style={{ background: mode.preview.text, opacity: 0.7 }} />
-                  <div className="h-1.5 rounded-full w-1/2" style={{ background: mode.preview.accent }} />
-                  <div className="h-1.5 rounded-full w-2/3" style={{ background: mode.preview.text, opacity: 0.4 }} />
-                </div>
-              </div>
-              <p className="text-xs font-medium leading-none">{mode.label}</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">{mode.description}</p>
-              {settings.themeMode === mode.id && (
-                <div className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary" />
-              )}
+      <div className="settings-choice-row">
+        <div>
+          <h3>Theme</h3>
+          <p>Choose a theme or follow your system preference.</p>
+        </div>
+        <div className="editor-modes" role="group" aria-label="Theme">
+          {(["light", "dark", "system"] as const).map((mode) => (
+            <button key={mode} aria-pressed={settings.themeMode === mode} onClick={() => handleThemeModeChange(mode)}>
+              {mode === "light" ? "Light" : mode === "dark" ? "Dark" : "System"}
             </button>
           ))}
         </div>
@@ -1237,17 +1199,13 @@ function DataSection({
     [arrayBufferToBase64]
   );
 
-  const handleRebuildSearchIndex = useCallback(() => {
-    document.dispatchEvent(new CustomEvent("rebuild-search-index"));
-    alert("Search index has been rebuilt.");
-  }, []);
-
   const handleResetSettings = useCallback(() => {
     if (!window.confirm("Reset all settings to defaults? This cannot be undone.")) return;
     reset();
   }, [reset]);
 
   const handleBackupWorkspace = useCallback(async () => {
+    await flushLocalSave();
     const { get } = await import("idb-keyval");
     const state = await get("markup-state");
     if (!state) return;
@@ -1434,20 +1392,6 @@ function DataSection({
         <Button variant="outline" size="sm" onClick={handleExportWorkspace} className="gap-1.5 text-xs">
           <HardDrive className="h-3.5 w-3.5" />
           Export
-        </Button>
-      </div>
-
-      <Separator />
-
-      {/* Rebuild search index */}
-      <div className="flex items-center justify-between">
-        <div>
-          <span className="text-xs text-foreground">Rebuild Search Index</span>
-          <p className="text-[11px] text-muted-foreground">Rebuild the full-text search index</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={handleRebuildSearchIndex} className="gap-1.5 text-xs">
-          <RotateCcw className="h-3.5 w-3.5" />
-          Rebuild
         </Button>
       </div>
 
@@ -1693,6 +1637,8 @@ function AppearanceSection({
           {ACCENT_PRESETS.map((c) => (
             <button
               key={c}
+              aria-label={"Accent color " + c}
+              aria-pressed={settings.accentColor === c}
               onClick={() => update({ accentColor: c })}
               className={cn(
                 "h-7 w-7 rounded-full border-2 transition-transform hover:scale-110",
@@ -1715,6 +1661,7 @@ function AppearanceSection({
           >
             <input
               type="color"
+              aria-label="Custom accent color"
               value={settings.accentColor}
               onChange={(e) => update({ accentColor: e.target.value })}
               className="absolute inset-0 cursor-pointer opacity-0"
@@ -1825,12 +1772,12 @@ function AppearanceSection({
 
       <RangeRow
         label="Sidebar Width"
-        value={settings.sidebarWidth}
-        min={36}
-        max={64}
-        step={4}
+        value={settings.fileTreeWidth}
+        min={220}
+        max={440}
+        step={10}
         unit="px"
-        onChange={(v) => update({ sidebarWidth: v })}
+        onChange={(v) => update({ fileTreeWidth: v })}
       />
 
       <div className="space-y-4">
@@ -2316,8 +2263,7 @@ export function SettingsPanel() {
   const updateSettings = useEditorStore((s) => s.updateSettings);
   const theme = useEditorStore((s) => s.theme);
   const toggleTheme = useEditorStore((s) => s.toggleTheme);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const isMobile = useIsMobile();
+
 
   // Listen for custom event
   useEffect(() => {
@@ -2350,44 +2296,9 @@ export function SettingsPanel() {
     return () => document.removeEventListener("settings-navigate", handler);
   }, []);
 
-  // Close on Escape
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setOpen(false);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
-
-  // Close on click outside
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    const id = setTimeout(() => {
-      document.addEventListener("mousedown", onClick);
-    }, 100);
-    return () => {
-      clearTimeout(id);
-      document.removeEventListener("mousedown", onClick);
-    };
-  }, [open]);
-
   const reset = () => updateSettings({ ...DEFAULT_SETTINGS });
 
   if (!open) return null;
-
-  // Group sections for sidebar rendering
-  const ungrouped = SECTIONS.filter((s) => !s.group);
-  const editorSections = SECTIONS.filter((s) => s.group === "Editor");
-  const accountSections = SECTIONS.filter((s) => s.group === "Account");
 
   const settingsContent = (
     <>
@@ -2434,171 +2345,31 @@ export function SettingsPanel() {
     </>
   );
 
-  const allSections = SECTIONS;
-
-  // ── Mobile: full-screen settings with horizontal tabs at top ──────
-  if (isMobile) {
-    return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-popover animate-in fade-in duration-150">
-        {/* Header */}
-        <div className="flex h-[44px] items-center justify-between px-3 border-b border-border shrink-0">
-          <div className="flex items-center gap-2">
-            <Settings className="h-4 w-4 text-muted-foreground" />
-            <span className="text-[15px] font-semibold">Settings</span>
-          </div>
-          <button
-            onClick={() => setOpen(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground active:bg-muted/60 transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Horizontal section tabs */}
-        <nav className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border overflow-x-auto scrollbar-none shrink-0 bg-card/50">
-          {allSections.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => setActiveSection(id)}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium whitespace-nowrap transition-colors shrink-0",
-                activeSection === id
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground active:text-foreground"
-              )}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {label}
-            </button>
-          ))}
-        </nav>
-
-        {/* Content — scrollable, fills remaining space */}
-        <div className="flex-1 overflow-y-auto overscroll-contain p-4">
-          {settingsContent}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-center border-t border-border px-4 py-2 shrink-0">
-          <span className="text-[11px] text-muted-foreground">Auto-saved</span>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Desktop: centered dialog with sidebar ─────────────────────────
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-8">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-150"
-        onClick={() => setOpen(false)}
-      />
-
-      {/* Panel */}
-      <div
-        ref={panelRef}
-        className="relative w-full max-w-4xl h-[80vh] rounded-lg border border-border bg-popover shadow-2xl animate-in slide-in-from-top-2 fade-in duration-150 flex flex-col overflow-hidden"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
-          <div className="flex items-center gap-2">
-            <Settings className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-semibold">Settings</span>
-          </div>
-          <button
-            onClick={() => setOpen(false)}
-            className="rounded-sm p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Body: sidebar + content */}
-        <div className="flex flex-1 min-h-0">
-          {/* Sidebar */}
-          <nav className="w-44 shrink-0 border-r border-border py-3 px-2 space-y-1 overflow-y-auto">
-            {ungrouped.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => setActiveSection(id)}
-                className={cn(
-                  "w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
-                  activeSection === id
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                )}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {label}
-              </button>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="workbench-settings-dialog" showCloseButton>
+        <div className="settings-dialog-heading"><DialogTitle>Settings</DialogTitle></div>
+        <DialogDescription className="sr-only">Workspace, editor, account, and storage preferences.</DialogDescription>
+        <div className="settings-dialog-body">
+          <nav aria-label="Settings sections">
+            {SETTINGS_GROUPS.map((group) => (
+              <div className="settings-category" key={group}>
+                <h3>{group}</h3>
+                {SECTIONS.filter((section) => section.group === group).map(({ id, label, icon: Icon }) => (
+                  <button key={id} aria-current={activeSection === id ? "page" : undefined} onClick={() => setActiveSection(id)}>
+                    <Icon size={15} />{label}
+                  </button>
+                ))}
+              </div>
             ))}
-
-            {editorSections.length > 0 && (
-              <>
-                <div className="pt-3 pb-1 px-2.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-                    Editor
-                  </span>
-                </div>
-                {editorSections.map(({ id, label, icon: Icon }) => (
-                  <button
-                    key={id}
-                    onClick={() => setActiveSection(id)}
-                    className={cn(
-                      "w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
-                      activeSection === id
-                        ? "bg-accent text-accent-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                    )}
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                    {label}
-                  </button>
-                ))}
-              </>
-            )}
-
-            {accountSections.length > 0 && (
-              <>
-                <div className="pt-3 pb-1 px-2.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-                    Account
-                  </span>
-                </div>
-                {accountSections.map(({ id, label, icon: Icon }) => (
-                  <button
-                    key={id}
-                    onClick={() => setActiveSection(id)}
-                    className={cn(
-                      "w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
-                      activeSection === id
-                        ? "bg-accent text-accent-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                    )}
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                    {label}
-                  </button>
-                ))}
-              </>
-            )}
           </nav>
-
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto p-5">
+          <div className="settings-content" key={activeSection}>
+            <h2>{SECTIONS.find(({ id }) => id === activeSection)?.label}</h2>
             {settingsContent}
           </div>
         </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-border px-5 py-2 shrink-0">
-          <span className="text-[10px] text-muted-foreground">
-            Settings saved automatically
-          </span>
-          <kbd className="text-[10px] text-muted-foreground font-mono">Alt+S</kbd>
-        </div>
-      </div>
-    </div>
+        <div className="settings-dialog-footer">Saved automatically</div>
+      </DialogContent>
+    </Dialog>
   );
 }

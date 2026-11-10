@@ -1,4 +1,6 @@
 "use client";
+import { resolveDocumentLink } from "@/lib/document-links";
+import { useEditorStore as linkedDocumentStore } from "@/lib/store";
 
 import React, { useMemo, useRef, useState, useEffect, useCallback, isValidElement, cloneElement } from "react";
 import ReactMarkdown from "react-markdown";
@@ -217,6 +219,11 @@ export function MarkdownPreviewStandalone({
         );
       },
       a: ({ href, children, ...props }) => {
+          if (href?.startsWith("#note/")) {
+            const state = linkedDocumentStore.getState();
+            const target = resolveDocumentLink(href, state.tabs, state.activeProfileId);
+            return <button type="button" disabled={!target} className="text-primary underline underline-offset-2" title={target ? target.title : "This document is not available in this workspace"} onClick={() => { if (target) linkedDocumentStore.getState().openTab(target.id); }}>{children}</button>;
+          }
         return (
           <a
             href={href}

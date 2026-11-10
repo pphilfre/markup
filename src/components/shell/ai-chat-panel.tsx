@@ -14,8 +14,13 @@ import {
   Send,
   X,
 } from "lucide-react";
-import { useAiChatStore, type AiChatMessage, type AiChatModel } from "@/lib/ai-chat-store";
+import {
+  useAiChatStore,
+  type AiChatMessage,
+  type AiChatModel,
+} from "@/lib/ai-chat-store";
 import { getTabWorkspaceId, useEditorStore, type Tab } from "@/lib/store";
+import { useIsMobile } from "@/lib/use-mobile";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,8 +29,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { MarkdownPreviewStandalone } from "@/components/editor/markdown-preview-standalone";
 
 const OPEN_LINK_PICKER_EVENT = "open-link-picker";
@@ -49,7 +63,9 @@ function formatDetails(details?: unknown): string | undefined {
   }
   try {
     const serialized = JSON.stringify(details, null, 2);
-    return serialized.length > 1200 ? `${serialized.slice(0, 1200)}...` : serialized;
+    return serialized.length > 1200
+      ? `${serialized.slice(0, 1200)}...`
+      : serialized;
   } catch {
     return undefined;
   }
@@ -83,30 +99,47 @@ function extractCompletionText(payload: unknown): ExtractionResult {
         typeof choiceError?.message === "string"
           ? choiceError.message
           : "The model provider returned an error.";
-      return { ok: false, message: providerMessage, details: choiceError ? formatDetails(choiceError) : undefined };
+      return {
+        ok: false,
+        message: providerMessage,
+        details: choiceError ? formatDetails(choiceError) : undefined,
+      };
     }
   }
   const message = choice?.message as { content?: unknown } | undefined;
-  if (message && typeof message.content === "string" && message.content.trim().length) {
+  if (
+    message &&
+    typeof message.content === "string" &&
+    message.content.trim().length
+  ) {
     return { ok: true, text: message.content };
   }
   const text = choice?.text;
   if (typeof text === "string" && text.trim().length) return { ok: true, text };
-  return { ok: false, message: "OpenRouter returned an empty response.", details: formatDetails(payload) };
+  return {
+    ok: false,
+    message: "OpenRouter returned an empty response.",
+    details: formatDetails(payload),
+  };
 }
 
+/** Include only the notes explicitly attached to the current AI request. */
 function buildAttachmentContext(attachedNotes: Tab[], hideMd: boolean): string {
   return attachedNotes
     .map((note) => {
       const title = getDisplayTitle(note.title, hideMd);
-      const body = note.content.trim().length ? note.content.trim() : "(Empty note)";
+      const body = note.content.trim().length
+        ? note.content.trim()
+        : "(Empty note)";
       return `# ${title}\n${body}`;
     })
     .join("\n\n---\n\n");
 }
 
+/** Combine the assistant instructions with the selected document context. */
 function buildSystemPrompt(attachedNotes: Tab[], hideMd: boolean): string {
-  const base = "You are Markup AI, a helpful writing and planning assistant. Respond in Markdown.";
+  const base =
+    "You are Markup AI, a helpful writing and planning assistant. Respond in Markdown.";
   if (attachedNotes.length === 0) return base;
   const context = buildAttachmentContext(attachedNotes, hideMd);
   return `${base}\n\nAttached notes:\n${context}`;
@@ -119,8 +152,12 @@ function useActiveTab() {
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const activeProfileId = useEditorStore((s) => s.activeProfileId);
   const activeTab = useMemo(
-    () => tabs.find((tab) => tab.id === activeTabId && getTabWorkspaceId(tab) === activeProfileId) ?? null,
-    [activeProfileId, activeTabId, tabs]
+    () =>
+      tabs.find(
+        (tab) =>
+          tab.id === activeTabId && getTabWorkspaceId(tab) === activeProfileId,
+      ) ?? null,
+    [activeProfileId, activeTabId, tabs],
   );
   return { activeTab };
 }
@@ -148,21 +185,31 @@ function ModelPickerPopover({
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!open) return;
-    setQuery("");
-    requestAnimationFrame(() => searchRef.current?.focus());
+    if (!open) return undefined;
+    const frame = requestAnimationFrame(() => searchRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
   }, [open]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return models;
-    return models.filter((m) => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q));
+    const searchQuery = query.trim().toLowerCase();
+    if (!searchQuery) return models;
+    return models.filter(
+      (m) =>
+        m.name.toLowerCase().includes(searchQuery) ||
+        m.id.toLowerCase().includes(searchQuery),
+    );
   }, [models, query]);
 
   const disabled = modelStatus !== "ready" || models.length === 0;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) setQuery("");
+      }}
+    >
       <PopoverTrigger asChild disabled={disabled}>
         {children as React.ReactElement}
       </PopoverTrigger>
@@ -187,21 +234,30 @@ function ModelPickerPopover({
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="p-1">
             {filtered.length === 0 ? (
-              <div className="px-2 py-2 text-xs text-muted-foreground">No models</div>
+              <div className="px-2 py-2 text-xs text-muted-foreground">
+                No models
+              </div>
             ) : (
               filtered.map((model) => (
                 <button
                   key={model.id}
                   type="button"
-                  onClick={() => { onSelect(model.id); setOpen(false); }}
+                  onClick={() => {
+                    onSelect(model.id);
+                    setOpen(false);
+                  }}
                   className="flex w-full min-w-0 items-start gap-2 rounded-md px-2 py-2 text-left hover:bg-muted"
                 >
                   <div className="mt-0.5">
-                    {model.id === selectedModelId
-                      ? <Check className="h-3.5 w-3.5 text-primary" />
-                      : <div className="h-3.5 w-3.5" />}
+                    {model.id === selectedModelId ? (
+                      <Check className="h-3.5 w-3.5 text-primary" />
+                    ) : (
+                      <div className="h-3.5 w-3.5" />
+                    )}
                   </div>
-                  <p className="min-w-0 text-sm font-medium leading-snug break-words">{model.name}</p>
+                  <p className="min-w-0 text-sm font-medium leading-snug break-words">
+                    {model.name}
+                  </p>
                 </button>
               ))
             )}
@@ -238,16 +294,18 @@ function ChatMessageBubble({
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (message.role !== "assistant" || !message.reveal || message.status === "loading") {
-      setRevealedText(message.content);
-      setIsRevealing(false);
-      return;
+    if (
+      message.role !== "assistant" ||
+      !message.reveal ||
+      message.status === "loading"
+    ) {
+      return undefined;
     }
     const text = message.content;
     let index = 0;
     const step = Math.max(1, Math.floor(text.length / 80));
-    setIsRevealing(true);
     const timer = window.setInterval(() => {
+      setIsRevealing(true);
       index = Math.min(text.length, index + step);
       setRevealedText(text.slice(0, index));
       if (index >= text.length) {
@@ -257,7 +315,14 @@ function ChatMessageBubble({
       }
     }, 16);
     return () => window.clearInterval(timer);
-  }, [message.content, message.id, message.reveal, message.role, message.status, onRevealComplete]);
+  }, [
+    message.content,
+    message.id,
+    message.reveal,
+    message.role,
+    message.status,
+    onRevealComplete,
+  ]);
 
   const isUser = message.role === "user";
   const isError = message.role === "error";
@@ -271,7 +336,12 @@ function ChatMessageBubble({
   }, [message.content, onCopy]);
 
   return (
-    <div className={cn("group flex flex-col gap-1", isUser ? "items-end" : "items-start")}>
+    <div
+      className={cn(
+        "group flex flex-col gap-1",
+        isUser ? "items-end" : "items-start",
+      )}
+    >
       <div
         className={cn(
           "max-w-[85%] rounded-2xl px-3 text-sm leading-relaxed",
@@ -279,7 +349,8 @@ function ChatMessageBubble({
           compact && "text-[13px]",
           isUser && "bg-foreground text-background",
           !isUser && !isError && "bg-muted/50 text-foreground",
-          isError && "border border-destructive/40 bg-destructive/10 text-destructive"
+          isError &&
+            "border border-destructive/40 bg-destructive/10 text-destructive",
         )}
       >
         {isLoading ? (
@@ -290,7 +361,9 @@ function ChatMessageBubble({
           <div className="flex flex-col gap-1.5 py-0.5">
             <div className="flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span className="min-w-0 break-words text-xs leading-relaxed">{message.content}</span>
+              <span className="min-w-0 break-words text-xs leading-relaxed">
+                {message.content}
+              </span>
             </div>
             {message.details && (
               <Popover>
@@ -332,7 +405,11 @@ function ChatMessageBubble({
               aria-label={copied ? "Copied" : "Copy message"}
               onClick={handleCopy}
             >
-              {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              {copied ? (
+                <Check className="h-3 w-3" />
+              ) : (
+                <Copy className="h-3 w-3" />
+              )}
             </Button>
           )}
           <ModelPickerPopover
@@ -392,10 +469,13 @@ function AiChatPanelContent({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const attachedNotes = useMemo(() => {
-    return attachedNoteIds.map((id) => tabs.find((tab) => tab.id === id)).filter(Boolean) as Tab[];
+    return attachedNoteIds
+      .map((id) => tabs.find((tab) => tab.id === id))
+      .filter(Boolean) as Tab[];
   }, [attachedNoteIds, tabs]);
 
-  const activeAttached = !!activeTab && attachedNoteIds.includes(activeTab.id);
+  const activeAttached =
+    activeTab !== null && attachedNoteIds.includes(activeTab.id);
 
   const modelLabel = useMemo(() => {
     if (modelStatus === "loading") return "Loading";
@@ -407,14 +487,32 @@ function AiChatPanelContent({
   }, [modelStatus, models, selectedModelId]);
 
   const statusNotice = useMemo<StatusNotice | null>(() => {
-    if (sendStatus === "error" && sendError) return { title: sendError.title, message: sendError.message, details: sendError.details };
-    if ((modelStatus === "missing_key" || modelStatus === "auth_failed" || modelStatus === "error") && modelError) {
-      return { title: modelError.title, message: modelError.message, details: modelError.details };
+    if (sendStatus === "error" && sendError)
+      return {
+        title: sendError.title,
+        message: sendError.message,
+        details: sendError.details,
+      };
+    if (
+      (modelStatus === "missing_key" ||
+        modelStatus === "auth_failed" ||
+        modelStatus === "error") &&
+      modelError
+    ) {
+      return {
+        title: modelError.title,
+        message: modelError.message,
+        details: modelError.details,
+      };
     }
     return null;
   }, [modelError, modelStatus, sendError, sendStatus]);
 
-  const canSend = draft.trim().length > 0 && sendStatus !== "sending" && modelStatus === "ready" && !!selectedModelId;
+  const canSend =
+    draft.trim().length > 0 &&
+    sendStatus !== "sending" &&
+    modelStatus === "ready" &&
+    Boolean(selectedModelId);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const container = scrollContainerRef.current;
@@ -432,93 +530,195 @@ function AiChatPanelContent({
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 80;
+    const isAtBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight <
+      80;
     if (isAtBottom) scrollToBottom("smooth");
   }, [lastMessageContent, scrollToBottom]);
 
-  const handleRevealComplete = useCallback((id: string) => {
-    updateMessage(id, { reveal: false });
-  }, [updateMessage]);
+  const handleRevealComplete = useCallback(
+    (id: string) => {
+      updateMessage(id, { reveal: false });
+    },
+    [updateMessage],
+  );
 
-  const handleCopy = useCallback((content: string) => {
-    void navigator.clipboard.writeText(content);
-  }, []);
+  const handleAsyncError = useCallback(
+    (error: unknown) => {
+      setSendStatus("error", {
+        title: "AI request failed",
+        message:
+          error instanceof Error
+            ? error.message
+            : "The request could not be completed.",
+      });
+    },
+    [setSendStatus],
+  );
+
+  const handleCopy = useCallback(
+    (content: string) => {
+      navigator.clipboard.writeText(content).catch(handleAsyncError);
+    },
+    [handleAsyncError],
+  );
 
   // Core send logic — accepts an explicit model override and a history override for retry
-  const sendRequest = useCallback(async (opts: {
-    userMessage: AiChatMessage;
-    assistantMessageId: string;
-    modelId: string;
-    history: AiChatMessage[];
-  }) => {
-    const { userMessage, assistantMessageId, modelId, history } = opts;
-    setSendStatus("sending", null);
-    try {
-      const apiHistory = [...history, userMessage]
-        .filter((m) => m.role === "user" || m.role === "assistant")
-        .map((m) => ({ role: m.role, content: m.content }));
-      const systemPrompt = buildSystemPrompt(attachedNotes, hideMd);
-      const res = await fetch(CHAT_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: modelId, messages: [{ role: "system", content: systemPrompt }, ...apiHistory] }),
-      });
-      const data = (await res.json().catch(() => null)) as
-        | { ok: true; completion: unknown }
-        | { ok: false; error?: { message?: string; details?: unknown } }
-        | null;
-      if (!res.ok || !data || !data.ok) {
-        const summary = data && !data.ok && data.error?.message ? data.error.message : "We could not reach OpenRouter. Please try again.";
-        const details = formatDetails(data && !data.ok ? data.error?.details : null);
-        updateMessage(assistantMessageId, { role: "error", content: summary, details, status: "complete" });
-        setSendStatus("error", { title: "OpenRouter error", message: summary, details });
-        return;
+  const sendRequest = useCallback(
+    async (opts: {
+      userMessage: AiChatMessage;
+      assistantMessageId: string;
+      modelId: string;
+      history: AiChatMessage[];
+    }) => {
+      const { userMessage, assistantMessageId, modelId, history } = opts;
+      setSendStatus("sending", null);
+      try {
+        const apiHistory = [...history, userMessage]
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .map((m) => ({ role: m.role, content: m.content }));
+        const systemPrompt = buildSystemPrompt(attachedNotes, hideMd);
+        const res = await fetch(CHAT_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: modelId,
+            messages: [
+              { role: "system", content: systemPrompt },
+              ...apiHistory,
+            ],
+          }),
+        });
+        const data = (await res.json().catch(() => null)) as
+          | { ok: true; completion: unknown }
+          | { ok: false; error?: { message?: string; details?: unknown } }
+          | null;
+        if (!res.ok || !data || !data.ok) {
+          const summary =
+            data && !data.ok && data.error?.message
+              ? data.error.message
+              : "We could not reach OpenRouter. Please try again.";
+          const details = formatDetails(
+            data && !data.ok ? data.error?.details : null,
+          );
+          updateMessage(assistantMessageId, {
+            role: "error",
+            content: summary,
+            details,
+            status: "complete",
+          });
+          setSendStatus("error", {
+            title: "OpenRouter error",
+            message: summary,
+            details,
+          });
+          return;
+        }
+        const result = extractCompletionText(data.completion);
+        if (!result.ok) {
+          updateMessage(assistantMessageId, {
+            role: "error",
+            content: result.message,
+            details: result.details,
+            status: "complete",
+          });
+          setSendStatus("error", {
+            title: "OpenRouter error",
+            message: result.message,
+            details: result.details,
+          });
+          return;
+        }
+        updateMessage(assistantMessageId, {
+          role: "assistant",
+          content: result.text,
+          status: "complete",
+          reveal: true,
+        });
+        setSendStatus("idle", null);
+      } catch (error) {
+        const details = error instanceof Error ? error.message : undefined;
+        updateMessage(assistantMessageId, {
+          role: "error",
+          content: "We could not reach OpenRouter. Please try again.",
+          details,
+          status: "complete",
+        });
+        setSendStatus("error", {
+          title: "OpenRouter error",
+          message: "We could not reach OpenRouter. Please try again.",
+          details,
+        });
       }
-      const result = extractCompletionText(data.completion);
-      if (!result.ok) {
-        updateMessage(assistantMessageId, { role: "error", content: result.message, details: result.details, status: "complete" });
-        setSendStatus("error", { title: "OpenRouter error", message: result.message, details: result.details });
-        return;
-      }
-      updateMessage(assistantMessageId, { role: "assistant", content: result.text, status: "complete", reveal: true });
-      setSendStatus("idle", null);
-    } catch (error) {
-      const details = error instanceof Error ? error.message : undefined;
-      updateMessage(assistantMessageId, { role: "error", content: "We could not reach OpenRouter. Please try again.", details, status: "complete" });
-      setSendStatus("error", { title: "OpenRouter error", message: "We could not reach OpenRouter. Please try again.", details });
-    }
-  }, [attachedNotes, hideMd, setSendStatus, updateMessage]);
+    },
+    [attachedNotes, hideMd, setSendStatus, updateMessage],
+  );
 
   const handleSend = useCallback(async () => {
     if (!canSend || !selectedModelId) return;
     const trimmed = draft.trim();
-    const userMessage: AiChatMessage = { id: createMessageId(), role: "user", content: trimmed, createdAt: Date.now(), status: "complete" };
+    const userMessage: AiChatMessage = {
+      id: createMessageId(),
+      role: "user",
+      content: trimmed,
+      createdAt: Date.now(),
+      status: "complete",
+    };
     const assistantMessageId = createMessageId();
     addMessage(userMessage);
-    addMessage({ id: assistantMessageId, role: "assistant", content: "", createdAt: Date.now(), status: "loading" });
+    addMessage({
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      createdAt: Date.now(),
+      status: "loading",
+    });
     setDraft("");
-    await sendRequest({ userMessage, assistantMessageId, modelId: selectedModelId, history: messages });
+    await sendRequest({
+      userMessage,
+      assistantMessageId,
+      modelId: selectedModelId,
+      history: messages,
+    });
   }, [addMessage, canSend, draft, messages, selectedModelId, sendRequest]);
 
   // Retry: find the last user message before this assistant/error message, replay with chosen model
-  const handleRetry = useCallback(async (messageId: string, modelId: string) => {
-    if (sendStatus === "sending") return;
-    const idx = messages.findIndex((m) => m.id === messageId);
-    if (idx === -1) return;
-    // Find the last user message before this position
-    let userMsgIdx = -1;
-    for (let i = idx - 1; i >= 0; i--) {
-      if (messages[i].role === "user") { userMsgIdx = i; break; }
-    }
-    if (userMsgIdx === -1) return;
-    const userMessage = messages[userMsgIdx];
-    const historyBeforeUser = messages.slice(0, userMsgIdx);
-    // Replace the assistant/error message with a fresh loading one
-    const newAssistantId = createMessageId();
-    updateMessage(messageId, { id: newAssistantId, role: "assistant", content: "", status: "loading", details: undefined, reveal: false });
-    setSelectedModelId(modelId);
-    await sendRequest({ userMessage, assistantMessageId: newAssistantId, modelId, history: historyBeforeUser });
-  }, [messages, sendRequest, sendStatus, setSelectedModelId, updateMessage]);
+  const handleRetry = useCallback(
+    async (messageId: string, modelId: string) => {
+      if (sendStatus === "sending") return;
+      const idx = messages.findIndex((m) => m.id === messageId);
+      if (idx === -1) return;
+      // Find the last user message before this position
+      let userMsgIdx = -1;
+      for (let i = idx - 1; i >= 0; i--) {
+        if (messages[i].role === "user") {
+          userMsgIdx = i;
+          break;
+        }
+      }
+      if (userMsgIdx === -1) return;
+      const userMessage = messages[userMsgIdx];
+      const historyBeforeUser = messages.slice(0, userMsgIdx);
+      // Replace the assistant/error message with a fresh loading one
+      const newAssistantId = createMessageId();
+      updateMessage(messageId, {
+        id: newAssistantId,
+        role: "assistant",
+        content: "",
+        status: "loading",
+        details: undefined,
+        reveal: false,
+      });
+      setSelectedModelId(modelId);
+      await sendRequest({
+        userMessage,
+        assistantMessageId: newAssistantId,
+        modelId,
+        history: historyBeforeUser,
+      });
+    },
+    [messages, sendRequest, sendStatus, setSelectedModelId, updateMessage],
+  );
 
   const handleNewChat = useCallback(() => {
     clearMessages();
@@ -526,36 +726,71 @@ function AiChatPanelContent({
   }, [clearMessages, setSendStatus]);
 
   const handleOpenPicker = useCallback(() => {
-    document.dispatchEvent(new CustomEvent(OPEN_LINK_PICKER_EVENT, {
-      detail: { title: "Add context", description: "Select a note to attach.", onPick: (tabId: string) => attachNote(tabId) },
-    }));
+    document.dispatchEvent(
+      new CustomEvent(OPEN_LINK_PICKER_EVENT, {
+        detail: {
+          title: "Add context",
+          description: "Select a note to attach.",
+          onPick: (tabId: string) => attachNote(tabId),
+        },
+      }),
+    );
   }, [attachNote]);
 
   const handleToggleAttachment = useCallback(() => {
     if (!activeTab) return;
-    activeAttached ? detachNote(activeTab.id) : attachNote(activeTab.id);
+    if (activeAttached) detachNote(activeTab.id);
+    else attachNote(activeTab.id);
   }, [activeAttached, activeTab, attachNote, detachNote]);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setDropActive(true); }, []);
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDropActive(true);
+  }, []);
   const handleDragLeave = useCallback(() => setDropActive(false), []);
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault(); setDropActive(false);
-    const tabId = e.dataTransfer.getData("text/tab-id");
-    if (tabId) attachNote(tabId);
-  }, [attachNote]);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDropActive(false);
+      const tabId = e.dataTransfer.getData("text/tab-id");
+      if (tabId) attachNote(tabId);
+    },
+    [attachNote],
+  );
 
-  useEffect(() => { if (modelStatus === "idle") void ensureModels(); }, [ensureModels, modelStatus]);
+  useEffect(() => {
+    if (modelStatus === "idle")
+      Promise.resolve(ensureModels()).catch(handleAsyncError);
+  }, [ensureModels, modelStatus, handleAsyncError]);
 
   return (
-    <div className={cn("relative flex h-full flex-col bg-background", compact && "text-[13px]")}>
+    <div
+      className={cn(
+        "relative flex h-full flex-col bg-background",
+        compact && "text-[13px]",
+      )}
+    >
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-3 py-2">
-        <span className="text-xs font-semibold text-muted-foreground">Markup AI</span>
+        <span className="text-xs font-semibold text-muted-foreground">
+          Markup AI
+        </span>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon-xs" onClick={handleNewChat} aria-label="New chat" title="New chat">
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={handleNewChat}
+            aria-label="New chat"
+            title="New chat"
+          >
             <MessageSquarePlus className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon-xs" onClick={onClose} aria-label="Close Markup AI">
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={onClose}
+            aria-label="Close Markup AI"
+          >
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -564,23 +799,20 @@ function AiChatPanelContent({
       {/* Messages */}
       <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto">
         <div className={cn("flex flex-col gap-2 px-3 pb-4 pt-3")}>
-          {statusNotice && (
-            <div className="flex items-start gap-2 rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-              <span className="min-w-0 break-words">{statusNotice.message}</span>
-              {statusNotice.details && (
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="ghost" size="icon-xs" className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground" aria-label="View status details">
-                      <Info className="h-3 w-3" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-72 text-xs">
-                    <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-[11px] text-muted-foreground">{statusNotice.details}</pre>
-                  </PopoverContent>
-                </Popover>
-              )}
-            </div>
+          {!messages.length && (
+            <ChatEmptyState modelStatus={modelStatus} setDraft={setDraft} />
+          )}
+          {statusNotice && <ChatStatusNotice notice={statusNotice} />}
+          {modelStatus === "error" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                Promise.resolve(ensureModels()).catch(handleAsyncError)
+              }
+            >
+              Retry connection
+            </Button>
           )}
 
           {messages.map((message) => (
@@ -602,82 +834,40 @@ function AiChatPanelContent({
 
       {/* Input area */}
       <div className="shrink-0 border-t border-border p-3 space-y-2">
-        <div
-          className={cn("flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground", dropActive && "rounded-md bg-muted/50")}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-xs" className="text-muted-foreground hover:text-foreground" aria-label="Attach notes">
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48">
-              <DropdownMenuItem onClick={handleToggleAttachment} disabled={!activeTab}>
-                {activeAttached ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-                {activeAttached ? "Remove active note" : "Add active note"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleOpenPicker}>
-                <FolderOpen className="h-3.5 w-3.5" />
-                Browse notes
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {attachedNotes.map((note) => (
-            <div key={note.id} className="flex items-center gap-1 rounded-full border border-border/60 bg-muted/20 px-2 py-1 text-[11px]">
-              <span className="max-w-[140px] truncate">{getDisplayTitle(note.title, hideMd)}</span>
-              <Button variant="ghost" size="icon-xs" onClick={() => detachNote(note.id)} aria-label={`Remove ${note.title}`}>
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
-          ))}
-        </div>
-
-        <div className="flex items-end gap-2">
-          <div className="relative flex-1">
-            <ModelPickerPopover
-              models={models}
-              selectedModelId={selectedModelId}
-              modelStatus={modelStatus}
-              onSelect={setSelectedModelId}
-              align="start"
-              side="top"
-            >
-              <Button
-                variant="ghost"
-                size="xs"
-                className="absolute bottom-2 left-2 z-10 h-6 max-w-[200px] gap-1 px-2 text-[11px] text-muted-foreground"
-                disabled={modelStatus !== "ready" || models.length === 0}
-              >
-                <span className="truncate">{modelLabel}</span>
-                <ChevronDown className="h-3 w-3" />
-              </Button>
-            </ModelPickerPopover>
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSend(); } }}
-              placeholder="Ask Markup AI..."
-              rows={3}
-              className={cn(
-                "min-h-[88px] w-full resize-none rounded-md border border-border bg-background px-3 pb-10 pt-3 text-sm leading-relaxed shadow-sm outline-none focus:border-primary",
-                compact && "text-[13px]"
-              )}
-            />
-          </div>
-          <Button size="icon" disabled={!canSend} aria-label="Send message" onClick={() => void handleSend()}>
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
+        <ChatAttachments
+          activeTab={activeTab}
+          activeAttached={activeAttached}
+          attachedNotes={attachedNotes}
+          hideMd={hideMd}
+          dropActive={dropActive}
+          handleDragOver={handleDragOver}
+          handleDragLeave={handleDragLeave}
+          handleDrop={handleDrop}
+          handleToggleAttachment={handleToggleAttachment}
+          handleOpenPicker={handleOpenPicker}
+          detachNote={detachNote}
+        />
+        <ChatDraftInput
+          compact={compact}
+          models={models}
+          selectedModelId={selectedModelId}
+          modelStatus={modelStatus}
+          modelLabel={modelLabel}
+          setSelectedModelId={setSelectedModelId}
+          draft={draft}
+          setDraft={setDraft}
+          handleSend={handleSend}
+          canSend={canSend}
+          handleAsyncError={handleAsyncError}
+        />
       </div>
     </div>
   );
 }
 
+/** Show AI alongside the editor on desktop, or in the phone chat dialog. */
 export function AiChatPanel() {
+  const isMobile = useIsMobile();
   const panelOpen = useAiChatStore((s) => s.panelOpen);
   const setPanelOpen = useAiChatStore((s) => s.setPanelOpen);
   const [width, setWidth] = useState(DEFAULT_PANEL_WIDTH);
@@ -686,42 +876,56 @@ export function AiChatPanel() {
   const startWidth = useRef(DEFAULT_PANEL_WIDTH);
 
   useEffect(() => {
-    if (!panelOpen) return;
+    if (!panelOpen) return undefined;
+    /** Close the assistant with Escape while its panel is open. */
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); setPanelOpen(false); }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setPanelOpen(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [panelOpen, setPanelOpen]);
 
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isDragging.current = true;
-    startX.current = e.clientX;
-    startWidth.current = width;
+  const onMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      isDragging.current = true;
+      startX.current = e.clientX;
+      startWidth.current = width;
 
-    const onMouseMove = (e: MouseEvent) => {
-      if (!isDragging.current) return;
-      const delta = startX.current - e.clientX;
-      const next = Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, startWidth.current + delta));
-      setWidth(next);
-    };
-    const onMouseUp = () => {
-      isDragging.current = false;
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-  }, [width]);
+      /** Resize the pane within its supported width range. */
+      const onMouseMove = (e: MouseEvent) => {
+        if (!isDragging.current) return;
+        const delta = startX.current - e.clientX;
+        const next = Math.min(
+          MAX_PANEL_WIDTH,
+          Math.max(MIN_PANEL_WIDTH, startWidth.current + delta),
+        );
+        setWidth(next);
+      };
+      /** End resizing and release the temporary pointer listeners. */
+      const onMouseUp = () => {
+        isDragging.current = false;
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+      };
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    },
+    [width],
+  );
 
+  if (isMobile) return <AiChatMobileModal />;
+  if (!panelOpen) return null;
   return (
     <div
       id="markup-ai-panel"
       style={{ width }}
       className={cn(
-        "fixed right-0 top-8 z-50 h-[calc(100%-2rem)] max-w-[92vw] border-l border-border bg-card shadow-2xl transition-transform duration-300",
-        panelOpen ? "translate-x-0" : "translate-x-full pointer-events-none"
+        "workbench-ai-panel relative h-full shrink-0 border-l border-border bg-background",
+        panelOpen ? "translate-x-0" : "translate-x-full pointer-events-none",
       )}
       aria-hidden={!panelOpen}
     >
@@ -741,41 +945,265 @@ export function AiChatMobileModal() {
   const setPanelOpen = useAiChatStore((s) => s.setPanelOpen);
   return (
     <Dialog open={panelOpen} onOpenChange={setPanelOpen}>
-      <DialogContent showCloseButton={false} className="h-[100dvh] w-[100dvw] max-w-none rounded-none p-0">
+      <DialogContent
+        showCloseButton={false}
+        className="h-[100dvh] w-[100dvw] max-w-none rounded-none p-0"
+      >
+        <DialogTitle className="sr-only">Markup AI</DialogTitle>
+        <DialogDescription className="sr-only">
+          Chat with attached notes and choose a model.
+        </DialogDescription>
         <AiChatPanelContent onClose={() => setPanelOpen(false)} compact />
       </DialogContent>
     </Dialog>
   );
 }
 
-export function AiChatToggleButton() {
-  const panelOpen = useAiChatStore((s) => s.panelOpen);
-  const setPanelOpen = useAiChatStore((s) => s.setPanelOpen);
-  const modelStatus = useAiChatStore((s) => s.modelStatus);
-  const ensureStatus = useAiChatStore((s) => s.ensureStatus);
-
-  useEffect(() => { if (modelStatus === "idle") void ensureStatus(); }, [ensureStatus, modelStatus]);
-
-  const needsSetup = modelStatus === "missing_key";
-  const hasError = modelStatus === "auth_failed" || modelStatus === "error";
-  const label = needsSetup ? "Setup AI" : "Markup AI";
-
+/** Render attached note controls independently from message and model state. */
+function ChatAttachments({
+  activeTab,
+  activeAttached,
+  attachedNotes,
+  hideMd,
+  dropActive,
+  handleDragOver,
+  handleDragLeave,
+  handleDrop,
+  handleToggleAttachment,
+  handleOpenPicker,
+  detachNote,
+}: {
+  activeTab: Tab | null;
+  activeAttached: boolean;
+  attachedNotes: Tab[];
+  hideMd: boolean;
+  dropActive: boolean;
+  handleDragOver: React.DragEventHandler;
+  handleDragLeave: React.DragEventHandler;
+  handleDrop: React.DragEventHandler;
+  handleToggleAttachment: () => void;
+  handleOpenPicker: () => void;
+  detachNote: (id: string) => void;
+}) {
   return (
-    <button
-      type="button"
-      onClick={() => setPanelOpen(true)}
-      aria-label={label}
-      aria-expanded={panelOpen}
-      className={cn("fixed right-2 top-1/2 z-40 -translate-y-1/2", panelOpen && "pointer-events-none opacity-0")}
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground",
+        dropActive && "rounded-md bg-muted/50",
+      )}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
-      <div className={cn(
-        "flex h-20 w-7 items-center justify-center rounded-l-lg border border-border/60 bg-card/80 px-1 shadow-sm transition-colors",
-        needsSetup && "border-amber-400/60 bg-amber-100/60 text-amber-900",
-        hasError && !needsSetup && "border-red-400/60 bg-red-100/60 text-red-900",
-        !needsSetup && !hasError && "text-muted-foreground"
-      )}>
-        <span className="block rotate-90 text-[10px] font-semibold uppercase tracking-[0.2em]">Markup AI</span>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="text-muted-foreground hover:text-foreground"
+            aria-label="Attach notes"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-48">
+          <DropdownMenuItem
+            onClick={handleToggleAttachment}
+            disabled={!activeTab}
+          >
+            {activeAttached ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : (
+              <Plus className="h-3.5 w-3.5" />
+            )}
+            {activeAttached ? "Remove active note" : "Add active note"}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleOpenPicker}>
+            <FolderOpen className="h-3.5 w-3.5" />
+            Browse notes
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {attachedNotes.map((note) => (
+        <div
+          key={note.id}
+          className="flex items-center gap-1 rounded-full border border-border/60 bg-muted/20 px-2 py-1 text-[11px]"
+        >
+          <span className="max-w-[140px] truncate">
+            {getDisplayTitle(note.title, hideMd)}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={() => detachNote(note.id)}
+            aria-label={`Remove ${note.title}`}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Keep model selection and the controlled draft in one reusable composer. */
+function ChatDraftInput({
+  compact,
+  models,
+  selectedModelId,
+  modelStatus,
+  modelLabel,
+  setSelectedModelId,
+  draft,
+  setDraft,
+  handleSend,
+  canSend,
+  handleAsyncError,
+}: {
+  compact: boolean;
+  models: AiChatModel[];
+  selectedModelId: string | null;
+  modelStatus: string;
+  modelLabel: string;
+  setSelectedModelId: (id: string) => void;
+  draft: string;
+  setDraft: (value: string) => void;
+  handleSend: () => Promise<void>;
+  canSend: boolean;
+  handleAsyncError: (error: unknown) => void;
+}) {
+  return (
+    <div className="flex items-end gap-2">
+      <div className="relative flex-1">
+        <ChatModelSelector
+          models={models}
+          selectedModelId={selectedModelId}
+          modelStatus={modelStatus}
+          modelLabel={modelLabel}
+          setSelectedModelId={setSelectedModelId}
+        />
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSend().catch(handleAsyncError);
+            }
+          }}
+          placeholder="Ask Markup AI..."
+          rows={3}
+          className={cn(
+            "min-h-[88px] w-full resize-none rounded-md border border-border bg-background px-3 pb-10 pt-3 text-sm leading-relaxed shadow-sm outline-none focus:border-primary",
+            compact && "text-[13px]",
+          )}
+        />
       </div>
-    </button>
+      <Button
+        size="icon"
+        disabled={!canSend}
+        aria-label="Send message"
+        onClick={() => handleSend().catch(handleAsyncError)}
+      >
+        <Send className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
+/** Show connection errors with expandable technical details. */
+function ChatStatusNotice({ notice }: { notice: StatusNotice }) {
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+      <span className="min-w-0 break-words">{notice.message}</span>
+      {notice.details && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
+              aria-label="View status details"
+            >
+              <Info className="h-3 w-3" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-72 text-xs">
+            <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-[11px] text-muted-foreground">
+              {notice.details}
+            </pre>
+          </PopoverContent>
+        </Popover>
+      )}
+    </div>
+  );
+}
+
+/** Keep the model menu and its trigger together without nesting the composer. */
+function ChatModelSelector({
+  models,
+  selectedModelId,
+  modelStatus,
+  modelLabel,
+  setSelectedModelId,
+}: {
+  models: AiChatModel[];
+  selectedModelId: string | null;
+  modelStatus: string;
+  modelLabel: string;
+  setSelectedModelId: (id: string) => void;
+}) {
+  return (
+    <ModelPickerPopover
+      models={models}
+      selectedModelId={selectedModelId}
+      modelStatus={modelStatus}
+      onSelect={setSelectedModelId}
+      align="start"
+      side="top"
+    >
+      <Button
+        variant="ghost"
+        size="xs"
+        className="absolute bottom-2 left-2 z-10 h-6 max-w-[200px] gap-1 px-2 text-[11px] text-muted-foreground"
+        disabled={modelStatus !== "ready" || models.length === 0}
+      >
+        <span className="truncate">{modelLabel}</span>
+        <ChevronDown className="h-3 w-3" />
+      </Button>
+    </ModelPickerPopover>
+  );
+}
+
+/** Offer draft prompts before the first message without coupling them to message rendering. */
+function ChatEmptyState({
+  modelStatus,
+  setDraft,
+}: {
+  modelStatus: string;
+  setDraft: (value: string) => void;
+}) {
+  return (
+    <div className="ai-empty-state">
+      <h3>Work with your notes</h3>
+      <p>Attach a note, then ask for an edit, summary, or next steps.</p>
+      {modelStatus === "loading" ? (
+        <p role="status">Loading available models…</p>
+      ) : (
+        <div>
+          {[
+            "Summarise the attached notes",
+            "Turn the attached notes into action items",
+            "Suggest improvements to this draft",
+          ].map((prompt) => (
+            <button key={prompt} onClick={() => setDraft(prompt)}>
+              {prompt}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

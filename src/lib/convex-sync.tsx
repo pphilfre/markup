@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useConvex } from "convex/react";
+import { reconcileRemoteProjectState } from "@/lib/project-sync";
+import { serializeCloudProjectData } from "@/lib/projects";
 import { shallow } from "zustand/shallow";
 import { api } from "../../convex/_generated/api";
 import { getTabWorkspaceId, useEditorStore, DEFAULT_SETTINGS, WORKSPACE_PRESETS, type Settings, type NoteType, type Profile } from "@/lib/store";
@@ -58,7 +60,7 @@ function filterOpenAndActiveToWorkspace(
   );
 
   const scopedOpenTabIds = openTabIds.filter((id) => visibleTabIds.has(id));
-  const scopedActiveTabId = activeTabId && visibleTabIds.has(activeTabId)
+  const scopedActiveTabId = activeTabId === null ? null : activeTabId && visibleTabIds.has(activeTabId)
     ? activeTabId
     : (scopedOpenTabIds[0] ?? null);
 
@@ -251,6 +253,7 @@ export function ConvexSync() {
       settings: sanitizedSettings,
       profiles: slice.profiles.map((p) => ({ id: p.id, name: p.name })),
       activeProfileId: slice.activeProfileId,
+      projectData: serializeCloudProjectData(slice.projectData, slice.tabs),
     };
     const nextWorkspaceKey = JSON.stringify(workspacePayload);
 
@@ -421,7 +424,7 @@ export function ConvexSync() {
       const mergedProfiles = mergeProfilesWithLocal(latestWorkspace.profiles, current.profiles);
 
       useEditorStore.setState({
-        tabs: mergedTabs,
+        ...reconcileRemoteProjectState(current, mergedTabs, latestWorkspace.projectData),
         openTabIds: scopedOpenTabIds,
         activeTabId: scopedActiveTabId,
         folders: (latestWorkspace.folders ?? []).map((f) => ({
@@ -611,7 +614,7 @@ export function ConvexSync() {
       const mergedProfiles = mergeProfilesWithLocal(workspace.profiles, current.profiles);
 
       useEditorStore.setState({
-        tabs: mergedTabs,
+        ...reconcileRemoteProjectState(current, mergedTabs, workspace.projectData),
         openTabIds: scopedOpenTabIds,
         activeTabId: scopedActiveTabId,
         folders: (workspace.folders ?? []).map((f) => ({
@@ -671,6 +674,8 @@ export function ConvexSync() {
           ? workspace.profiles.map((p) => ({ id: p.id, name: p.name }))
           : [{ id: "default", name: "Personal" }],
         activeProfileId: workspace.activeProfileId ?? "default",
+
+        projectData: workspace.projectData ?? null,
       });
       lastRemoteTabs.current = lastPushedTabs.current;
       lastRemoteWorkspace.current = lastPushedWorkspace.current;
@@ -727,6 +732,8 @@ export function ConvexSync() {
         settings: sanitizedSettings as Settings,
         profiles: s.profiles.map((p) => ({ id: p.id, name: p.name })),
         activeProfileId: s.activeProfileId,
+
+        projectData: serializeCloudProjectData(s.projectData, s.tabs),
       }).then(() => {
         lastPushedTabs.current = JSON.stringify(
           initialTabs.map((t) => ({ tabId: t.tabId, title: t.title, content: t.content, workspaceId: t.workspaceId, folderId: t.folderId, tags: t.tags ?? [], pinned: t.pinned ?? false, noteType: t.noteType ?? "note", customIcon: t.customIcon, iconColor: t.iconColor }))
@@ -750,6 +757,8 @@ export function ConvexSync() {
           settings: sanitizeSettings(s.settings),
           profiles: s.profiles.map((p) => ({ id: p.id, name: p.name })),
           activeProfileId: s.activeProfileId,
+
+          projectData: serializeCloudProjectData(s.projectData, s.tabs),
         });
         setSyncState({ status: "synced", lastSyncedAt: Date.now(), error: null });
       }).catch((err) => {
@@ -815,6 +824,8 @@ export function ConvexSync() {
         ? workspace.profiles.map((p) => ({ id: p.id, name: p.name }))
         : [{ id: "default", name: "Personal" }],
       activeProfileId: workspace.activeProfileId ?? "default",
+
+      projectData: workspace.projectData ?? null,
     });
 
     const remoteChanged =
@@ -893,7 +904,7 @@ export function ConvexSync() {
     const mergedProfiles = mergeProfilesWithLocal(workspace.profiles, current.profiles);
 
     useEditorStore.setState({
-      tabs: mergedTabs,
+      ...reconcileRemoteProjectState(current, mergedTabs, workspace.projectData),
       openTabIds: scopedOpenTabIds,
       activeTabId: scopedActiveTabId,
       folders: (workspace.folders ?? []).map((f) => ({
@@ -1008,6 +1019,8 @@ export function ConvexSync() {
         settings: s.settings,
         profiles: s.profiles,
         activeProfileId: s.activeProfileId,
+
+        projectData: s.projectData,
       }),
       () => {
         if (isHydrating.current) return;

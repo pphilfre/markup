@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "node:path";
 
 const isTauriBuild = process.env.TAURI_ENV_PLATFORM !== undefined;
 const isProd = process.env.NODE_ENV === "production";
@@ -66,6 +67,8 @@ const sensitiveNoStoreHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  outputFileTracingRoot: path.resolve(process.cwd()),
+  turbopack: { root: path.resolve(process.cwd()) },
   /* config options here */
   reactCompiler: true,
   serverExternalPackages: ["@prisma/client", "prisma"],

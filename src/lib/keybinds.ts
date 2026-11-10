@@ -29,6 +29,19 @@ export function useGlobalKeybinds() {
         useEditorStore.getState().requestCreateTab();
       },
 
+      "Alt+Shift+Digit1": (e: KeyboardEvent) => {
+        e.preventDefault();
+        useEditorStore.getState().navigate("home");
+      },
+      "Alt+Shift+Digit2": (e: KeyboardEvent) => {
+        e.preventDefault();
+        useEditorStore.getState().navigate("recent");
+      },
+      "Alt+Shift+Digit3": (e: KeyboardEvent) => {
+        e.preventDefault();
+        useEditorStore.getState().navigate("tasks");
+      },
+
       // Close tab
       "Alt+KeyW": (e: KeyboardEvent) => {
         e.preventDefault();
@@ -45,7 +58,10 @@ export function useGlobalKeybinds() {
       // Toggle theme
       "Alt+KeyL": (e: KeyboardEvent) => {
         e.preventDefault();
-        useEditorStore.getState().toggleTheme();
+        const state = useEditorStore.getState();
+        const next = document.documentElement.classList.contains("dark") ? "light" : "dark";
+        state.updateSettings({ themeMode: next });
+        if (state.theme !== next) state.toggleTheme();
       },
 
       // Toggle file tree sidebar

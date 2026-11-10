@@ -58,6 +58,7 @@ model Workspace {
   fileTreeOpen    Boolean?
   settings        Json?
   profiles        Json?
+  projectData     String? @db.Text
   activeProfileId String?
 
   user User @relation(fields: [userId], references: [workosId], onDelete: Cascade)

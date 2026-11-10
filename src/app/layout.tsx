@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DatabaseClientProvider } from "@/components/database-client-provider";
 import { UpdateBanner } from "@/components/shell/update-banner";
@@ -7,26 +6,16 @@ import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 const SITE_URL = "https://markup.freddiephilpot.dev";
 const SITE_NAME = "Markup";
 const IS_DEV = process.env.NODE_ENV === "development";
 const SITE_DESCRIPTION =
-  "A fast, keyboard-first markdown editor built for speed. Write, preview, and export markdown with split view, syntax highlighting, spotlight search, and a distraction-free interface.";
+  "A keyboard-first Markdown workspace with live preview, connected notes, tasks, whiteboards, mind maps, and local or cloud sync.";
 
 export const metadata: Metadata = {
   // ── Core ──────────────────────────────────────────────────────────────
   title: {
-    default: "Markup — Fast, Keyboard-First Markdown Editor",
+    default: "Markup — Keyboard-first Markdown workspace",
     template: "%s | Markup",
   },
   description: SITE_DESCRIPTION,
@@ -186,7 +175,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased h-screen overflow-hidden`}
+        className="antialiased h-screen overflow-hidden"
       >
         <DatabaseClientProvider>
           <TooltipProvider delayDuration={300}>

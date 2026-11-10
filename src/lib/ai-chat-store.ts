@@ -213,7 +213,7 @@ export const useAiChatStore = create<AiChatState>((set, get) => ({
 
     inflightStatus = (async () => {
       try {
-        const res = await fetch(STATUS_ENDPOINT);
+        const res = await fetch(STATUS_ENDPOINT, {signal: AbortSignal.timeout(15000)});
         const data = (await res.json().catch(() => null)) as ModelListResponse | null;
 
         if (!data || !data.ok) {
@@ -253,7 +253,7 @@ export const useAiChatStore = create<AiChatState>((set, get) => ({
 
     inflightModels = (async () => {
       try {
-        const res = await fetch(MODEL_ENDPOINT);
+        const res = await fetch(MODEL_ENDPOINT, {signal: AbortSignal.timeout(15000)});
         const data = (await res.json().catch(() => null)) as ModelListResponse | null;
 
         if (!data || !data.ok) {

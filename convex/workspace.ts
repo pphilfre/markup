@@ -1,5 +1,10 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import {
+  mergeProjectData,
+  parseProjectData,
+  serializeCloudProjectData,
+} from "../src/lib/projects";
 
 const folderValidator = v.object({
   id: v.string(),
@@ -114,6 +119,7 @@ export const save = mutation({
     settings: v.optional(settingsValidator),
     profiles: v.optional(v.array(profileValidator)),
     activeProfileId: v.optional(v.string()),
+    projectData: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { userId, ...data } = args;
@@ -124,9 +130,16 @@ export const save = mutation({
       .first();
 
     if (existing) {
+      if (data.projectData !== undefined)
+        data.projectData = serializeCloudProjectData(
+          mergeProjectData(
+            parseProjectData(existing.projectData),
+            data.projectData,
+          ),
+        );
       // Filter out undefined values from data to avoid overwriting with null/undefined
       const patchData = Object.fromEntries(
-        Object.entries(data).filter(([, v]) => v !== undefined)
+        Object.entries(data).filter(([, v]) => v !== undefined),
       );
       await ctx.db.patch(existing._id, patchData);
     } else {
@@ -141,6 +154,7 @@ export const save = mutation({
         fileTreeOpen: data.fileTreeOpen ?? true,
         settings: data.settings ?? {},
         profiles: data.profiles ?? [{ id: "default", name: "Personal" }],
+        projectData: data.projectData,
         activeProfileId: data.activeProfileId ?? "default",
       };
       await ctx.db.insert("workspaces", insertData);

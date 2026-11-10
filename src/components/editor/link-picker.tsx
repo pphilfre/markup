@@ -167,7 +167,7 @@ export function LinkPicker() {
 
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
             <Link2 className="h-3 w-3" />
-            Links use [[Title]] in notes.
+            Links stay connected when a document is renamed or moved.
           </div>
         </div>
       </DialogContent>

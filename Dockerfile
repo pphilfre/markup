@@ -6,6 +6,7 @@ RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 
 COPY package.json package-lock.json ./
+COPY vendor/exceljs ./vendor/exceljs
 RUN npm ci --ignore-scripts --legacy-peer-deps
 
 # Rebuild the source code only when needed

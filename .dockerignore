@@ -1,0 +1,9 @@
+.git
+.github
+.env*
+node_modules
+.next*
+out
+src-tauri/target
+tsconfig.tsbuildinfo
+npm-debug.log*

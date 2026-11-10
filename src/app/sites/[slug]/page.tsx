@@ -240,8 +240,8 @@ function PublishedSiteContent({ slug, userId, loggedIn }: { slug: string; userId
 
   return (
     <div className="h-full min-h-0 bg-background flex flex-col">
-      <div className="sticky top-0 z-10 border-b border-border bg-card/90 backdrop-blur">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-2">
+      <div className="sticky top-0 z-10 border-b border-border bg-card">
+        <div className="public-document-header mx-auto max-w-4xl justify-between">
           <div className="min-w-0">
             <div className="text-xs text-muted-foreground truncate">
               Published with <a className="underline underline-offset-2" href="/" target="_blank" rel="noopener noreferrer">Markup</a>
@@ -255,7 +255,7 @@ function PublishedSiteContent({ slug, userId, loggedIn }: { slug: string; userId
               workspaceCustomThemeColors={workspaceCustomThemeColors ?? null}
             />
             <Button variant="outline" size="sm" className="gap-1.5" onClick={handleCopyLink}>
-              <Copy className="h-3.5 w-3.5" /> Copy link
+              <Copy className="h-3.5 w-3.5" /> <span aria-live="polite">{copied ? "Copied" : "Copy link"}</span>
             </Button>
             {isOwner && (
               <Button size="sm" className="gap-1.5" onClick={handleEdit}>
@@ -265,17 +265,6 @@ function PublishedSiteContent({ slug, userId, loggedIn }: { slug: string; userId
           </div>
         </div>
       </div>
-
-      {/* Copied to Clipboard Banner */}
-      {copied && (
-        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 flex items-center gap-2 rounded-lg bg-green-600 text-white px-4 py-2 shadow-lg animate-fade-in">
-          <svg className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="10" cy="10" r="10" fill="#22c55e" />
-            <path d="M6 10.5l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <span className="font-semibold text-sm">Copied to Clipboard</span>
-        </div>
-      )}
 
       <main className="flex-1 min-h-0 overflow-auto mx-auto max-w-4xl px-4 py-8">
         <article className="markdown-body">

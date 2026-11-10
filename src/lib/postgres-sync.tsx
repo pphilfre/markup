@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { reconcileRemoteProjectState } from "@/lib/project-sync";
+import { serializeCloudProjectData } from "@/lib/projects";
 import { shallow } from "zustand/shallow";
 import {
   getTabWorkspaceId,
@@ -105,7 +107,7 @@ function filterOpenAndActiveToWorkspace(
 
   const scopedOpenTabIds = openTabIds.filter((id) => visibleTabIds.has(id));
   const scopedActiveTabId =
-    activeTabId && visibleTabIds.has(activeTabId)
+    activeTabId === null ? null : activeTabId && visibleTabIds.has(activeTabId)
       ? activeTabId
       : scopedOpenTabIds[0] ?? null;
 
@@ -344,6 +346,7 @@ export function PostgresSync() {
       settings: sanitizedSettings,
       profiles: slice.profiles.map((p) => ({ id: p.id, name: p.name })),
       activeProfileId: slice.activeProfileId,
+      projectData: serializeCloudProjectData(slice.projectData, slice.tabs),
     };
     const nextWorkspaceKey = JSON.stringify(workspacePayload);
 
@@ -529,7 +532,7 @@ export function PostgresSync() {
       );
 
       useEditorStore.setState({
-        tabs: mergedTabs,
+        ...reconcileRemoteProjectState(current, mergedTabs, latestWorkspace.projectData),
         openTabIds: scopedOpenTabIds,
         activeTabId: scopedActiveTabId,
         folders: (latestWorkspace.folders ?? []).map((f) => ({
@@ -784,7 +787,7 @@ export function PostgresSync() {
       );
 
       useEditorStore.setState({
-        tabs: mergedTabs,
+        ...reconcileRemoteProjectState(current, mergedTabs, workspace.projectData),
         openTabIds: scopedOpenTabIds,
         activeTabId: scopedActiveTabId,
         folders: (workspace.folders ?? []).map((f) => ({
@@ -887,6 +890,8 @@ export function PostgresSync() {
           ? workspace.profiles.map((p) => ({ id: p.id, name: p.name }))
           : [{ id: "default", name: "Personal" }],
         activeProfileId: workspace.activeProfileId ?? "default",
+
+        projectData: workspace.projectData ?? null,
       });
       lastRemoteTabs.current = lastPushedTabs.current;
       lastRemoteWorkspace.current = lastPushedWorkspace.current;
@@ -957,6 +962,8 @@ export function PostgresSync() {
         settings: sanitizedSettings as Settings,
         profiles: s.profiles.map((p) => ({ id: p.id, name: p.name })),
         activeProfileId: s.activeProfileId,
+
+        projectData: serializeCloudProjectData(s.projectData, s.tabs),
       })
         .then(() => {
           lastPushedTabs.current = JSON.stringify(
@@ -1002,6 +1009,8 @@ export function PostgresSync() {
             settings: sanitizeSettings(s.settings),
             profiles: s.profiles.map((p) => ({ id: p.id, name: p.name })),
             activeProfileId: s.activeProfileId,
+
+            projectData: serializeCloudProjectData(s.projectData, s.tabs),
           });
           setSyncState({ status: "synced", lastSyncedAt: Date.now(), error: null });
         })
@@ -1096,6 +1105,8 @@ export function PostgresSync() {
         ? workspace.profiles.map((p) => ({ id: p.id, name: p.name }))
         : [{ id: "default", name: "Personal" }],
       activeProfileId: workspace.activeProfileId ?? "default",
+
+      projectData: workspace.projectData ?? null,
     });
 
     const remoteChanged =
@@ -1190,7 +1201,7 @@ export function PostgresSync() {
     const mergedProfiles = mergeProfilesWithLocal(workspace.profiles, current.profiles);
 
     useEditorStore.setState({
-      tabs: mergedTabs,
+      ...reconcileRemoteProjectState(current, mergedTabs, workspace.projectData),
       openTabIds: scopedOpenTabIds,
       activeTabId: scopedActiveTabId,
       folders: (workspace.folders ?? []).map((f) => ({
@@ -1349,6 +1360,8 @@ export function PostgresSync() {
         settings: s.settings,
         profiles: s.profiles,
         activeProfileId: s.activeProfileId,
+
+        projectData: s.projectData,
       }),
       () => {
         if (isHydrating.current) return;

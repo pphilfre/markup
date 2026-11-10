@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
-import { Link2 } from "lucide-react";
+import { CheckCheck, Link2 } from "lucide-react";
 import { useEditorStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -108,6 +108,7 @@ export function SelectionToolbar() {
           <Link2 className="h-3 w-3" />
           Link file
         </button>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => useEditorStore.getState().createTaskFromSelection()} className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted"><CheckCheck className="h-3 w-3" />Create task</button>
       </div>
     </div>
   );
