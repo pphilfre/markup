@@ -8,7 +8,8 @@ export type ProjectPage =
   | "resources"
   | "unfiled"
   | "trash"
-  | "files";
+  | "files"
+  | "recent";
 export type Navigation = {
   page: ProjectPage;
   projectId: string | null;

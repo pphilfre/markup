@@ -15,6 +15,13 @@ import remarkSupersub from "remark-supersub";
 import { remarkDefinitionList, defListHastHandlers } from "remark-definition-list";
 import rehypeRaw from "rehype-raw";
 import rehypeKatex from "rehype-katex";
+import rehypeHighlight from "rehype-highlight";
+import { markdownLanguage } from "@codemirror/lang-markdown";
+import { resolveDocumentLink } from "@/lib/document-links";
+import { titleWithoutExtension } from "@/lib/projects";
+import { MermaidBlock } from "./markdown-preview";
+import { Button } from "@/components/ui/button";
+import { AlertCircle, AlertTriangle, Info, Lightbulb, Pin } from "lucide-react";
 import "katex/dist/katex.min.css";
 import { emojify } from "node-emoji";
 import { useEditorStore } from "@/lib/store";
@@ -30,12 +37,12 @@ function preprocessLine(line: string): string {
   return out;
 }
 
-const ADMONITION_TYPES: Record<string, { color: string; icon: string; label: string }> = {
-  NOTE: { color: "#3b82f6", icon: "ℹ️", label: "Note" },
-  TIP: { color: "#22c55e", icon: "💡", label: "Tip" },
-  IMPORTANT: { color: "#8b5cf6", icon: "📌", label: "Important" },
-  WARNING: { color: "#f97316", icon: "⚠️", label: "Warning" },
-  CAUTION: { color: "#ef4444", icon: "🔴", label: "Caution" },
+const ADMONITION_TYPES: Record<string, { color: string; Icon: typeof Info; label: string }> = {
+  NOTE: { color: "var(--primary)", Icon: Info, label: "Note" },
+  TIP: { color: "var(--success)", Icon: Lightbulb, label: "Tip" },
+  IMPORTANT: { color: "var(--primary)", Icon: Pin, label: "Important" },
+  WARNING: { color: "#da9b5d", Icon: AlertTriangle, label: "Warning" },
+  CAUTION: { color: "var(--destructive)", Icon: AlertCircle, label: "Caution" },
 };
 
 /**
@@ -73,6 +80,7 @@ interface LineProps {
   isActive: boolean;
   onFocus: (idx: number) => void;
   onBlur: () => void;
+  onToggleTask: (idx: number, checked: boolean) => void;
   onChange: (idx: number, value: string) => void;
   onKeyDown: (idx: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onActiveTextarea: (lineIndex: number, el: HTMLTextAreaElement | null) => void;
@@ -90,7 +98,7 @@ interface LineProps {
 /**
  * Renders a single editable markdown line, toggling between preview and textarea modes.
  */
-function InlineLine({ lineIndex, text, isActive, onFocus, onBlur, onChange, onKeyDown, onActiveTextarea, onSelectionChange, settings }: LineProps) {
+function InlineLine({ lineIndex, text, isActive, onFocus, onBlur, onToggleTask, onChange, onKeyDown, onActiveTextarea, onSelectionChange, settings }: LineProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-focus textarea when this line becomes active
@@ -144,6 +152,8 @@ function InlineLine({ lineIndex, text, isActive, onFocus, onBlur, onChange, onKe
             );
           }
         }}
+        aria-label={"Markdown line " + (lineIndex + 1)}
+        data-document-line={lineIndex + 1}
         rows={1}
         className="w-full resize-none overflow-hidden bg-transparent outline-none border-none p-0 m-0 block"
         style={style}
@@ -155,32 +165,53 @@ function InlineLine({ lineIndex, text, isActive, onFocus, onBlur, onChange, onKe
     );
   }
 
-  // Empty line — render a non-breaking space so it has height
   if (!text.trim()) {
-    return (
-      <div
-        onClick={() => onFocus(lineIndex)}
-        className="min-h-[1.5em] cursor-text w-full"
-        style={style}
-      >
-        &nbsp;
-      </div>
-    );
+    return <div onClick={() => onFocus(lineIndex)} className="markdown-live-blank cursor-text w-full" />;
   }
 
-  const processed = preprocessLine(text);
+  const readingStyle = { ...style, fontFamily: settings.fontFamily === "var(--font-geist-mono), ui-monospace, monospace" ? "var(--font-geist-sans)" : settings.fontFamily };
+  const processed = preprocessLine(text).replace(/\[\[([^\]]+)\]\]/g, (_, title: string) =>
+    "[" + title + "](#wiki/" + encodeURIComponent(title) + ")");
 
   return (
     <div
-      onClick={() => onFocus(lineIndex)}
+      data-document-line={lineIndex + 1}
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          onFocus(lineIndex);
+        }
+      }}
+      onClick={(event) => {
+        if (!(event.target instanceof Element) || !event.target.closest("a, button, input")) onFocus(lineIndex);
+      }}
       className="cursor-text w-full [&_p]:m-0 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:text-xl [&_h2]:font-bold [&_h3]:text-lg [&_h3]:font-semibold [&_strong]:font-bold [&_em]:italic [&_code]:bg-muted [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_mark]:bg-yellow-200 [&_mark]:dark:bg-yellow-800 [&_mark]:px-0.5 [&_del]:line-through [&_del]:opacity-60 [&_sup]:text-xs [&_sup]:align-super [&_sub]:text-xs [&_sub]:align-sub"
-      style={style}
+      style={readingStyle}
     >
       <ReactMarkdown
         remarkPlugins={[[remarkGfm, { singleTilde: false }], remarkMath, remarkSupersub, remarkDefinitionList]}
         remarkRehypeOptions={{ handlers: defListHastHandlers, allowDangerousHtml: true }}
         rehypePlugins={[rehypeRaw, rehypeKatex]}
         components={{
+          input: ({ type, checked }) => type === "checkbox" ? (
+            <input type="checkbox" aria-label="Toggle checklist item" checked={Boolean(checked)} onChange={(event) => onToggleTask(lineIndex, event.target.checked)} />
+          ) : null,
+          a: ({ href, children }) => {
+            if (!href?.startsWith("#note/") && !href?.startsWith("#wiki/")) {
+              return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
+            }
+            const state = useEditorStore.getState();
+            let target = resolveDocumentLink(href, state.tabs, state.activeProfileId);
+            if (href.startsWith("#wiki/")) {
+              try {
+                const name = titleWithoutExtension(decodeURIComponent(href.slice(6))).toLowerCase();
+                target = state.tabs.find((tab) => (tab.workspaceId ?? "default") === state.activeProfileId &&
+                  titleWithoutExtension(tab.title).toLowerCase() === name);
+              } catch { /* A malformed link has no destination. */ }
+            }
+            return <button type="button" className="text-primary underline underline-offset-2" disabled={!target} onClick={() => target && state.openTab(target.id)}>{children}</button>;
+          },
           // Prevent wrapping in <p> for single-line content
           p: ({ children }) => <span>{children}</span>,
           blockquote: ({ children, ...props }) => {
@@ -190,11 +221,11 @@ function InlineLine({ lineIndex, text, isActive, onFocus, onBlur, onChange, onKe
               if (config) {
                 return (
                   <div
-                    className="admonition my-2 rounded-lg border-l-4 p-3"
-                    style={{ borderLeftColor: config.color, background: `${config.color}10` }}
+                    className="admonition my-1 rounded-md border p-2.5"
+                    style={{ borderColor: config.color, background: "color-mix(in srgb, " + config.color + " 9%, var(--background))" }}
                   >
                     <div className="mb-1 flex items-center gap-1.5 font-semibold text-sm" style={{ color: config.color }}>
-                      <span>{config.icon}</span>
+                      <config.Icon size={15} aria-hidden />
                       <span>{config.label}</span>
                     </div>
                     <div className="text-sm leading-relaxed">{admonition.content}</div>
@@ -229,20 +260,44 @@ export function InlineMarkdownEditor({ onScroll }: { onScroll?: (fraction: numbe
   const containerRef = useRef<HTMLDivElement>(null);
 
   const lines = useMemo(() => (activeTab?.content ?? "").split("\n"), [activeTab?.content]);
-  const lineKeys = useMemo(() => {
-    const result = lines.reduce(
-      (acc, line) => {
-        const nextKey = `${line.length}:${acc.offset}:${line}`;
-        return {
-          keys: [...acc.keys, nextKey],
-          offset: acc.offset + line.length + 1,
-        };
+  const blocks = useMemo(() => {
+    const text = activeTab?.content ?? "";
+    const lineStarts = new Map<number, number>();
+    let offset = 0;
+    lines.forEach((line, index) => {
+      lineStarts.set(offset, index);
+      offset += line.length + 1;
+    });
+    const entries = new Map<number, { end: number; kind: string; chart?: string }>();
+    markdownLanguage.parser.parse(text).iterate({
+      enter(node) {
+        if (node.node.parent?.name !== "Document") return;
+        if (!["FencedCode", "CodeBlock", "Table", "SetextHeading1", "SetextHeading2"].includes(node.name)) return;
+        const start = lineStarts.get(node.from);
+        if (start === undefined) return;
+        const source = text.slice(node.from, node.to);
+        const end = start + source.split("\n").length - 1;
+        const info = node.node.getChild("CodeInfo");
+        const chart = info && text.slice(info.from, info.to).trim() === "mermaid"
+          ? (() => {
+              const code = node.node.getChild("CodeText");
+              return code ? text.slice(code.from, code.to) : "";
+            })()
+          : undefined;
+        entries.set(start, { end, kind: node.name, chart });
       },
-      { keys: [] as string[], offset: 0 }
-    );
+    });
+    return entries;
+  }, [activeTab?.content, lines]);
 
-    return result.keys;
-  }, [lines]);
+  const registerTextarea = useCallback((lineIndex: number, element: HTMLTextAreaElement | null) => {
+    if (activeLineIdx !== lineIndex) return;
+    setInlineTextarea(element);
+  }, [activeLineIdx, setInlineTextarea]);
+
+  const updateSelection = useCallback((lineIndex: number, from: number, to: number) => {
+    if (activeLineIdx === lineIndex) setInlineSelection({ lineIndex, from, to });
+  }, [activeLineIdx, setInlineSelection]);
 
   const handleFocus = useCallback((idx: number) => setActiveLineIdx(idx), []);
 
@@ -266,6 +321,11 @@ export function InlineMarkdownEditor({ onScroll }: { onScroll?: (fraction: numbe
     },
     [activeTab, lines, updateContent]
   );
+
+  const toggleTask = (idx: number, checked: boolean) => {
+    handleChange(idx, lines[idx].replace(/^(\s*(?:[-+*]|\d+[.)])\s+\[)[ xX](\])/, (_, prefix, suffix) =>
+      prefix + (checked ? "x" : " ") + suffix));
+  };
 
   const tryAutoPunctuation = useCallback(
     (idx: number, e: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
@@ -385,38 +445,59 @@ export function InlineMarkdownEditor({ onScroll }: { onScroll?: (fraction: numbe
         event.preventDefault();
         insertNoteLink(tabId);
       }}
-      className="flex-1 overflow-auto"
-      style={{ paddingLeft: settings.editorMargin, paddingRight: settings.editorMargin }}
+      className="markdown-live-scroll flex-1 overflow-auto"
+      style={{ paddingInline: "min(" + settings.editorMargin + "px, 6vw)" }}
     >
-      <div className="mx-auto py-4" style={{ maxWidth: settings.maxLineWidth > 0 ? `${settings.maxLineWidth}ch` : undefined }}>
-        {lines.map((line, idx) => (
-          <InlineLine
-            key={lineKeys[idx]}
-            lineIndex={idx}
-            text={line}
-            isActive={activeLineIdx === idx}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            onActiveTextarea={(lineIndex, el) => {
-              if (activeLineIdx !== lineIndex) return;
-              setInlineTextarea(el);
-              if (el) {
-                setInlineSelection({
-                  lineIndex,
-                  from: el.selectionStart ?? 0,
-                  to: el.selectionEnd ?? 0,
-                });
-              }
-            }}
-            onSelectionChange={(lineIndex, from, to) => {
-              if (activeLineIdx !== lineIndex) return;
-              setInlineSelection({ lineIndex, from, to });
-            }}
-            settings={settings}
-          />
-        ))}
+      <div className="markdown-live-sheet" style={{
+        maxWidth: settings.maxLineWidth > 0 ? settings.maxLineWidth + "ch" : undefined,
+      }}>
+        {(() => {
+          const rendered = [];
+          for (let idx = 0; idx < lines.length; idx++) {
+            const block = blocks.get(idx);
+            if (block && (activeLineIdx === null || activeLineIdx < idx || activeLineIdx > block.end)) {
+              const start = idx;
+              rendered.push(
+                <div className="markdown-live-block markdown-body" key={start} data-document-line={start + 1} tabIndex={-1}>
+                  {block.chart !== undefined ? <MermaidBlock chart={block.chart} /> : (
+                    <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex, rehypeHighlight]}>
+                      {lines.slice(start, block.end + 1).join("\n")}
+                    </ReactMarkdown>
+                  )}
+                  <Button size="xs" variant="ghost" onClick={() => handleFocus(start)}>
+                    Edit {block.chart !== undefined ? "diagram" : block.kind === "Table" ? "table" : block.kind.startsWith("Setext") ? "heading" : "code"}
+                  </Button>
+                </div>,
+              );
+              idx = block.end;
+              continue;
+            }
+            rendered.push(
+              <InlineLine
+                key={idx}
+                lineIndex={idx}
+                text={lines[idx]}
+                isActive={activeLineIdx === idx}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
+                onToggleTask={toggleTask}
+                onChange={handleChange}
+                onKeyDown={handleKeyDown}
+                onActiveTextarea={registerTextarea}
+                onSelectionChange={updateSelection}
+                settings={settings}
+              />,
+            );
+            if (idx === 0 && /^#\s/.test(lines[0]) && activeTab.tags.length > 0) {
+              rendered.push(
+                <div className="inspector-tags markdown-live-tags" key="document-tags" aria-label="Document tags">
+                  {activeTab.tags.map((tag) => <span key={tag}>{tag}</span>)}
+                </div>,
+              );
+            }
+          }
+          return rendered;
+        })()}
         {/* Click below last line to add new line */}
         <div
           className="min-h-[40px] cursor-text"

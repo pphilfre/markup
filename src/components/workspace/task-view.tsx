@@ -211,14 +211,22 @@ export function TaskView({
       )}
       {view === "list" || compact || listOnly ? (
         <div className="task-list">
-          {filtered.slice(0, compact ? 5 : undefined).map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              onOpen={() => selectTask(task.id)}
-              showProject={projectId === undefined}
-            />
-          ))}
+          {compact || boardId ? (
+            filtered.slice(0, compact ? 5 : undefined).map((task) => (
+              <TaskRow key={task.id} task={task} onOpen={() => selectTask(task.id)} showProject={projectId === undefined} />
+            ))
+          ) : TASK_STATUSES.map((status) => {
+            const items = filtered.filter((task) => task.status === status.id);
+            if (!items.length) return null;
+            return (
+              <section key={status.id} className="task-list-group" aria-label={status.label}>
+                <h3><span className={"status-dot status-" + status.id} />{status.label}<span className="workspace-count">{items.length}</span></h3>
+                {items.map((task) => (
+                  <TaskRow key={task.id} task={task} onOpen={() => selectTask(task.id)} showProject={projectId === undefined} />
+                ))}
+              </section>
+            );
+          })}
         </div>
       ) : (
         <div className="task-board">

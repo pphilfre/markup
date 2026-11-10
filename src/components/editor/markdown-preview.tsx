@@ -69,7 +69,7 @@ function parseAdmonition(children: React.ReactNode): { type: string; content: Re
 
 let mermaidCounter = 0;
 
-function MermaidBlock({ chart }: { chart: string }) {
+export function MermaidBlock({ chart }: { chart: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [svg, setSvg] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -81,9 +81,25 @@ function MermaidBlock({ chart }: { chart: string }) {
     (async () => {
       try {
         const mermaid = (await import("mermaid")).default;
+        const root = document.documentElement;
+        const styles = getComputedStyle(root);
+        const isDark = root.classList.contains("dark");
+        const color = (name: string, fallback: string) => {
+          const value = styles.getPropertyValue(name).trim();
+          return /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
+        };
         mermaid.initialize({
           startOnLoad: false,
-          theme: document.documentElement.classList.contains("dark") ? "dark" : "default",
+          theme: "base",
+          themeVariables: {
+            darkMode: isDark,
+            background: color("--background", isDark ? "#151518" : "#ffffff"),
+            primaryColor: color("--accent", isDark ? "#322942" : "#eee5fa"),
+            primaryTextColor: color("--foreground", isDark ? "#efedf3" : "#26232d"),
+            primaryBorderColor: color("--primary", isDark ? "#c296fa" : "#67429b"),
+            lineColor: color("--muted-foreground", isDark ? "#aba8b5" : "#625c6c"),
+            fontFamily: styles.getPropertyValue("--font-geist-sans").trim(),
+          },
           securityLevel: "loose",
           suppressErrorRendering: true,
         });
@@ -111,7 +127,7 @@ function MermaidBlock({ chart }: { chart: string }) {
     </div>
   );
   return (
-    <div ref={containerRef} className="my-4 flex justify-center overflow-x-auto [&_svg]:max-w-full"
+    <div ref={containerRef} className="markdown-diagram"
       dangerouslySetInnerHTML={{ __html: svg }} />
   );
 }
@@ -248,7 +264,16 @@ export function MarkdownPreview({
       // Reset checkbox counter each render
       let checkboxIdx = 0;
 
+      const heading = (Tag: "h1" | "h2" | "h3" | "h4" | "h5" | "h6"): Components["h1"] =>
+        function DocumentHeading({ node, ...props }) {
+          return <Tag {...props} tabIndex={-1} data-document-line={node?.position?.start.line} />;
+        };
+
       return {
+        h1: heading("h1"), h2: heading("h2"), h3: heading("h3"),
+        h4: heading("h4"), h5: heading("h5"), h6: heading("h6"),
+        pre: ({ children }) => isValidElement<{ className?: string }>(children) && children.props.className?.split(" ").includes("language-mermaid")
+          ? children : <pre>{children}</pre>,
         // Code blocks: mermaid diagrams + syntax highlighting scoped to pre>code
         code: ({ className, children, ...props }) => {
           const match = /language-(\w+)/.exec(className || "");

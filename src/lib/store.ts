@@ -247,14 +247,14 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
   fontSize: 16,
-  lineHeight: 1.7,
+  lineHeight: 1.5,
   tabSize: 2,
   editorMargin: 24,
-  accentColor: "#3559c7",
+  accentColor: "#a674e2",
   hideMdExtensions: false,
   // Typography
   letterSpacing: 0,
-  maxLineWidth: 76,
+  maxLineWidth: 84,
   showInvisibleCharacters: false,
   // Markdown
   autoCloseBrackets: true,
@@ -274,7 +274,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cursorAnimation: "smooth",
   multiCursorSupport: true,
   // Appearance - Theme
-  themeMode: "system",
+  themeMode: "dark",
   customThemeColors: {},
   // Appearance - UI
   sidebarPosition: "left",
@@ -291,7 +291,7 @@ export const DEFAULT_SETTINGS: Settings = {
   checkboxStyle: "default",
   customFontFamily: null,
   // Panel sizes
-  fileTreeWidth: 208,
+  fileTreeWidth: 300,
   splitRatio: 0.5,
 };
 

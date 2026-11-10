@@ -197,6 +197,7 @@ export function ProjectPages({
         />
       </div>
     );
+  if (navigation.page === "recent") return <RecentDocuments />;
   if (navigation.page === "trash") return <TrashPage />;
   if (navigation.page === "files" || navigation.page === "unfiled")
     return <WorkspaceLibrary inbox={navigation.page === "unfiled"} />;
@@ -206,8 +207,26 @@ export function ProjectPages({
     return <ProjectOverviewV2 key={navigation.projectId} />;
   return <WorkbenchHome onCreateProject={onCreateProject} />;
 }
+function RecentDocuments() {
+  const tabs = useEditorStore((s) => s.tabs);
+  const metadata = useEditorStore((s) => s.projectData.documents);
+  const workspaceId = useEditorStore((s) => s.activeProfileId);
+  const recent = tabs
+    .filter((tab) => getTabWorkspaceId(tab) === workspaceId && metadata[tab.id]?.lastOpenedAt)
+    .sort((a, b) => (metadata[b.id]?.lastOpenedAt ?? 0) - (metadata[a.id]?.lastOpenedAt ?? 0));
+  return (
+    <section className="workspace-page">
+      <PageHeading title="Recent documents" description="Files you have opened in this workspace." />
+      {recent.length ? <DocumentRows documents={recent} showProject /> : (
+        <p className="workspace-muted-note">Open a file to see it here.</p>
+      )}
+    </section>
+  );
+}
+
 export function PageHeading({
   title,
+  description,
   children,
 }: {
   title: string;
@@ -218,6 +237,7 @@ export function PageHeading({
     <div className="workspace-page-heading">
       <div>
         <h1>{title}</h1>
+        {description && <p>{description}</p>}
       </div>
       {children}
     </div>

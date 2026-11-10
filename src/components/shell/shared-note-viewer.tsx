@@ -381,11 +381,12 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
   return (
     <div className="flex h-screen min-h-0 flex-col bg-background">
       {/* Top bar */}
-      <div className="flex items-center gap-2 border-b border-border bg-card px-4 py-2">
+      <header className="public-document-header">
         <Button
           variant="ghost"
           size="icon"
           onClick={onBack}
+          aria-label="Back to workspace"
           className="h-7 w-7 shrink-0"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -405,7 +406,7 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
           )}
         </h1>
 
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="shared-access flex items-center gap-2 text-xs text-muted-foreground">
           {sharedNote.visibility === "public" ? (
             <span className="flex items-center gap-1">
               <Globe className="h-3 w-3" /> Public
@@ -438,7 +439,7 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
           ) : (
             <Copy className="h-3 w-3" />
           )}
-          {copied ? "Copied" : "Copy link"}
+          <span aria-live="polite">{copied ? "Copied" : "Copy link"}</span>
         </Button>
 
         <PublicThemeMenu
@@ -446,7 +447,7 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
           workspaceThemeMode={workspaceThemeMode ?? null}
           workspaceCustomThemeColors={workspaceCustomThemeColors ?? null}
         />
-      </div>
+      </header>
 
       {/* Content */}
       {noteType === "whiteboard" && (sharedNote as Record<string, unknown>).whiteboardData ? (

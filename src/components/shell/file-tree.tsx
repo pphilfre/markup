@@ -1,12 +1,17 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { createElement, useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   ChevronRight,
   ChevronDown,
   FileText,
   Plus,
   FolderPlus,
+  Grid2X2,
+  SquareCheck,
+  Folder as FolderIcon,
+  FolderOpen,
+  Box,
   Download,
   Trash2,
   Palette,
@@ -20,6 +25,7 @@ import {
   ArrowUpZA,
   User,
   Pin,
+  Star,
   PinOff,
   Filter,
   X,
@@ -138,11 +144,15 @@ function getTabIcon(tab: Tab): React.ComponentType<{ className?: string; style?:
     const custom = getLucideIcon(tab.customIcon);
     if (custom) return custom;
   }
-  if (tab.noteType === "whiteboard") return PenTool;
+  if (tab.noteType === "whiteboard") return Grid2X2;
   if (tab.noteType === "mindmap") return GitBranch;
-  if (tab.noteType === "kanban") return KanbanSquare;
+  if (tab.noteType === "kanban") return SquareCheck;
   if (tab.noteType === "pdf") return FileType;
   return FileText;
+}
+
+export function TabFileIcon({ tab, className }: { tab: Tab; className?: string }) {
+  return createElement(getTabIcon(tab), { className, style: tab.iconColor ? { color: tab.iconColor } : undefined });
 }
 
 /** Get a display-friendly tab title, optionally hiding supported extensions. */
@@ -367,7 +377,6 @@ function IconPickerPopover({
 function FolderHeaderButton({
   folder,
   expanded,
-  depth,
   mobile,
   mobileDraggingTabId,
   renaming,
@@ -382,7 +391,6 @@ function FolderHeaderButton({
 }: {
   folder: Folder;
   expanded: boolean;
-  depth: number;
   mobile?: boolean;
   mobileDraggingTabId?: string | null;
   renaming: boolean;
@@ -397,17 +405,19 @@ function FolderHeaderButton({
 }) {
   return (
     <button
+      aria-expanded={expanded}
       onClick={onHeaderClick}
       draggable={!mobile}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
+      data-folder-row
       className={cn(
         "flex w-full items-center gap-1.5 rounded-sm pr-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors group",
         mobile ? "py-2 text-[13px]" : "py-1 text-xs",
         mobile && mobileDraggingTabId && "border border-dashed border-primary/50 bg-primary/5 text-foreground"
       )}
-      style={{ paddingLeft: (mobile ? 10 : 8) + depth * (mobile ? 14 : 12) }}
+      style={{ paddingLeft: mobile ? 10 : 8 }}
     >
       {expanded ? (
         <ChevronDown className={cn("shrink-0", mobile ? "h-4 w-4" : "h-3 w-3")} />
@@ -415,11 +425,9 @@ function FolderHeaderButton({
         <ChevronRight className={cn("shrink-0", mobile ? "h-4 w-4" : "h-3 w-3")} />
       )}
       <ColorPicker current={folder.color} onPick={onColorPick}>
-        <span
-          className={cn("rounded-sm shrink-0 cursor-pointer hover:scale-125 transition-transform", mobile ? "h-3.5 w-3.5" : "h-2.5 w-2.5")}
-          style={{ background: folder.color }}
-          onClick={(event) => event.stopPropagation()}
-        />
+        <span className="shrink-0 cursor-pointer" style={{ color: folder.color }} onClick={(event) => event.stopPropagation()}>
+          {expanded ? <FolderOpen size={15} /> : <FolderIcon size={15} />}
+        </span>
       </ColorPicker>
       {renaming ? (
         <InlineRename
@@ -430,7 +438,7 @@ function FolderHeaderButton({
       ) : (
         <span className="truncate">{folder.name}</span>
       )}
-      <span className="ml-auto text-[10px] text-muted-foreground/50">
+      <span className="folder-file-count ml-auto text-[10px] text-muted-foreground/50">
         {folderTabCount}
       </span>
     </button>
@@ -569,7 +577,6 @@ function FolderItem({
           <FolderHeaderButton
             folder={folder}
             expanded={expanded}
-            depth={depth}
             mobile={mobile}
             mobileDraggingTabId={mobileDraggingTabId}
             renaming={renaming}
@@ -643,7 +650,7 @@ function FolderItem({
 
       {/* Files in folder */}
       {expanded && (
-        <div className="border-l border-border/50" style={{ marginLeft: 16 + depth * 12 }}>
+        <div className="border-l border-border/50" style={{ marginLeft: 18 }}>
           {childFolders.map((child) => renderFolder(child, depth + 1))}
           {folderTabs.length === 0 && childFolders.length === 0 ? (
             <p className="px-3 py-1 text-[10px] text-muted-foreground/50 italic">Empty</p>
@@ -679,7 +686,7 @@ function PinToggleMenuLabel({ pinned }: { pinned: boolean }) {
   if (pinned) {
     return <><PinOff className="mr-2 h-3.5 w-3.5" /> Unpin</>;
   }
-  return <><Pin className="mr-2 h-3.5 w-3.5" /> Pin to Top</>;
+  return <><Pin className="mr-2 h-3.5 w-3.5" /> Add to favourites</>;
 }
 
 function FileItemQuickActions({
@@ -714,7 +721,7 @@ function FileItemQuickActions({
   const availableTags = allTags.filter((tagName) => !tab.tags.includes(tagName));
 
   return (
-    <div className={cn("flex items-center shrink-0 transition-opacity", mobile ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
+    <div data-file-actions className={cn("flex items-center shrink-0 transition-opacity", mobile ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
       {!mobile && (
         <Popover>
           <PopoverTrigger asChild>
@@ -1020,7 +1027,7 @@ function FileItemContextPanel({
   );
 }
 
-function FileItem({
+export function FileItem({
   tab,
   isActive,
   onSwitch,
@@ -1028,6 +1035,7 @@ function FileItem({
   hideMd,
   mobile,
   mobileDraggingTabId,
+  favourite = false,
   onStartMobileDrag,
 }: {
   tab: Tab;
@@ -1035,6 +1043,7 @@ function FileItem({
   onSwitch: () => void;
   onClose: () => void;
   hideMd: boolean;
+  favourite?: boolean;
   mobile?: boolean;
   mobileDraggingTabId?: string | null;
   onStartMobileDrag?: (tabId: string) => void;
@@ -1175,14 +1184,15 @@ function FileItem({
   }, [addingTag]);
 
   const allTags = getAllTags();
-  const TabIcon = getTabIcon(tab);
+  const TabIcon = favourite && isActive && tab.noteType === "note" ? Star : getTabIcon(tab);
 
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <div className="group">
+        <div className="group" data-file-row data-note-type={tab.noteType} data-favourite={favourite || undefined}>
           <div className="flex w-full items-center">
             <button
+              aria-current={isActive ? "true" : undefined}
               onClick={onPrimaryButtonClick}
               draggable={!mobile}
               onDragStart={onDragStart}
@@ -1194,7 +1204,7 @@ function FileItem({
                 mobile ? "py-2 text-[13px]" : "py-1 text-xs",
                 mobile ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
                 mobileDraggingTabId === tab.id && "border border-dashed border-primary/60 bg-primary/10 text-foreground",
-                isActive
+                isActive && !favourite
                   ? "bg-accent text-accent-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
@@ -1209,8 +1219,8 @@ function FileItem({
               ) : (
                 <span className="truncate">{displayName}</span>
               )}
-              {tab.pinned && (
-                <Pin className="ml-auto h-2.5 w-2.5 shrink-0 text-muted-foreground/60" />
+              {tab.pinned && !favourite && (
+                <Pin className="file-tree-pinned-icon ml-auto h-2.5 w-2.5 shrink-0 text-muted-foreground/60" />
               )}
             </button>
             <FileItemQuickActions
@@ -1230,7 +1240,7 @@ function FileItem({
             />
           </div>
           {tab.tags.length > 0 && (
-            <div className="flex flex-wrap gap-0.5 px-3 pb-0.5">
+            <div data-file-tags className="flex flex-wrap gap-0.5 px-3 pb-0.5">
               {tab.tags.map((tagName) => (
                 <span
                   key={tagName}
@@ -1450,7 +1460,7 @@ function WorkspaceSettingsForm({
 }
 
 /** Workspace switcher dropdown and workspace create/edit dialog flow. */
-function ProfileSelector() {
+export function ProfileSelector() {
   const profiles = useEditorStore((s) => s.profiles);
   const activeProfileId = useEditorStore((s) => s.activeProfileId);
   const workspaceSettings = useEditorStore((s) => s.workspaceSettings);
@@ -1548,10 +1558,12 @@ function ProfileSelector() {
             variant="ghost"
             size="sm"
             className="h-6 gap-1 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
-            title="Switch Workspace"
+            title="Switch workspace"
+            aria-label={"Switch workspace, current workspace " + (active?.name ?? "Workspace")}
           >
-            <span className="h-2.5 w-2.5 rounded-full" style={{ background: active?.color ?? "#7c3aed" }} />
+            <Box size={14} aria-hidden />
             <span className="max-w-[90px] truncate">{active?.name ?? "Workspace"}</span>
+            <ChevronDown size={11} aria-hidden />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="min-w-[220px]">
@@ -2056,6 +2068,7 @@ function FileTreeRootArea({
   onRootDragOver,
   onRootDrop,
   onlineTabs,
+  showFavourites,
   tabPassesFilter,
   activeTabId,
   switchTab,
@@ -2080,6 +2093,7 @@ function FileTreeRootArea({
   onRootDragOver: (e: React.DragEvent) => void;
   onRootDrop: (e: React.DragEvent) => void;
   onlineTabs: Tab[];
+  showFavourites: boolean;
   tabPassesFilter: (tab: Tab) => boolean;
   activeTabId: string | null;
   switchTab: (id: string) => void;
@@ -2109,11 +2123,9 @@ function FileTreeRootArea({
           onDragOver={onRootDragOver}
           onDrop={onRootDrop}
         >
-          {onlineTabs.some((t) => t.pinned && tabPassesFilter(t)) && (
-            <div className="mb-1 pb-1 border-b border-border/50">
-              <p className="px-2 py-0.5 text-[10px] text-muted-foreground/50 uppercase tracking-wider flex items-center gap-1">
-                <Pin className="h-2.5 w-2.5" /> Pinned
-              </p>
+          {showFavourites && onlineTabs.some((t) => t.pinned && tabPassesFilter(t)) && (
+            <details className="navigator-favourites" open>
+              <summary><ChevronDown size={13} /> Favourites</summary>
               {onlineTabs
                 .filter((t) => t.pinned && tabPassesFilter(t))
                 .map((tab) => (
@@ -2129,7 +2141,7 @@ function FileTreeRootArea({
                     onStartMobileDrag={startMobileDrag}
                   />
                 ))}
-            </div>
+            </details>
           )}
 
           {mobile && mobileDraggedTabId && (
@@ -2337,7 +2349,7 @@ function LocalFilesDrawer({
 }
 
 // ── Main FileTree component ───────────────────────────────────────────────
-export function FileTree({ mobile, onMobileClose, embedded, projectScope }: { mobile?: boolean; onMobileClose?: () => void; embedded?: boolean; projectScope?: string } = {}) {
+export function FileTree({ mobile, onMobileClose, embedded, projectScope, toolbarVisible = true }: { mobile?: boolean; onMobileClose?: () => void; embedded?: boolean; projectScope?: string; toolbarVisible?: boolean } = {}) {
   const fileTreeOpen = useEditorStore((s) => s.fileTreeOpen);
   const toggleFileTree = useEditorStore((s) => s.toggleFileTree);
   const fileTreeWidth = useEditorStore((s) => s.settings.fileTreeWidth);
@@ -2522,7 +2534,7 @@ export function FileTree({ mobile, onMobileClose, embedded, projectScope }: { mo
   else if (sortAsc === false) rootTabs = [...rootTabs].sort((a, b) => b.title.localeCompare(a.title));
 
   // Separate pinned and unpinned root tabs
-  const unpinnedRootTabs = rootTabs.filter((t) => !t.pinned);
+  const unpinnedRootTabs = embedded ? rootTabs : rootTabs.filter((t) => !t.pinned);
 
   // Drop on root area — move file out of folder
   const onRootDragOver = (e: React.DragEvent) => {
@@ -2561,7 +2573,7 @@ export function FileTree({ mobile, onMobileClose, embedded, projectScope }: { mo
   const draggingRef = { current: false };
   const pendingWidthRef = { current: fileTreeWidth };
 
-  const onResizeMouseDown = !mobile ? (e: React.MouseEvent) => {
+  const onResizeMouseDown = !mobile && !embedded ? (e: React.MouseEvent) => {
     e.preventDefault();
     draggingRef.current = true;
     const startX = e.clientX;
@@ -2632,7 +2644,7 @@ export function FileTree({ mobile, onMobileClose, embedded, projectScope }: { mo
       className={cn("relative flex h-full flex-col border-r border-border bg-card overflow-hidden")}
       style={!mobile ? { width: `var(--filetree-drag-width, ${fileTreeWidth}px)`, maxWidth: "100vw" } : undefined}
     >
-      <FileTreeToolbar
+      {toolbarVisible && <FileTreeToolbar
         mobile={mobile}
         onMobileClose={onMobileClose}
         toolbarButtonSize={toolbarButtonSize}
@@ -2654,7 +2666,7 @@ export function FileTree({ mobile, onMobileClose, embedded, projectScope }: { mo
         setTagFilterOpen={setTagFilterOpen}
         activeTagFilterCount={activeTagFilters.size}
         toggleFileTree={toggleFileTree}
-      />
+      />}
 
       <FileTreeTagFilterPanel
         tagFilterOpen={tagFilterOpen}
@@ -2669,6 +2681,7 @@ export function FileTree({ mobile, onMobileClose, embedded, projectScope }: { mo
         onRootDragOver={onRootDragOver}
         onRootDrop={onRootDrop}
         onlineTabs={onlineTabs}
+        showFavourites={!embedded}
         tabPassesFilter={tabPassesFilter}
         activeTabId={activeTabId}
         switchTab={switchTab}
@@ -2708,15 +2721,15 @@ export function FileTree({ mobile, onMobileClose, embedded, projectScope }: { mo
         />
       )}
       {/* Profile selector — bottom */}
-      <div className="flex items-center px-2 py-1.5 border-t border-border">
+      {!embedded && <div className="flex items-center px-2 py-1.5 border-t border-border">
         <ProfileSelector />
-      </div>
+      </div>}
 
       {/* Resize handle — desktop only */}
-      {!mobile && (
+      {!mobile && !embedded && (
         <div
           onMouseDown={onResizeMouseDown}
-          className="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors z-10"
+          className="filetree-resize absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors z-10"
         />
       )}
     </aside>

@@ -7,6 +7,12 @@
 A keyboard-first Markdown workspace for connected notes, tasks, and visual thinking, built with **Next.js**, **TypeScript**, **Zustand**, **Convex or PostgreSQL**, and **WorkOS AuthKit**.
 Write with source, live editing, split preview, and the full formatting toolbar. Organise files in folders or projects, switch between task lists and full boards, and work across whiteboards, mind maps, PDFs, graph links, sharing, and local/remote sync.
 
+## What's new in v1.2.0
+
+Markup has a redesigned workspace with Favourites, Recent documents, compact tabs, and a docked inspector. Live mode renders Mermaid diagrams, code blocks, and tables. Tasks, graph search, and settings have updated layouts.
+
+See the [changelog](CHANGELOG.md) for release notes.
+
 ## Project workspace
 
 - Create projects inside existing workspaces. Existing documents retain their folders and IDs. New captures inherit the current folder or project; loose captures go to **Inbox**, with batch moves into folders and projects.
@@ -221,7 +227,7 @@ Workspace settings include typography/editor behavior, markdown rendering settin
 Edit the `version.json` file to the next release version and run:
 
 ```bash
-npm run sync-changes
+npm run sync-version
 ```
 
 ---
@@ -249,7 +255,27 @@ Scope production keys to Vercel's Production environment. For isolated PR previe
 
 ### Desktop
 
-Use the Tauri build scripts after setting up the Rust/Tauri toolchain.
+Download the Windows x64 or Apple silicon installer from [GitHub Releases](https://github.com/pphilfre/markup/releases).
+
+To build locally after setting up the Rust and Tauri toolchain:
+
+```bash
+npm ci
+npm run tauri:build -- --no-bundle
+```
+
+Pushing a version tag runs the installer workflow. Signed updater artifacts use the repository's release signing secrets.
+
+### Docker
+
+Pull the versioned image from GitHub Container Registry or build it locally:
+
+```bash
+docker pull ghcr.io/pphilfre/markup:1.2.0
+docker build -t markup:1.2.0 .
+```
+
+The tagged image supports Linux amd64 and arm64. Configure the database and application environment before starting the container.
 
 ### Docker Updates
 

@@ -29,6 +29,7 @@ import {
   Layers,
   Move,
   X,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -241,6 +242,9 @@ export function GraphView() {
 
   // Collapsible control panel
   const [panelOpen, setPanelOpen] = useState(false);
+  const [nodeQuery, setNodeQuery] = useState("");
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const highlightedNode = hoveredNode ?? selectedNodeId;
 
   // Display & force settings
   const [display, setDisplay] = useState<DisplaySettings>({ ...DEFAULT_DISPLAY });
@@ -473,7 +477,7 @@ export function GraphView() {
         const targetVisible = filteredNodeIds.has(target.id);
         if (!sourceVisible && !targetVisible) return;
 
-        const isHighlighted = hoveredNode === source.id || hoveredNode === target.id;
+        const isHighlighted = highlightedNode === source.id || highlightedNode === target.id;
         const isManual = link.manual;
 
         ctx.beginPath();
@@ -519,10 +523,10 @@ export function GraphView() {
     };
 
     const isConnectedToHovered = (nodeId: string, simLinks: GraphLink[]): boolean => {
-      if (!hoveredNode) return false;
+      if (!highlightedNode) return false;
       return simLinks.some((link) => {
         const { sourceId, targetId } = getLinkNodeIds(link);
-        return (sourceId === hoveredNode && targetId === nodeId) || (targetId === hoveredNode && sourceId === nodeId);
+        return (sourceId === highlightedNode && targetId === nodeId) || (targetId === highlightedNode && sourceId === nodeId);
       });
     };
 
@@ -530,7 +534,7 @@ export function GraphView() {
       if (node.x == null || node.y == null) return;
 
       const visible = filteredNodeIds.has(node.id);
-      const isHovered = hoveredNode === node.id;
+      const isHovered = highlightedNode === node.id;
       const isLinkSource = linkMode && linkSourceId === node.id;
       const connectedToHover = isConnectedToHovered(node.id, simLinks);
 
@@ -538,7 +542,7 @@ export function GraphView() {
         ? 0.15
         : isHovered || connectedToHover || isLinkSource
           ? 1
-          : hoveredNode
+          : highlightedNode
             ? 0.4
             : 1;
       const baseRadius = node.hasContent ? 7 : 5;
@@ -565,7 +569,7 @@ export function GraphView() {
       const textOpacity = zoom < display.textFadeThreshold
         ? 0
         : Math.min(1, (zoom - display.textFadeThreshold) / 0.3);
-      const shouldDrawText = visible && textOpacity > 0 && (isHovered || connectedToHover || !hoveredNode);
+      const shouldDrawText = visible && textOpacity > 0 && (isHovered || connectedToHover || !highlightedNode);
       if (!shouldDrawText) {
         ctx.globalAlpha = 1;
         return;
@@ -643,7 +647,7 @@ export function GraphView() {
     return () => {
       cancelAnimationFrame(animFrameRef.current);
     };
-  }, [theme, zoom, pan, filteredNodeIds, hoveredNode, getNodeColor, display, linkMode, linkSourceId, accentColor, groups]);
+  }, [theme, zoom, pan, filteredNodeIds, highlightedNode, getNodeColor, display, linkMode, linkSourceId, accentColor, groups]);
 
   // Coordinate transform helpers
   const canvasToGraph = useCallback(
@@ -989,15 +993,30 @@ export function GraphView() {
     );
   }, []);
 
+  const selectedNode = nodes.find((node) => node.id === selectedNodeId && filteredNodeIds.has(node.id));
+  const nodeResults = nodeQuery.trim()
+    ? nodes.filter((node) => filteredNodeIds.has(node.id) && node.title.toLowerCase().includes(nodeQuery.trim().toLowerCase())).slice(0, 8)
+    : [];
+
+  const centerNode = (id: string) => {
+    const node = nodesRef.current.find((entry) => entry.id === id);
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect || node?.x == null || node.y == null) return;
+    setPan({ x: rect.width / 2 - node.x * zoom, y: rect.height / 2 - node.y * zoom });
+    setSelectedNodeId(id);
+    setNodeQuery("");
+  };
+
   return (
-    <div ref={containerRef} className="flex flex-1 flex-col overflow-hidden relative select-none">
+    <div ref={containerRef} className="graph-workspace flex flex-1 flex-col overflow-hidden relative select-none">
       {/* Top-left: zoom + link controls */}
       <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
-        <div className="flex items-center gap-0.5 rounded-md border border-border bg-card/90 backdrop-blur-sm p-0.5">
+        <div className="flex items-center gap-0.5 rounded-md border border-border bg-card p-0.5">
           <Button
             variant="ghost"
             size="icon"
             className="h-6 w-6"
+            aria-label="Zoom in"
             onClick={() => {
               const rect = canvasRef.current?.getBoundingClientRect();
               if (!rect) {
@@ -1013,6 +1032,7 @@ export function GraphView() {
             variant="ghost"
             size="icon"
             className="h-6 w-6"
+            aria-label="Zoom out"
             onClick={() => {
               const rect = canvasRef.current?.getBoundingClientRect();
               if (!rect) {
@@ -1024,7 +1044,7 @@ export function GraphView() {
           >
             <ZoomOut className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={resetView}>
+          <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Reset graph view" onClick={resetView}>
             <Maximize2 className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -1054,10 +1074,38 @@ export function GraphView() {
         )}
       </div>
 
+      <div className="graph-find">
+        <label className="workspace-search-field">
+          <Search size={14} />
+          <input
+            aria-label="Find note in graph"
+            placeholder="Find a note"
+            value={nodeQuery}
+            onChange={(event) => setNodeQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setNodeQuery("");
+              if (event.key === "Enter" && nodeResults[0]) centerNode(nodeResults[0].id);
+            }}
+          />
+        </label>
+        {nodeQuery.trim() && (
+          <div className="graph-find-results" aria-label="Matching graph notes">
+            {nodeResults.map((node) => <button key={node.id} onClick={() => centerNode(node.id)}>{node.title}</button>)}
+            {!nodeResults.length && <p>No matching notes in this graph.</p>}
+          </div>
+        )}
+        {selectedNode && !nodeQuery.trim() && (
+          <div className="graph-selection">
+            <button className="inspector-link" onClick={() => switchTab(selectedNode.id)} title="Open note">{selectedNode.title}</button>
+            <button className="workspace-icon-button" aria-label="Clear graph selection" onClick={() => setSelectedNodeId(null)}><X size={14} /></button>
+          </div>
+        )}
+      </div>
       {/* Right panel: collapsible settings */}
       <div className="absolute top-3 right-3 z-10 w-[220px] max-w-[calc(100vw-24px)]">
-        <div className="rounded-md border border-border bg-card/90 backdrop-blur-sm overflow-hidden">
+        <div className="rounded-md border border-border bg-card overflow-hidden">
           <button
+            aria-expanded={panelOpen}
             onClick={() => setPanelOpen(!panelOpen)}
             className="flex w-full items-center gap-1.5 px-2.5 py-2 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
           >

@@ -2,6 +2,12 @@
 import {
   Bold,
   Italic,
+  Underline,
+  Superscript,
+  Subscript,
+  Undo2,
+  Redo2,
+  ChevronDown,
   Strikethrough,
   Heading,
   List,
@@ -15,6 +21,7 @@ import {
   MoreHorizontal,
   CheckCheck,
 } from "lucide-react";
+import { redo, undo } from "@codemirror/commands";
 import { useEditorStore } from "@/lib/store";
 import {
   DropdownMenu,
@@ -28,9 +35,11 @@ export function EditorControls() {
   const wrap = useEditorStore((s) => s.wrapSelection),
     prefix = useEditorStore((s) => s.insertLinePrefix),
     snippet = useEditorStore((s) => s.insertSnippet);
+  const view = useEditorStore((s) => s.editorView);
   const tools = [
     { label: "Bold", Icon: Bold, action: () => wrap("**", "**") },
     { label: "Italic", Icon: Italic, action: () => wrap("*", "*") },
+    { label: "Underline", Icon: Underline, action: () => wrap("<u>", "</u>") },
     {
       label: "Strikethrough",
       Icon: Strikethrough,
@@ -38,26 +47,23 @@ export function EditorControls() {
     },
   ];
   return (
-    <div className="editor-control-strip" aria-label="Formatting tools">
-      {tools.map(({ label, Icon, action }) => (
-        <button
-          key={label}
-          title={label}
-          aria-label={label}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={action}
-        >
-          <Icon size={16} />
-        </button>
-      ))}
+    <div className="editor-control-strip" role="group" aria-label="Formatting tools">
+      {view && (
+        <>
+          <button title="Undo" aria-label="Undo" onMouseDown={(event) => event.preventDefault()} onClick={() => { undo(view); view.focus(); }}><Undo2 size={16} /></button>
+          <button title="Redo" aria-label="Redo" onMouseDown={(event) => event.preventDefault()} onClick={() => { redo(view); view.focus(); }}><Redo2 size={16} /></button>
+          <span className="editor-control-divider" aria-hidden />
+        </>
+      )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             title="Heading level"
             aria-label="Heading level"
+            className="editor-heading-control"
             onMouseDown={(e) => e.preventDefault()}
           >
-            <Heading size={18} />
+            <Heading size={15} /><span>Heading</span><ChevronDown size={11} />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
@@ -72,31 +78,21 @@ export function EditorControls() {
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            title="Lists"
-            aria-label="Lists"
-            onMouseDown={(e) => e.preventDefault()}
-          >
-            <List size={17} />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          <DropdownMenuItem onSelect={() => prefix("- ")}>
-            <List size={15} />
-            Bullet list
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => prefix("1. ")}>
-            <ListOrdered size={15} />
-            Numbered list
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => prefix("- [ ] ")}>
-            <CheckSquare size={15} />
-            Checklist
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {tools.map(({ label, Icon, action }) => (
+        <button
+          key={label}
+          title={label}
+          aria-label={label}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={action}
+        >
+          <Icon size={16} />
+        </button>
+      ))}
+      <span className="editor-control-divider" aria-hidden />
+      <button title="Bullet list" aria-label="Bullet list" onMouseDown={(event) => event.preventDefault()} onClick={() => prefix("- ")}><List size={16} /></button>
+      <button title="Numbered list" aria-label="Numbered list" onMouseDown={(event) => event.preventDefault()} onClick={() => prefix("1. ")}><ListOrdered size={16} /></button>
+      <button title="Checklist" aria-label="Checklist" onMouseDown={(event) => event.preventDefault()} onClick={() => prefix("- [ ] ")}><CheckSquare size={16} /></button>
       <button
         title="Blockquote"
         aria-label="Blockquote"
@@ -136,6 +132,9 @@ export function EditorControls() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <button title="Superscript" aria-label="Superscript" onMouseDown={(event) => event.preventDefault()} onClick={() => wrap("^", "^")}><Superscript size={16} /></button>
+      <button title="Subscript" aria-label="Subscript" onMouseDown={(event) => event.preventDefault()} onClick={() => wrap("~", "~")}><Subscript size={16} /></button>
+      <span className="editor-control-divider" aria-hidden />
       <button
         title="Image"
         aria-label="Image"

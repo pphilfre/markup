@@ -81,7 +81,7 @@ export function WorkbenchHome({
     navigate = useEditorStore((s) => s.navigate);
   const [archive, setArchive] = useState(false);
   const docs = tabs.filter((tab) => getTabWorkspaceId(tab) === workspaceId);
-  const recent = [...docs]
+  const recent = docs.filter((tab) => data.documents[tab.id]?.lastOpenedAt)
     .sort(
       (a, b) =>
         (data.documents[b.id]?.lastOpenedAt ?? 0) -
@@ -121,7 +121,7 @@ export function WorkbenchHome({
         <div>
           {pinned.length > 0 && (
             <section>
-              <h2>Pinned</h2>
+              <h2>Favourites</h2>
               <DocumentRows documents={pinned} showProject />
             </section>
           )}
@@ -130,9 +130,9 @@ export function WorkbenchHome({
               <h2>Recent files</h2>
               <button
                 className="workspace-text-button"
-                onClick={() => navigate("files")}
+                onClick={() => navigate("recent")}
               >
-                Browse all files
+                View all recent
               </button>
             </div>
             {recent.length ? (
@@ -140,7 +140,7 @@ export function WorkbenchHome({
             ) : (
               <div className="home-empty">
                 <FileText size={24} />
-                <p>No files yet</p>
+                <p>Files you open appear here.</p>
                 <Button
                   size="sm"
                   onClick={() =>

@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/popover";
 import { useFileSaveState } from "@/lib/file-save-state";
 
-export function SaveStatus({ compact = false }: { compact?: boolean }) {
+export function SaveStatus({ compact = false, iconOnly = false }: { compact?: boolean; iconOnly?: boolean }) {
   const local = useLocalSaveState(),
     cloud = useSyncState(),
     files = useFileSaveState();
@@ -37,17 +37,19 @@ export function SaveStatus({ compact = false }: { compact?: boolean }) {
         : saving
           ? "Saving…"
           : local.status === "saved"
-            ? "Saved on this device"
+            ? cloud.status === "synced" ? "Cloud synced" : cloud.status === "syncing" ? "Syncing changes..." : "Saved on this device"
             : "Device storage ready";
   return (
     <Popover>
       <PopoverTrigger
+        aria-label={label}
+        title={label}
         className={`workspace-save-status${error ? " save-error" : ""}${compact ? " save-compact" : ""}`}
       >
         <Icon size={14} className={saving ? "animate-spin" : ""} />
-        <span>{label}</span>
+        {!iconOnly && <span>{label}</span>}
       </PopoverTrigger>
-      <PopoverContent className="workspace-save-popover" align="start">
+      <PopoverContent className="workspace-save-popover" align={compact ? "end" : "start"}>
         <h3>Where your work is saved</h3>
         <div>
           <HardDrive size={16} />

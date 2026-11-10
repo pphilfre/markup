@@ -467,7 +467,7 @@ function MindmapSettingsPanel({
   ];
 
   return (
-    <div className="absolute right-2 top-14 z-20 w-56 rounded-lg border border-border bg-popover p-3 shadow-xl space-y-3 animate-in fade-in slide-in-from-top-2 duration-150 max-h-[80vh] overflow-y-auto">
+    <div className="absolute right-2 top-14 z-20 w-56 rounded-md border border-border bg-popover p-3 shadow-lg space-y-3 animate-in fade-in slide-in-from-top-2 duration-150 max-h-[80vh] overflow-y-auto">
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold">Mindmap Settings</span>
         <button
@@ -673,7 +673,7 @@ function NodeEditPopover({
 
   return (
     <div
-      className="absolute z-30 w-52 rounded-lg border border-border bg-popover p-3 shadow-xl space-y-2.5 animate-in fade-in zoom-in-95 duration-150"
+      className="absolute z-30 w-52 rounded-md border border-border bg-popover p-3 shadow-lg space-y-2.5 animate-in fade-in zoom-in-95 duration-150"
       style={{ left: screenPos.x, top: screenPos.y }}
       onPointerDown={(e) => e.stopPropagation()}
     >
@@ -1846,7 +1846,7 @@ export function MindmapView() {
       )}
 
       {/* Top-left: Toolbar */}
-      <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-popover/95 backdrop-blur-sm p-1 shadow-lg md:bottom-auto md:right-auto md:top-2 mobile-canvas-toolbar">
+      <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center gap-0.5 rounded-md border border-border bg-popover p-1 md:bottom-auto md:right-auto md:top-2 mobile-canvas-toolbar">
         {tools.map(({ tool, icon: Icon, label, shortcut }) => (
           <Tooltip key={tool}>
             <TooltipTrigger asChild>
@@ -1877,7 +1877,7 @@ export function MindmapView() {
       </div>
 
       {/* Top-right: Actions */}
-      <div className="absolute bottom-14 left-2 right-2 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-popover/95 backdrop-blur-sm p-1 shadow-lg md:bottom-auto md:left-auto md:right-2 md:top-2 mobile-canvas-actions">
+      <div className="absolute bottom-14 left-2 right-2 z-10 flex items-center gap-0.5 rounded-md border border-border bg-popover p-1 md:bottom-auto md:left-auto md:right-2 md:top-2 mobile-canvas-actions">
         <Tooltip>
           <TooltipTrigger asChild>
             <button

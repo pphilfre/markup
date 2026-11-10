@@ -1403,6 +1403,7 @@ export function SpotlightSearch() {
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
             ref={inputRef}
+            aria-label="Search query"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
@@ -1423,7 +1424,7 @@ export function SpotlightSearch() {
         {/* Results list */}
         <div
           ref={listRef}
-          className="max-h-[min(60dvh,480px)] overflow-y-auto p-1"
+          className="spotlight-results max-h-[min(60dvh,480px)] overflow-y-auto p-1"
         >
           {allItems.length === 0 ? (
             <p className="px-3 py-6 text-center text-xs text-muted-foreground">

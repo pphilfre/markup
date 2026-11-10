@@ -62,7 +62,7 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: "Markup v__VERSION__"
-          releaseBody: "Desktop app release for Markup."
+          releaseBody: "See the [changelog](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/CHANGELOG.md) for release notes."
           releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}
