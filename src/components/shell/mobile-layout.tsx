@@ -54,6 +54,7 @@ import { PdfEditorView } from "@/components/shell/pdf-editor";
 import { NewFileTemplateDialog } from "@/components/shell/new-file-template-dialog";
 import { FirstRunDialog } from "@/components/shell/first-run-dialog";
 import { AiChatMobileModal } from "@/components/shell/ai-chat-panel";
+import { TaskDrawer } from "@/components/workspace/task-view";
 import { useAuthState } from "@/components/convex-client-provider";
 import { signIn, signOut } from "@/lib/tauri";
 import {
@@ -723,6 +724,7 @@ export function MobileLayout() {
       <NewFileTemplateDialog />
       <PublishDialog open={publishOpen} onOpenChange={setPublishOpen} />
       <AiChatMobileModal />
+      <TaskDrawer />
 
       {/* Keep formatting controls reachable while typing on mobile keyboards */}
       {showTopFormattingBar && <MobileFormattingBar placement="top" />}

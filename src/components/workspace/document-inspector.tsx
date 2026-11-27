@@ -10,9 +10,9 @@ import { TabFileIcon } from "@/components/shell/file-tree";
 import { Button } from "@/components/ui/button";
 import { useSyncState } from "@/lib/sync-state";
 
-function DocumentLink({ tab, excerpt }: { tab: Tab; excerpt?: string }) {
+function DocumentLink({ tab, excerpt, onClick }: { tab: Tab; excerpt?: string; onClick: () => void }) {
   return (
-    <button data-note-type={tab.noteType} className="inspector-link inspector-document-link" onClick={() => useEditorStore.getState().openTab(tab.id)}>
+    <button data-note-type={tab.noteType} className="inspector-link inspector-document-link" onClick={onClick}>
       <TabFileIcon tab={tab} className="file-type-icon" />
       <span>
         <span className="inspector-document-title">{tab.title}</span>
@@ -59,7 +59,11 @@ function jumpToHeading(line: number) {
   heading?.scrollIntoView({ block: "start" });
   if (heading instanceof HTMLElement) heading.focus({ preventScroll: true });
 }
-export function DocumentContext({ onClose }: { onClose: () => void }) {
+export function DocumentContext({ onClose, width, onNavigate }: {
+  onClose: () => void;
+  width?: number;
+  onNavigate?: (action: () => void) => void;
+}) {
   const tab = useEditorStore((s) =>
     s.tabs.find((tab) => tab.id === s.activeTabId),
   );
@@ -104,6 +108,8 @@ export function DocumentContext({ onClose }: { onClose: () => void }) {
       isTaskVisible(task, data) && task.relatedDocumentIds.includes(tab.id),
   );
   const preview = history?.find((snapshot) => snapshot.id === previewId);
+  const follow = (action: () => void) => onNavigate ? onNavigate(action) : action();
+  const openDocument = (id: string) => follow(() => useEditorStore.getState().openTab(id));
   const incoming = workspaceTabs.filter((source) => {
     if (source.noteType === "note")
       return (
@@ -121,7 +127,7 @@ export function DocumentContext({ onClose }: { onClose: () => void }) {
     }
   });
   return (
-    <aside className="document-context" aria-label="Document context">
+    <aside className="document-context" style={{ inlineSize: width, flexBasis: width }} aria-label="Document context">
       <div className="inspector-mobile-heading">
         <h2>Inspector</h2>
         <button onClick={onClose} className="workspace-icon-button" aria-label="Close inspector"><X size={15} /></button>
@@ -136,7 +142,7 @@ export function DocumentContext({ onClose }: { onClose: () => void }) {
                 data-level={index === 0 ? 1 : Math.max(2, level)}
                 aria-current={(selectedHeading ?? headings[0]?.line) === line ? "location" : undefined}
                 style={{ paddingInlineStart: index === 0 ? 28 : 41 + Math.max(0, level - 2) * 10 }}
-                onClick={() => { setSelectedHeading(line); jumpToHeading(line); }}
+                onClick={() => { setSelectedHeading(line); follow(() => jumpToHeading(line)); }}
               >{title}</button>
             ))}
           </div>
@@ -144,7 +150,7 @@ export function DocumentContext({ onClose }: { onClose: () => void }) {
         </Section>
       )}
       <Section title="Backlinks" count={incoming.length}>
-        {incoming.map((source) => <DocumentLink key={source.id} tab={source} excerpt={backlinkExcerpt(source, tab)} />)}
+        {incoming.map((source) => <DocumentLink key={source.id} tab={source} excerpt={backlinkExcerpt(source, tab)} onClick={() => openDocument(source.id)} />)}
         {!incoming.length && <p className="inspector-empty">No documents link here yet.</p>}
       </Section>
       <Section title="Properties">
@@ -202,7 +208,7 @@ export function DocumentContext({ onClose }: { onClose: () => void }) {
         </details>
       </Section>
       <Section title="Linked Docs" count={outgoing.length}>
-        {outgoing.map((target) => <DocumentLink key={target.id} tab={target} />)}
+        {outgoing.map((target) => <DocumentLink key={target.id} tab={target} onClick={() => openDocument(target.id)} />)}
         {!outgoing.length && <p className="inspector-empty">No outgoing links.</p>}
       </Section>
       {tasks.length > 0 && (
@@ -211,7 +217,7 @@ export function DocumentContext({ onClose }: { onClose: () => void }) {
             <button
               className="inspector-link"
               key={task.id}
-              onClick={() => useEditorStore.getState().selectTask(task.id)}
+              onClick={() => follow(() => useEditorStore.getState().selectTask(task.id))}
             >
               <CheckCheck size={14} />
               {task.title}

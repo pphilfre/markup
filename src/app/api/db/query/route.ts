@@ -176,7 +176,7 @@ export async function POST(req: NextRequest) {
           select: sharedNoteSelect,
         });
 
-        if (!sharedNote) {
+        if (!sharedNote || !["private", "public"].includes(sharedNote.visibility)) {
           return NextResponse.json(null);
         }
 
@@ -190,13 +190,13 @@ export async function POST(req: NextRequest) {
               normalizeEmail(email)
             );
             const email = normalizeEmail(user.email || "");
-            if (!email || !allowed.includes(email)) {
+            if (!user.emailVerified || !email || !allowed.includes(email)) {
               return NextResponse.json(null);
             }
           }
         }
 
-        return NextResponse.json(sharedNote);
+        return NextResponse.json({ ...sharedNote, allowedUsers: [] });
       }
 
       case "sharing.getByOwnerTab": {

@@ -270,8 +270,8 @@ function ReadOnlyMindmapCanvas({ data }: { data: string }) {
 }
 
 export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
-  const { user } = useAuthState();
-  const sharedNote = useDbQuery("sharing.getByShareId", { shareId });
+  const { isLoading, user } = useAuthState();
+  const sharedNote = useDbQuery("sharing.getByShareId", isLoading ? "skip" : { shareId });
   const workspace = useDbQuery("workspace.get", user?.id ? { userId: user.id } : "skip");
   const updateByShareId = useDbMutation("sharing.updateByShareId");
 
@@ -341,27 +341,7 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-4 bg-background">
         <p className="text-sm text-muted-foreground">
-          This shared note doesn&apos;t exist or has been unshared.
-        </p>
-        <Button variant="outline" size="sm" onClick={onBack} className="gap-1.5">
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Go back
-        </Button>
-      </div>
-    );
-  }
-
-  // Check access for private notes
-  if (
-    sharedNote.visibility === "private" &&
-    sharedNote.ownerUserId !== user?.id &&
-    (!user?.email || !sharedNote.allowedUsers.includes(user.email.toLowerCase()))
-  ) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-background">
-        <Lock className="h-8 w-8 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">
-          This note is private. You don&apos;t have access.
+          This shared note is unavailable. Sign in if you were invited to a private note.
         </p>
         <Button variant="outline" size="sm" onClick={onBack} className="gap-1.5">
           <ArrowLeft className="h-3.5 w-3.5" />

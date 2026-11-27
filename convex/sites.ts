@@ -1,16 +1,7 @@
 import { mutation, query } from "./_generated/server";
+import { requireUser } from "./auth";
 import { v } from "convex/values";
-
-function normalizeSlug(input: string): string {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_]+/g, "-")
-    .replace(/[^a-z0-9-]/g, "")
-    .replace(/-+/g, "-")
-    .replace(/^-+/, "")
-    .replace(/-+$/, "");
-}
+import { normalizeSlug } from "../src/lib/site-slug";
 
 function validateSlug(slug: string): string {
   const normalized = normalizeSlug(slug);
@@ -54,6 +45,7 @@ export const getBySlug = query({
 export const getByOwnerTab = query({
   args: { ownerUserId: v.string(), tabId: v.string() },
   handler: async (ctx, { ownerUserId, tabId }) => {
+    await requireUser(ctx, ownerUserId);
     try {
       const matches = await ctx.db
         .query("sites")
@@ -77,6 +69,7 @@ export const publish = mutation({
     content: v.string(),
   },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.ownerUserId);
     const slug = validateSlug(args.slug);
 
     const now = Date.now();
@@ -167,6 +160,7 @@ export const unpublish = mutation({
     tabId: v.string(),
   },
   handler: async (ctx, { ownerUserId, tabId }) => {
+    await requireUser(ctx, ownerUserId);
     const matches = await ctx.db
       .query("sites")
       .withIndex("by_owner_tab", (q) =>

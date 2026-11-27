@@ -118,12 +118,14 @@ export async function getClientAuthToken(): Promise<AuthTokenResponse> {
 
     if (res.ok) {
       const data = (await res.json()) as Partial<AuthTokenResponse>;
-      const token = data.accessToken ?? desktopToken ?? null;
+      const token = data.accessToken ?? null;
       const user = data.user ?? (token ? userFromToken(token) : null);
       const sessionId = data.sessionId ?? null;
 
       if (isTauri() && token) {
         storeDesktopSession(token, user);
+      } else if (desktopToken) {
+        clearDesktopSession();
       }
 
       return {

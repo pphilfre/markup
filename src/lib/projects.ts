@@ -1,5 +1,6 @@
 /** Versioned project records shared by the desktop, web and storage adapters. */
 export type TaskStatus = "todo" | "in-progress" | "done";
+export const TASK_PRIORITY_ORDER = { high: 0, medium: 1, low: 2 } as const;
 export type ProjectPage =
   | "home"
   | "tasks"
@@ -68,6 +69,11 @@ export interface ProjectBoard {
   showCompleted: boolean;
   updatedAt: number;
 }
+export const DEFAULT_BOARD_COLUMNS: readonly BoardColumn[] = [
+  { id: "todo", title: "To do", color: "#2563eb", wipLimit: null, status: "todo" },
+  { id: "in-progress", title: "In progress", color: "#7c3aed", wipLimit: null, status: "in-progress" },
+  { id: "done", title: "Done", color: "#16a34a", wipLimit: null, status: "done" },
+];
 export interface StoredDocument {
   id: string;
   title: string;
@@ -280,7 +286,7 @@ export function migrateProjectData(
     if (tab.noteType !== "kanban" || next.boards[tab.id]) continue;
     let raw: Record<string, unknown>;
     try {
-      raw = JSON.parse(tab.content);
+      raw = tab.content.trim() ? JSON.parse(tab.content) : { columns: DEFAULT_BOARD_COLUMNS };
     } catch {
       continue;
     }
@@ -354,7 +360,7 @@ export function migrateProjectData(
             typeof raw.boardTitle === "string"
               ? raw.boardTitle
               : titleWithoutExtension(tab.title),
-          columns,
+          columns: columns.length ? columns : DEFAULT_BOARD_COLUMNS.map((column) => ({ ...column })),
           showCompleted: raw.showCompleted !== false,
           updatedAt: 0,
         },

@@ -56,9 +56,11 @@ export const DOCUMENT_ICONS = {
 export function CreateMenu({
   label = "New note",
   onCreated,
+  iconOnly = false,
 }: {
   label?: string;
   onCreated?: () => void;
+  iconOnly?: boolean;
 }) {
   const createDocument = useEditorStore((s) => s.createProjectDocument);
   const create = (type?: NoteType, template?: string) => {
@@ -67,28 +69,32 @@ export function CreateMenu({
   };
   return (
     <div className="workspace-create-menu">
-      <Button size="sm" onClick={() => create()}>
+      {!iconOnly && <Button size="sm" onClick={() => create()}>
         <Plus size={15} />
         {label}
-      </Button>
+      </Button>}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             size="sm"
-            aria-label="More creation options"
-            className="create-menu-more"
+            aria-label={iconOnly ? "Create document" : "More creation options"}
+            title={iconOnly ? "Create document" : undefined}
+            className={iconOnly ? "workbench-create-toggle" : "create-menu-more"}
           >
-            <MoreHorizontal size={16} />
+            {iconOnly ? <Plus size={18} /> : <MoreHorizontal size={16} />}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => create("note", "brief")}>
+          {iconOnly && <DropdownMenuItem onSelect={() => create()}>
+            <FileText size={15} /> New note
+          </DropdownMenuItem>}
+          <DropdownMenuItem onSelect={() => create("note", "brief")}>
             Project brief
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => create("note", "meeting")}>
+          <DropdownMenuItem onSelect={() => create("note", "meeting")}>
             Meeting notes
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => create("note", "decision")}>
+          <DropdownMenuItem onSelect={() => create("note", "decision")}>
             Decision log
           </DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -96,7 +102,7 @@ export function CreateMenu({
             (type) => {
               const Icon = DOCUMENT_ICONS[type];
               return (
-                <DropdownMenuItem key={type} onClick={() => create(type)}>
+                <DropdownMenuItem key={type} onSelect={() => create(type)}>
                   <Icon size={15} />
                   {type === "kanban"
                     ? "Task board"
@@ -179,20 +185,14 @@ export function ProjectPages({
   onCreateProject: () => void;
 }) {
   const navigation = useEditorStore((s) => s.navigation);
+  const workspaceId = useEditorStore((s) => s.activeProfileId);
   if (navigation.page === "tasks")
     return (
       <div className="workspace-page workspace-page-wide">
-        <PageHeading
-          title={navigation.projectId ? "Tasks" : "My tasks"}
-          description={
-            navigation.projectId
-              ? "The next steps for this project."
-              : "The next steps, across your workspace."
-          }
-        />
+        <PageHeading title="Tasks" />
         <TaskBoardsBar projectId={navigation.projectId} />
         <TaskView
-          key={navigation.projectId ?? "workspace"}
+          key={navigation.projectId ?? workspaceId}
           projectId={navigation.projectId ?? undefined}
         />
       </div>
@@ -200,7 +200,7 @@ export function ProjectPages({
   if (navigation.page === "recent") return <RecentDocuments />;
   if (navigation.page === "trash") return <TrashPage />;
   if (navigation.page === "files" || navigation.page === "unfiled")
-    return <WorkspaceLibrary inbox={navigation.page === "unfiled"} />;
+    return <WorkspaceLibrary key={workspaceId + ":" + navigation.page} inbox={navigation.page === "unfiled"} />;
   if (["notes", "resources"].includes(navigation.page))
     return <DocumentLibrary />;
   if (navigation.projectId)

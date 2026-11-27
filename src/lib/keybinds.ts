@@ -67,7 +67,7 @@ export function useGlobalKeybinds() {
       // Toggle file tree sidebar
       "Alt+KeyB": (e: KeyboardEvent) => {
         e.preventDefault();
-        useEditorStore.getState().toggleFileTree();
+        document.dispatchEvent(new Event("toggle-workspace-navigation"));
       },
 
       // Spotlight search — Ctrl+K

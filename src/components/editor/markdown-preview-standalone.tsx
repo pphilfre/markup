@@ -76,7 +76,7 @@ function MermaidBlock({ chart }: { chart: string }) {
         mermaid.initialize({
           startOnLoad: false,
           theme: document.documentElement.classList.contains("dark") ? "dark" : "default",
-          securityLevel: "loose",
+          securityLevel: "strict",
           suppressErrorRendering: true,
         });
         const { svg: rendered } = await mermaid.render(renderId, chart);

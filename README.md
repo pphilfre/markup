@@ -118,11 +118,11 @@ The default backend is Convex; select PostgreSQL with `NEXT_PUBLIC_DB_PROVIDER=p
 
 ## Requirements
 
-* **Node.js** 18+ (recommended: latest LTS)
+* **Node.js** 20.9+ (recommended: latest LTS)
 * **npm** (or compatible package manager)
 * A **PostgreSQL** database
 * **WorkOS** app credentials
-* (Optional) **Tauri v2** toolchain for desktop builds
+* (Optional) **Tauri v2** toolchain and **Rust 1.90+** for desktop builds
 
 ---
 
@@ -146,6 +146,17 @@ NEXT_PUBLIC_WORKOS_REDIRECT_URI=...
 
 You may also need additional WorkOS/AuthKit callback/session variables depending on your WorkOS setup.
 If unsure, follow the WorkOS AuthKit for Next.js setup documentation and mirror the values used in your WorkOS dashboard.
+
+For Convex, set `WORKOS_CLIENT_ID` on the Convex deployment to the same client ID as the Next.js server. Use the matching WorkOS environment for development, preview and production. Deploy the Convex functions with the matching frontend so signed-in users can sync.
+
+To keep private note invitations working, add the following claims to the WorkOS environment's JWT template and preserve any existing claims. Invitees need a verified email address and a refreshed WorkOS session. [WorkOS JWT template documentation](https://workos.com/docs/authkit/jwt-templates)
+
+```jsonc
+{
+  "markup_email": {{ user.email }},
+  "markup_email_verified": {{ user.email_verified }}
+}
+```
 
 ---
 

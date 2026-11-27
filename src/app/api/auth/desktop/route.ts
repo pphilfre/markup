@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 export async function GET(req: NextRequest) {
   const port = req.nextUrl.searchParams.get("port");
 
-  if (!port || !/^\d{4,5}$/.test(port)) {
+  if (!port || !/^[1-9]\d{3,4}$/.test(port) || Number(port) > 65535) {
     return NextResponse.json({ error: "Invalid port" }, { status: 400 });
   }
 

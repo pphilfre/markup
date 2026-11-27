@@ -7,6 +7,7 @@ import {
   MoreHorizontal,
   Globe,
   Trash2,
+  FolderOpen,
 } from "lucide-react";
 import { useEditorStore, type ViewMode } from "@/lib/store";
 import { EditorControls } from "./editor-controls";
@@ -24,30 +25,35 @@ const editorModes: { id: ViewMode; label: string }[] = [
   { id: "split", label: "Split" }, { id: "preview", label: "Preview" },
 ];
 
-export function EditorToolbar({ onInspect }: { onInspect: () => void }) {
-  const tab = useEditorStore((s) =>
-      s.tabs.find((tab) => tab.id === s.activeTabId),
-    ),
-    view = useEditorStore((s) => s.viewMode),
-    setView = useEditorStore((s) => s.setViewMode);
+export function EditorToolbar() {
+  const view = useEditorStore((s) => s.viewMode);
+  const setView = useEditorStore((s) => s.setViewMode);
+  return (
+    <>
+      <div className="editor-modebar">
+        <div className="editor-modes" role="group" aria-label="Editor view">
+          {editorModes.map(({ id, label }) => (
+            <button key={id} aria-pressed={view === id} onClick={() => setView(id)}>{label}</button>
+          ))}
+        </div>
+      </div>
+      {view !== "preview" && view !== "split" && <div className="editor-workbar"><EditorControls /></div>}
+    </>
+  );
+}
+
+export function DocumentActions({ onInspect }: { onInspect: () => void }) {
+  const tab = useEditorStore((s) => s.tabs.find((tab) => tab.id === s.activeTabId));
+  const projectId = useEditorStore((s) => tab ? s.projectData.documents[tab.id]?.projectId : null);
   const [share, setShare] = useState(false),
     [exportOpen, setExport] = useState(false),
     [publish, setPublish] = useState(false);
   if (!tab) return null;
   return (
     <>
-      <div className="editor-modebar">
-        {tab.noteType === "note" && (
-          <div className="editor-modes" role="group" aria-label="Editor view">
-            {editorModes.map(({ id, label }) => (
-              <button key={id} aria-pressed={view === id} onClick={() => setView(id)}>{label}</button>
-            ))}
-          </div>
-        )}
-        <div className="editor-document-actions">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button title="More actions" aria-label="More document actions">
+              <button className="workspace-icon-button" title="Document actions" aria-label="Document actions">
                 <MoreHorizontal size={17} />
               </button>
             </DropdownMenuTrigger>
@@ -73,6 +79,15 @@ export function EditorToolbar({ onInspect }: { onInspect: () => void }) {
                 <PanelRight size={14} />
                 Inspector
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => useEditorStore.getState().navigate("files", null, tab.folderId ?? undefined)}>
+                <FolderOpen size={14} />
+                Show in Files
+              </DropdownMenuItem>
+              {projectId && (
+                <DropdownMenuItem onSelect={() => useEditorStore.getState().navigate("overview", projectId)}>
+                  Open project
+                </DropdownMenuItem>
+              )}
               {tab.noteType === "note" && (
                 <DropdownMenuItem onClick={() => setPublish(true)}>
                   <Globe size={14} />
@@ -88,9 +103,6 @@ export function EditorToolbar({ onInspect }: { onInspect: () => void }) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-      </div>
-      {tab.noteType === "note" && view !== "preview" && <div className="editor-workbar"><EditorControls /></div>}
       <ShareDialog open={share} onOpenChange={setShare} />
       <ExportDialog open={exportOpen} onOpenChange={setExport} />
       <PublishDialog open={publish} onOpenChange={setPublish} />

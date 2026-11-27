@@ -10,7 +10,6 @@ import { TauriFileSync } from "@/lib/tauri-file-sync";
 import { SharedNoteViewer } from "@/components/shell/shared-note-viewer";
 import { DesktopDebugNotice } from "@/components/shell/desktop-debug-notice";
 import { NewFileTemplateDialog } from "@/components/shell/new-file-template-dialog";
-import { AiChatPanel } from "@/components/shell/ai-chat-panel";
 import { getTabWorkspaceId, useEditorStore } from "@/lib/store";
 import { useGlobalKeybinds } from "@/lib/keybinds";
 import { useEffect, useState, useCallback, useRef } from "react";
@@ -43,8 +42,8 @@ export function HomeClient() {
     // Compensate layout size for CSS zoom so fixed-height regions (like sidebar tools)
     // remain fully visible instead of getting clipped at the viewport edge.
     appRoot.style.width = `${100 / zoomFactor}vw`;
-    appRoot.style.height = `${100 / zoomFactor}vh`;
-  }, [zoomLevel]);
+    appRoot.style.height = `${100 / zoomFactor}dvh`;
+  }, [hydrated, zoomLevel]);
 
   // Check for shared note URL parameter
   const [shareId, setShareId] = useState<string | null>(null);
@@ -73,7 +72,7 @@ export function HomeClient() {
       .find((c) => c.startsWith("desktop_port="))
       ?.split("=")[1];
 
-    if (desktopPort) {
+    if (desktopPort && /^[1-9]\d{3,4}$/.test(desktopPort) && Number(desktopPort) <= 65535) {
       // Clear the cookie immediately
       document.cookie = "desktop_port=; path=/; max-age=0; secure; samesite=lax";
       (async () => {
@@ -81,10 +80,10 @@ export function HomeClient() {
           const res = await fetch("/api/auth/token");
           const data = await res.json();
           if (data.accessToken) {
-            const userParam = data.user
-              ? `&user=${encodeURIComponent(JSON.stringify(data.user))}`
-              : "";
-            window.location.href = `http://localhost:${desktopPort}?token=${encodeURIComponent(data.accessToken)}${userParam}`;
+            const relay = new URL(`http://localhost:${desktopPort}`);
+            relay.searchParams.set("token", data.accessToken);
+            if (data.user) relay.searchParams.set("user", JSON.stringify(data.user));
+            window.location.href = relay.toString();
           }
         } catch {
           // If token fetch fails, just stay on the page
@@ -135,14 +134,14 @@ export function HomeClient() {
 
   if (!hydrated) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
+      <div className="flex h-dvh items-center justify-center bg-background">
         {loadError ? <div className="max-w-md px-6 text-center"><h1 className="text-lg font-medium">Your workspace could not be loaded</h1><p className="mt-3 text-sm text-muted-foreground">{loadError}</p><p className="mt-2 text-sm text-muted-foreground">Your saved data has not been replaced.</p><button className="mt-5 rounded-md border px-4 py-2 text-sm" onClick={() => { setLoadError(null); hydrate().catch((error: unknown) => setLoadError(error instanceof Error ? error.message : "Storage is still unavailable.")); }}>Try again</button></div> : <p className="text-muted-foreground text-sm">Loading…</p>}
       </div>
     );
   }
 
   return (
-    <div id="markup-app-root" className={`h-screen overflow-hidden${compactMode ? " compact-mode" : ""}`}>
+    <div id="markup-app-root" className={`h-dvh overflow-hidden${compactMode ? " compact-mode" : ""}`}>
       <ThemeSync />
       <DatabaseSync />
       <TauriFileSync />
@@ -151,7 +150,7 @@ export function HomeClient() {
       <FirstRunDialog />
       <NewFileTemplateDialog />
       <LinkPicker />
-      <AppShell><AiChatPanel /></AppShell>
+      <AppShell />
     </div>
   );
 }

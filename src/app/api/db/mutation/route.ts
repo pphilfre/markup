@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/server/prisma";
+import { normalizeSlug } from "@/lib/site-slug";
 import {
   mergeProjectData,
   parseProjectData,
@@ -61,6 +62,17 @@ function optionalString(value: unknown): string | undefined {
   return value;
 }
 
+function requireShareSettings(args: Record<string, unknown>) {
+  const { visibility, permission } = args;
+  if (visibility !== "public" && visibility !== "private") {
+    throw badRequest("Invalid share visibility.");
+  }
+  if (permission !== "read" && permission !== "edit") {
+    throw badRequest("Invalid share permission.");
+  }
+  return { visibility, permission };
+}
+
 /** Validate an optional list while retaining null as an explicit clear operation. */
 function optionalStringArray(
   value: unknown,
@@ -101,18 +113,6 @@ function handleError(error: unknown) {
     { error: "Internal server error." },
     { status: 500 },
   );
-}
-
-/** Convert a requested public site name into its canonical URL slug. */
-function normalizeSlug(input: string): string {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_]+/g, "-")
-    .replace(/[^a-z0-9-]/g, "")
-    .replace(/-+/g, "-")
-    .replace(/^-+/, "")
-    .replace(/-+$/, "");
 }
 
 /** Reject unsupported or reserved public site URLs after normalization. */
@@ -509,8 +509,7 @@ export async function POST(req: NextRequest) {
         const tabId = requireString(args.tabId, "tabId");
         const title = ensureString(args.title, "title");
         const content = ensureString(args.content, "content");
-        const visibility = requireString(args.visibility, "visibility");
-        const permission = requireString(args.permission, "permission");
+        const { visibility, permission } = requireShareSettings(args);
         const allowedUsers =
           optionalStringArray(args.allowedUsers, "allowedUsers") ?? [];
         const noteType = optionalString(args.noteType);
@@ -633,7 +632,8 @@ export async function POST(req: NextRequest) {
           },
         });
 
-        if (!sharedNote || sharedNote.permission !== "edit") {
+        if (!sharedNote || sharedNote.permission !== "edit" ||
+          !["private", "public"].includes(sharedNote.visibility)) {
           return NextResponse.json(null);
         }
 
@@ -647,14 +647,19 @@ export async function POST(req: NextRequest) {
               normalizeEmail(email),
             );
             const email = normalizeEmail(user.email || "");
-            if (!email || !allowed.includes(email)) {
+            if (!user.emailVerified || !email || !allowed.includes(email)) {
               return NextResponse.json(null);
             }
           }
         }
 
-        await prisma.sharedNote.update({
-          where: { shareId },
+        await prisma.sharedNote.updateMany({
+          where: {
+            shareId,
+            permission: "edit",
+            visibility: sharedNote.visibility,
+            allowedUsers: { equals: sharedNote.allowedUsers },
+          },
           data: {
             title,
             content,
@@ -667,8 +672,7 @@ export async function POST(req: NextRequest) {
       case "sharing.updateSettings": {
         const ownerUserId = requireString(args.ownerUserId, "ownerUserId");
         const tabId = requireString(args.tabId, "tabId");
-        const visibility = requireString(args.visibility, "visibility");
-        const permission = requireString(args.permission, "permission");
+        const { visibility, permission } = requireShareSettings(args);
         const allowedUsers =
           optionalStringArray(args.allowedUsers, "allowedUsers") ?? [];
 
@@ -809,6 +813,7 @@ export async function POST(req: NextRequest) {
       }
 
       case "pdfFiles.generateUploadUrl": {
+        await requireAuthUser(req);
         const origin =
           process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
           new URL(req.url).origin;

@@ -1,8 +1,11 @@
 "use client";
 
-import { ConvexProvider, ConvexReactClient } from "convex/react";
+import { ConvexProviderWithAuth, ConvexReactClient, useConvexAuth } from "convex/react";
 import {
   ReactNode,
+  createContext,
+  useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -38,6 +41,7 @@ let _authState: AuthState = {
   user: null,
 };
 const _listeners = new Set<() => void>();
+const ConvexAuthStatus = createContext<ReturnType<typeof useConvexAuth> | null>(null);
 
 function setAuthState(next: AuthState) {
   _authState = next;
@@ -45,7 +49,7 @@ function setAuthState(next: AuthState) {
 }
 
 /** Hook to read the current auth state from anywhere. */
-export function useAuthState(): AuthState {
+function useWorkOSAuthState(): AuthState {
   const [, rerender] = useState(0);
   useEffect(() => {
     const cb = () => rerender((n) => n + 1);
@@ -55,6 +59,26 @@ export function useAuthState(): AuthState {
     };
   }, []);
   return _authState;
+}
+
+export function useAuthState(): AuthState {
+  const auth = useWorkOSAuthState();
+  const convex = useContext(ConvexAuthStatus);
+  if (!convex || convex.isAuthenticated) return auth;
+  return { isLoading: convex.isLoading, isAuthenticated: false, user: null };
+}
+
+function useWorkOSForConvex() {
+  const { isLoading, isAuthenticated } = useWorkOSAuthState();
+  const fetchAccessToken = useCallback(async () => {
+    return (await getClientAuthToken()).accessToken;
+  }, []);
+  return { isLoading, isAuthenticated, fetchAccessToken };
+}
+
+function ConvexAuthBoundary({ children }: { children: ReactNode }) {
+  const auth = useConvexAuth();
+  return <ConvexAuthStatus.Provider value={auth}>{children}</ConvexAuthStatus.Provider>;
 }
 
 // ---------------------------------------------------------------------------
@@ -73,7 +97,7 @@ export function AuthLoader() {
         const data = await getClientAuthToken();
         setAuthState({
           isLoading: false,
-          isAuthenticated: !!data.accessToken,
+          isAuthenticated: Boolean(data.accessToken && data.user),
           user: data.user ?? null,
         });
       } catch {
@@ -144,9 +168,9 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <ConvexProvider client={convex}>
+    <ConvexProviderWithAuth client={convex} useAuth={useWorkOSForConvex}>
       <AuthLoader />
-      {children}
-    </ConvexProvider>
+      <ConvexAuthBoundary>{children}</ConvexAuthBoundary>
+    </ConvexProviderWithAuth>
   );
 }

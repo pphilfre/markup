@@ -126,6 +126,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   userScalable: true,
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({
@@ -175,7 +176,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className="antialiased h-screen overflow-hidden"
+        className="antialiased h-dvh overflow-hidden"
       >
         <DatabaseClientProvider>
           <TooltipProvider delayDuration={300}>

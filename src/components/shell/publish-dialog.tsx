@@ -7,6 +7,7 @@ import { signIn } from "@/lib/tauri";
 import { useEditorStore } from "@/lib/store";
 import { isTauri } from "@/lib/tauri";
 import { writeClipboardText } from "@/lib/clipboard";
+import { normalizeSlug } from "@/lib/site-slug";
 import {
   Dialog,
   DialogContent,
@@ -23,17 +24,6 @@ interface PublishDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tabId?: string | null;
-}
-
-function normalizeSlug(input: string): string {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_]+/g, "-")
-    .replace(/[^a-z0-9-]/g, "")
-    .replace(/-+/g, "-")
-    .replace(/^-+/, "")
-    .replace(/-+$/, "");
 }
 
 function getSiteOrigin(): string {

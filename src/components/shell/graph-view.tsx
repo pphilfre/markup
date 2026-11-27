@@ -222,7 +222,9 @@ export function GraphView() {
   const containerRef = useRef<HTMLDivElement>(null);
   const allTabs = useEditorStore((s) => s.tabs);
   const workspaceId = useEditorStore((s) => s.activeProfileId);
-  const projectId = useEditorStore((s) => s.navigation.projectId);
+  const projectId = useEditorStore((s) => s.activeTabId
+    ? s.projectData.documents[s.activeTabId]?.projectId ?? null
+    : s.navigation.projectId);
   const documentMeta = useEditorStore((s) => s.projectData.documents);
   const tabs = useMemo(() => allTabs.filter((tab) => (tab.workspaceId ?? "default") === workspaceId && (!projectId || documentMeta[tab.id]?.projectId === projectId)), [allTabs, workspaceId, projectId, documentMeta]);
   const updateContent = useEditorStore((s) => s.updateContent);

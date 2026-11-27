@@ -2,8 +2,8 @@ import { applyLinePrefix } from "./markdown-format";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import { EditorView } from "@codemirror/view";
-import { projectSlice, type ProjectSlice } from "./project-actions";
-import { applyBoardContent, defaultDocumentMeta, migrateProjectData, parseProjectData, type DocumentSnapshot, type ProjectData, type Navigation } from "./projects";
+import { getCaptureContext, getCaptureFolder, projectSlice, type CaptureContext, type ProjectSlice } from "./project-actions";
+import { applyBoardContent, DEFAULT_BOARD_COLUMNS, defaultDocumentMeta, migrateProjectData, parseProjectData, type DocumentSnapshot, type ProjectData, type Navigation } from "./projects";
 import { setLocalSaveState } from "./save-state";
 
 // ---------------------------------------------------------------------------
@@ -404,7 +404,7 @@ export interface EditorState extends ProjectSlice {
 
   // New note template prompt
   newTabTemplateDialogOpen: boolean;
-  newTabTemplateFolderId: string | null;
+  newTabTemplateContext: CaptureContext | null;
   requestCreateTab: (folderId?: string | null) => void;
   createTabFromTemplate: (templateId: NoteTemplateId) => void;
   closeTemplateDialog: () => void;
@@ -520,29 +520,7 @@ function newTab(
                 version: 2,
                 boardTitle: "Project Board",
                 showCompleted: true,
-                columns: [
-                  {
-                    id: "todo",
-                    title: "To Do",
-                    color: "#2563eb",
-                    wipLimit: null,
-                    cards: [],
-                  },
-                  {
-                    id: "in-progress",
-                    title: "In Progress",
-                    color: "#7c3aed",
-                    wipLimit: 5,
-                    cards: [],
-                  },
-                  {
-                    id: "done",
-                    title: "Done",
-                    color: "#16a34a",
-                    wipLimit: null,
-                    cards: [],
-                  },
-                ],
+                columns: DEFAULT_BOARD_COLUMNS.map((column) => ({ ...column, cards: [] })),
               }
             : { version: 1, fileName: null, source: "local", dataBase64: null, storageId: null, annotations: [] }
         ),
@@ -622,6 +600,12 @@ export function getTabWorkspaceId(tab: Pick<Tab, "workspaceId">): string {
   return tab.workspaceId ?? DEFAULT_PROFILE_ID;
 }
 
+function viewModeForTab(tab: Tab | undefined, current: ViewMode): ViewMode {
+  if (!tab) return "editor";
+  if (tab.noteType !== "note") return tab.noteType;
+  return current === "split" || current === "preview" || current === "inline" ? current : "editor";
+}
+
 // ---------------------------------------------------------------------------
 // Persistence helpers (IndexedDB via idb-keyval)
 // ---------------------------------------------------------------------------
@@ -692,7 +676,7 @@ export const useEditorStore = create<EditorState>()(
     },
     fileTreeOpen: true,
     newTabTemplateDialogOpen: false,
-    newTabTemplateFolderId: null,
+    newTabTemplateContext: null,
     profiles: [...DEFAULT_PROFILES],
     activeProfileId: DEFAULT_PROFILE_ID,
     tagColors: {},
@@ -988,16 +972,10 @@ export const useEditorStore = create<EditorState>()(
 
     switchProfile: (id) =>
       set((s) => {
-        if (!s.profiles.some((profile) => profile.id === id)) return {};
-        const workspaceTabIds = new Set(
-          s.tabs
-            .filter((tab) => getTabWorkspaceId(tab) === id)
-            .map((tab) => tab.id)
-        );
-        const nextOpenTabIds = s.openTabIds.filter((tabId) => workspaceTabIds.has(tabId));
-        const nextActiveTabId = s.activeTabId && workspaceTabIds.has(s.activeTabId)
-          ? s.activeTabId
-          : (nextOpenTabIds[0] ?? (Array.from(workspaceTabIds)[0] ?? null));
+        if (s.activeProfileId === id || !s.profiles.some((profile) => profile.id === id)) return s;
+        const workspaceTabs = s.tabs.filter((tab) => getTabWorkspaceId(tab) === id);
+        const nextOpenTabIds = s.openTabIds.filter((tabId) => workspaceTabs.some((tab) => tab.id === tabId));
+        const nextActiveTab = workspaceTabs.find((tab) => tab.id === nextOpenTabIds[0]);
 
         const nextSettings = {
           ...DEFAULT_SETTINGS,
@@ -1012,8 +990,13 @@ export const useEditorStore = create<EditorState>()(
             [id]: nextSettings,
           },
           openTabIds: nextOpenTabIds,
-          activeTabId: nextActiveTabId,
-          viewMode: nextActiveTabId ? s.viewMode : "editor",
+          activeTabId: nextActiveTab?.id ?? null,
+          viewMode: viewModeForTab(nextActiveTab, "editor"),
+          navigation: { page: "home", projectId: null },
+          selectedTaskId: null,
+          taskDraft: null,
+          newTabTemplateDialogOpen: false,
+          newTabTemplateContext: null,
         };
       }),
 
@@ -1021,49 +1004,29 @@ export const useEditorStore = create<EditorState>()(
     toggleFileTree: () => set((s) => ({ fileTreeOpen: !s.fileTreeOpen })),
 
     // ── New note template prompt ───────────────────────────────────────
-    requestCreateTab: (folderId = null) =>
-      set((s) => {
-        if (s.settings.promptForTemplateOnNewFile) {
-          return {
-            newTabTemplateDialogOpen: true,
-            newTabTemplateFolderId: folderId,
-          };
-        }
+    requestCreateTab: (folderId) => {
+      const s = get();
+      const context = getCaptureContext(s, folderId ?? undefined);
+      set({ newTabTemplateContext: context, newTabTemplateDialogOpen: s.settings.promptForTemplateOnNewFile });
+      if (!s.settings.promptForTemplateOnNewFile) get().createTabFromTemplate("blank");
+    },
 
-        const tab = newTab(folderId, "note", "blank", s.activeProfileId);
-        const vm =
-          s.viewMode === "graph" || s.viewMode === "preview" || s.viewMode === "whiteboard" || s.viewMode === "mindmap" || s.viewMode === "kanban" || s.viewMode === "pdf"
-            ? "editor"
-            : s.viewMode;
+    createTabFromTemplate: (templateId) => {
+      const s = get();
+      const context = s.newTabTemplateContext ?? getCaptureContext(s);
+      const tab = newTab(getCaptureFolder(s, context), "note", templateId, s.activeProfileId);
+      set((state) => ({
+        tabs: [...state.tabs, tab],
+        openTabIds: [...state.openTabIds, tab.id],
+        activeTabId: tab.id,
+        viewMode: state.viewMode === "split" ? "split" : "editor",
+        newTabTemplateDialogOpen: false,
+        newTabTemplateContext: null,
+      }));
+      if (context.projectId) get().assignDocument(tab.id, context.projectId);
+    },
 
-        return {
-          tabs: [...s.tabs, tab],
-          openTabIds: [...s.openTabIds, tab.id],
-          activeTabId: tab.id,
-          viewMode: vm,
-        };
-      }),
-
-    createTabFromTemplate: (templateId) =>
-      set((s) => {
-        const folderId = s.newTabTemplateFolderId ?? null;
-        const tab = newTab(folderId, "note", templateId, s.activeProfileId);
-        const vm =
-          s.viewMode === "graph" || s.viewMode === "preview" || s.viewMode === "whiteboard" || s.viewMode === "mindmap" || s.viewMode === "kanban" || s.viewMode === "pdf"
-            ? "editor"
-            : s.viewMode;
-
-        return {
-          tabs: [...s.tabs, tab],
-          openTabIds: [...s.openTabIds, tab.id],
-          activeTabId: tab.id,
-          viewMode: vm,
-          newTabTemplateDialogOpen: false,
-          newTabTemplateFolderId: null,
-        };
-      }),
-
-    closeTemplateDialog: () => set({ newTabTemplateDialogOpen: false, newTabTemplateFolderId: null }),
+    closeTemplateDialog: () => set({ newTabTemplateDialogOpen: false, newTabTemplateContext: null }),
 
     // ── Hydrate ────────────────────────────────────────────────────────
     hydrate: async () => {
@@ -1125,14 +1088,21 @@ export const useEditorStore = create<EditorState>()(
           ? saved.activeTabId
           : (normalizedOpenTabIds[0] ?? null);
 
+        const projectData = migrateProjectData(parseProjectData(saved.projectData), normalizedTabs);
+        const savedProjectId = saved.navigation?.projectId;
+        const navigation = saved.navigation && (!savedProjectId ||
+          projectData.projects[savedProjectId]?.workspaceId === hydratedActiveProfileId)
+          ? saved.navigation : { page: "home" as const, projectId: null };
+        const active = normalizedTabs.find((tab) => tab.id === normalizedActiveTabId);
         set({
-          projectData: migrateProjectData(parseProjectData(saved.projectData), normalizedTabs),
-          navigation: saved.navigation ?? { page: "home", projectId: null },
+          projectData,
+          navigation,
           documentHistory: saved.documentHistory ?? {},
           tabs: normalizedTabs,
-          openTabIds: normalizedOpenTabIds,
+          openTabIds: active && !normalizedOpenTabIds.includes(active.id)
+            ? [...normalizedOpenTabIds, active.id] : normalizedOpenTabIds,
           activeTabId: normalizedActiveTabId,
-          viewMode: saved.viewMode,
+          viewMode: saved.viewMode === "graph" ? "graph" : viewModeForTab(active, saved.viewMode),
           theme: saved.theme ?? "dark",
           folders: saved.folders ?? [],
           settings: activeWorkspaceSettings,
@@ -1189,6 +1159,7 @@ export const useEditorStore = create<EditorState>()(
     createKanban: (folderId = null) => {
       const tab = newTab(folderId, "kanban", "blank", get().activeProfileId);
       set((s) => ({
+        projectData: migrateProjectData(s.projectData, [tab]),
         tabs: [...s.tabs, tab],
         openTabIds: [...s.openTabIds, tab.id],
         activeTabId: tab.id,
@@ -1207,7 +1178,7 @@ export const useEditorStore = create<EditorState>()(
     },
 
     closeTab: (id) => {
-      const { openTabIds, activeTabId } = get();
+      const { openTabIds, activeTabId, tabs, viewMode } = get();
       const idx = openTabIds.indexOf(id);
       if (idx === -1) return;
 
@@ -1224,13 +1195,18 @@ export const useEditorStore = create<EditorState>()(
         }
       }
 
-      set({ openTabIds: nextOpen, activeTabId: nextActive });
+      set({
+        openTabIds: nextOpen,
+        activeTabId: nextActive,
+        viewMode: nextActive === activeTabId || viewMode === "graph"
+          ? viewMode : viewModeForTab(tabs.find((tab) => tab.id === nextActive), viewMode),
+      });
     },
 
     goToDashboard: () => get().navigate("home"),
 
     deleteTab: (id) => {
-      const { tabs, openTabIds, activeTabId, projectData } = get();
+      const { tabs, openTabIds, activeTabId, projectData, viewMode } = get();
       const document = tabs.find((tab) => tab.id === id);
       if (!document) return;
       const now = Date.now();
@@ -1248,6 +1224,8 @@ export const useEditorStore = create<EditorState>()(
       }
 
       set({ tabs: next, openTabIds: nextOpen, activeTabId: nextActive,
+        viewMode: nextActive === activeTabId || viewMode === "graph"
+          ? viewMode : viewModeForTab(next.find((tab) => tab.id === nextActive), viewMode),
         projectData: { ...projectData, trash: { ...projectData.trash, [id]: { id, document, deletedAt: now, updatedAt: now } } },
       });
     },
@@ -1266,65 +1244,24 @@ export const useEditorStore = create<EditorState>()(
             .map((candidate) => candidate.id)
         );
 
-        const nt = tab?.noteType ?? "note";
-        let vm = s.viewMode;
-        if (nt === "whiteboard") vm = "whiteboard";
-        else if (nt === "mindmap") vm = "mindmap";
-        else if (nt === "kanban") vm = "kanban";
-        else if (nt === "pdf") vm = "pdf";
-        else if (vm === "graph" || vm === "whiteboard" || vm === "mindmap" || vm === "kanban" || vm === "pdf") vm = "editor";
-
         const baseOpenTabs = s.openTabIds.filter((tabId) => workspaceTabIds.has(tabId));
         const nextOpenTabIds = baseOpenTabs.includes(id) ? baseOpenTabs : [...baseOpenTabs, id];
 
         return {
           activeProfileId: nextActiveProfileId,
-          navigation: { page: tab.noteType === "note" ? "notes" : "resources", projectId: s.projectData.documents[id]?.projectId ?? null },
+          navigation: nextActiveProfileId === s.activeProfileId ? s.navigation : { page: "home", projectId: null },
           selectedTaskId: null,
+          taskDraft: null,
           projectData: { ...s.projectData, documents: { ...s.projectData.documents, [id]: { ...(s.projectData.documents[id] ?? defaultDocumentMeta(id)), lastOpenedAt: Date.now() } } },
           settings: s.workspaceSettings[nextActiveProfileId] ?? s.settings,
           openTabIds: nextOpenTabIds,
           activeTabId: id,
-          viewMode: vm,
+          viewMode: viewModeForTab(tab, s.viewMode),
         };
       });
     },
 
-    switchTab: (id) => set((s) => {
-      const tab = s.tabs.find((t) => t.id === id);
-      if (!tab) return {};
-
-      const tabWorkspaceId = getTabWorkspaceId(tab);
-      const workspaceExists = s.profiles.some((profile) => profile.id === tabWorkspaceId);
-      const nextActiveProfileId = workspaceExists ? tabWorkspaceId : s.activeProfileId;
-      const workspaceTabIds = new Set(
-        s.tabs
-          .filter((candidate) => getTabWorkspaceId(candidate) === nextActiveProfileId)
-          .map((candidate) => candidate.id)
-      );
-
-      const nt = tab?.noteType ?? "note";
-      let vm = s.viewMode;
-      if (nt === "whiteboard") vm = "whiteboard";
-      else if (nt === "mindmap") vm = "mindmap";
-      else if (nt === "kanban") vm = "kanban";
-      else if (nt === "pdf") vm = "pdf";
-      else if (vm === "graph" || vm === "whiteboard" || vm === "mindmap" || vm === "kanban" || vm === "pdf") vm = "editor";
-
-      const baseOpenTabs = s.openTabIds.filter((tabId) => workspaceTabIds.has(tabId));
-      const nextOpenTabIds = baseOpenTabs.includes(id) ? baseOpenTabs : [...baseOpenTabs, id];
-
-      return {
-        activeProfileId: nextActiveProfileId,
-          navigation: { page: tab.noteType === "note" ? "notes" : "resources", projectId: s.projectData.documents[id]?.projectId ?? null },
-          selectedTaskId: null,
-          projectData: { ...s.projectData, documents: { ...s.projectData.documents, [id]: { ...(s.projectData.documents[id] ?? defaultDocumentMeta(id)), lastOpenedAt: Date.now() } } },
-        settings: s.workspaceSettings[nextActiveProfileId] ?? s.settings,
-        activeTabId: id,
-        openTabIds: nextOpenTabIds,
-        viewMode: vm,
-      };
-    }),
+    switchTab: (id) => get().openTab(id),
 
     syncLocalTabToOnline: (localTabId) =>
       set((s) => {
@@ -1703,8 +1640,7 @@ useEditorStore.subscribe((state, previous) => {
       const createdAt = createdDocumentIds.get(tab.id);
       if (createdAt) {
         createdDocumentIds.delete(tab.id);
-        projectData = { ...projectData, documents: { ...projectData.documents, [tab.id]: { ...projectData.documents[tab.id], createdAt, updatedAt: createdAt, projectId: state.navigation.projectId } } };
-        if (projectData.boards[tab.id]) projectData = { ...projectData, boards: { ...projectData.boards, [tab.id]: { ...projectData.boards[tab.id], projectId: state.navigation.projectId } } };
+        projectData = { ...projectData, documents: { ...projectData.documents, [tab.id]: { ...projectData.documents[tab.id], createdAt, updatedAt: createdAt } } };
       }
     }
   }

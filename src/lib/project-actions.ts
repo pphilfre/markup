@@ -7,39 +7,38 @@ import {
   serializeBoard,
   type Navigation,
   type Project,
+  type ProjectBoard,
   type ProjectData,
   type ProjectTask,
   type TaskStatus,
 } from "./projects";
 
+export type NewTaskOptions = Partial<Pick<ProjectTask,
+  "projectId" | "boardId" | "columnId" | "status" | "relatedDocumentIds" |
+  "description" | "priority" | "dueDate" | "labels"
+>>;
+export type TaskDraft = NewTaskOptions & { title: string; workspaceId: string };
+
 export interface ProjectSlice {
   projectData: ProjectData;
   navigation: Navigation;
   selectedTaskId: string | null;
+  taskDraft: TaskDraft | null;
   createProject: (name: string, withBrief?: boolean) => string;
   updateProject: (
     id: string,
     changes: Partial<
-      Pick<Project, "name" | "description" | "color" | "archivedAt">
+      Pick<Project, "name" | "description" | "color" | "archivedAt" | "folderId">
     >,
   ) => void;
-  navigate: (page: Navigation["page"], projectId?: string | null) => void;
-  createProjectDocument: (type?: NoteType, template?: string) => void;
+  navigate: (page: Navigation["page"], projectId?: string | null, folderId?: string) => void;
+  createProjectDocument: (type?: NoteType, template?: string, folderId?: string) => void;
   assignDocument: (id: string, projectId: string | null) => void;
-  addTask: (
-    title: string,
-    options?: Partial<
-      Pick<
-        ProjectTask,
-        | "projectId"
-        | "boardId"
-        | "columnId"
-        | "status"
-        | "relatedDocumentIds"
-        | "description"
-      >
-    >,
-  ) => string | null;
+  addTask: (title: string, options?: NewTaskOptions) => string | null;
+  beginTask: (options?: NewTaskOptions & { title?: string }) => void;
+  cancelTaskDraft: () => void;
+  submitTaskDraft: (title: string, options: NewTaskOptions) => string | null;
+  updateBoard: (id: string, changes: Partial<Pick<ProjectBoard, "columns" | "showCompleted">>) => void;
   updateTask: (
     id: string,
     changes: Partial<
@@ -69,6 +68,58 @@ type SetState = (
     | Partial<EditorState>
     | ((state: EditorState) => Partial<EditorState>),
 ) => void;
+
+export type CaptureContext = { folderId?: string; projectId: string | null };
+
+export function getCaptureContext(state: EditorState, folderId?: string): CaptureContext {
+  const projects = Object.values(state.projectData.projects).filter(
+    (project) => project.workspaceId === state.activeProfileId,
+  );
+  const active = state.viewMode === "graph" ? undefined : state.tabs.find(
+    (tab) => tab.id === state.activeTabId && (tab.workspaceId ?? "default") === state.activeProfileId,
+  );
+  const targetFolderId = folderId ?? (!active ? state.navigation.folderId : undefined);
+  if (targetFolderId) {
+    const folder = state.folders.find((entry) => entry.id === targetFolderId);
+    if (folder) {
+      const visited = new Set<string>();
+      let ancestor = folder;
+      while (!visited.has(ancestor.id)) {
+        visited.add(ancestor.id);
+        const project = projects.find((entry) => entry.folderId === ancestor.id);
+        if (project) return { folderId: folder.id, projectId: project.id };
+        const parent = state.folders.find((entry) => entry.id === ancestor.parentId);
+        if (!parent) break;
+        ancestor = parent;
+      }
+      return { folderId: folder.id, projectId: null };
+    }
+  }
+
+  const project = projects.find((entry) => entry.id === (
+    active ? state.projectData.documents[active.id]?.projectId : state.navigation.projectId
+  ));
+  const destination = active?.folderId ?? project?.folderId;
+  return {
+    folderId: state.folders.find((folder) => folder.id === destination)?.id,
+    projectId: project?.id ?? null,
+  };
+}
+
+export function getCaptureFolder(state: EditorState, { folderId, projectId }: CaptureContext): string {
+  if (folderId && state.folders.some((folder) => folder.id === folderId)) return folderId;
+  const project = projectId ? state.projectData.projects[projectId] : undefined;
+  if (project) {
+    const destination = state.createFolder(project.name);
+    state.updateProject(project.id, { folderId: destination });
+    return destination;
+  }
+
+  const projectFolders = new Set(Object.values(state.projectData.projects).map((entry) => entry.folderId));
+  return state.folders.find((folder) => (
+    !folder.parentId && folder.name === "Inbox" && !projectFolders.has(folder.id)
+  ))?.id ?? state.createFolder("Inbox");
+}
 export function projectSlice(
   set: SetState,
   get: () => EditorState,
@@ -92,6 +143,7 @@ export function projectSlice(
     projectData: emptyProjectData(),
     navigation: { page: "home", projectId: null },
     selectedTaskId: null,
+    taskDraft: null,
     createProject: (name, withBrief = false) => {
       const title = name.trim();
       if (!title) return "";
@@ -119,6 +171,9 @@ export function projectSlice(
         },
         navigation: { page: "overview", projectId: id },
         activeTabId: null,
+        viewMode: "editor",
+        selectedTaskId: null,
+        taskDraft: null,
       });
       if (withBrief) get().createProjectDocument("note", "brief");
       return id;
@@ -142,15 +197,20 @@ export function projectSlice(
           },
         };
       }),
-    navigate: (page, projectId = null) =>
+    navigate: (page, projectId = null, folderId) =>
       set({
-        navigation: { page, projectId },
+        navigation: folderId ? { page, projectId, folderId } : { page, projectId },
         activeTabId: null,
         selectedTaskId: null,
+        taskDraft: null,
         viewMode: "editor",
       }),
-    createProjectDocument: (type = "note", template) => {
+    createProjectDocument: (type = "note", template, targetFolderId) => {
       const s = get();
+      if (type === "note" && !template) {
+        s.requestCreateTab(targetFolderId);
+        return;
+      }
       const create = {
         note: s.createTab,
         whiteboard: s.createWhiteboard,
@@ -158,22 +218,11 @@ export function projectSlice(
         kanban: s.createKanban,
         pdf: s.createPdf,
       }[type];
-      const current = s.tabs.find((tab) => tab.id === s.activeTabId);
-      const project = s.navigation.projectId
-        ? s.projectData.projects[s.navigation.projectId]
-        : null;
-      const folderId =
-        current?.folderId ??
-        project?.folderId ??
-        s.folders.find(
-          (folder) =>
-            folder.name === (project?.name ?? "Inbox") && !folder.parentId,
-        )?.id ??
-        s.createFolder(project?.name ?? "Inbox");
-      create(folderId);
+      const context = getCaptureContext(s, targetFolderId);
+      create(getCaptureFolder(s, context));
       const id = get().activeTabId;
       if (!id) return;
-      get().assignDocument(id, s.navigation.projectId);
+      if (context.projectId) get().assignDocument(id, context.projectId);
       const templates: Record<string, { title: string; content: string }> = {
         brief: {
           title: "Project brief.md",
@@ -195,7 +244,6 @@ export function projectSlice(
         get().renameTab(id, templates[template].title);
         get().updateContent(id, templates[template].content);
       }
-      requestAnimationFrame(() => get().editorView?.focus());
     },
     assignDocument: (id, projectId) =>
       set((s) => {
@@ -244,6 +292,7 @@ export function projectSlice(
           ? s.navigation.projectId
           : options.projectId;
       if (
+        (options.boardId && !board) ||
         (board && board.workspaceId !== s.activeProfileId) ||
         (projectId &&
           s.projectData.projects[projectId]?.workspaceId !== s.activeProfileId)
@@ -262,13 +311,13 @@ export function projectSlice(
         workspaceId: s.activeProfileId,
         projectId,
         status: column?.status ?? options.status ?? "todo",
-        priority: "medium",
-        dueDate: null,
-        labels: [],
+        priority: options.priority ?? "medium",
+        dueDate: options.dueDate ?? null,
+        labels: options.labels ?? [],
         relatedDocumentIds: options.relatedDocumentIds ?? [],
         boardId: board?.id ?? null,
         columnId: column?.id ?? null,
-        order: Object.keys(s.projectData.tasks).length,
+        order: Object.values(s.projectData.tasks).reduce((last, item) => Math.max(last, item.order), -1) + 1,
         createdAt: now,
         updatedAt: now,
         deletedAt: null,
@@ -281,6 +330,37 @@ export function projectSlice(
       );
       return id;
     },
+    beginTask: (options = {}) => set({
+      selectedTaskId: null,
+      taskDraft: { projectId: get().navigation.projectId, ...options, title: options.title ?? "", workspaceId: get().activeProfileId },
+    }),
+    cancelTaskDraft: () => set({ taskDraft: null }),
+    submitTaskDraft: (title, options) => {
+      const state = get();
+      const draft = state.taskDraft;
+      if (!draft || draft.workspaceId !== state.activeProfileId) return null;
+      const id = state.addTask(title, { ...draft, ...options });
+      if (id) set({ taskDraft: null });
+      return id;
+    },
+    updateBoard: (id, changes) => set((state) => {
+      const previous = state.projectData.boards[id];
+      if (!previous || previous.workspaceId !== state.activeProfileId || changes.columns?.length === 0) return state;
+      const updatedAt = Math.max(Date.now(), previous.updatedAt + 1);
+      const board = { ...previous, ...changes, updatedAt };
+      const tasks = { ...state.projectData.tasks };
+      const columns = new Map(board.columns.map((column) => [column.id, column]));
+      for (const task of Object.values(tasks)) {
+        if (task.boardId !== id) continue;
+        const current = task.columnId ? columns.get(task.columnId) : undefined;
+        const oldIndex = previous.columns.findIndex((column) => column.id === task.columnId);
+        const target = current ?? board.columns[Math.min(board.columns.length - 1, Math.max(0, oldIndex - 1))];
+        if (target && (task.columnId !== target.id || (previous.columns[oldIndex]?.status !== target.status))) {
+          tasks[task.id] = { ...task, columnId: target.id, status: target.status, updatedAt: Math.max(updatedAt, task.updatedAt + 1) };
+        }
+      }
+      return withProjections({ ...state.projectData, boards: { ...state.projectData.boards, [id]: board }, tasks });
+    }),
     updateTask: (id, changes) => {
       const s = get(),
         task = s.projectData.tasks[id];
@@ -339,7 +419,7 @@ export function projectSlice(
       }
       set(withProjections({ ...data, tasks: { ...data.tasks, [id]: next } }));
     },
-    selectTask: (id) => set({ selectedTaskId: id }),
+    selectTask: (id) => set({ selectedTaskId: id, taskDraft: null }),
     restoreDocument: (id) =>
       set((s) => {
         const entry = s.projectData.trash[id];
@@ -395,17 +475,14 @@ export function projectSlice(
           s.inlineSelection.from,
           s.inlineSelection.to,
         );
-      const id = s.addTask(
-        (text?.trim() || "Untitled task")
+      s.beginTask({
+        title: (text?.trim() ?? "")
           .replace(/^\s*[-*]\s*(\[[ x]\]\s*)?/i, "")
           .split("\n")[0],
-        {
-          projectId: s.projectData.documents[tab.id]?.projectId ?? null,
-          relatedDocumentIds: [tab.id],
-          description: text?.trim() ?? "",
-        },
-      );
-      if (id) set({ selectedTaskId: id });
+        projectId: s.projectData.documents[tab.id]?.projectId ?? null,
+        relatedDocumentIds: [tab.id],
+        description: text?.trim() ?? "",
+      });
     },
   };
 }
