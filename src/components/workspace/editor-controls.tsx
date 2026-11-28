@@ -47,6 +47,7 @@ export function EditorControls() {
     },
   ];
   return (
+    <>
     <div className="editor-control-strip" role="group" aria-label="Formatting tools">
       {view && (
         <>
@@ -153,17 +154,28 @@ export function EditorControls() {
       >
         <Table size={16} />
       </button>
+      <button
+        className="editor-new-task"
+        title="Create a task from selection, or add a new task"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => useEditorStore.getState().createTaskFromSelection()}
+      >
+        <CheckCheck size={16} />
+        <span>Task</span>
+      </button>
+    </div>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             title="More insert options"
             aria-label="More insert options"
+            className="editor-overflow-menu"
             onMouseDown={(e) => e.preventDefault()}
           >
             <MoreHorizontal size={17} />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent>
+        <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={() => snippet("\n---\n")}>
             Horizontal rule
           </DropdownMenuItem>
@@ -185,15 +197,6 @@ export function EditorControls() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <button
-        className="editor-new-task"
-        title="Create a task from selection, or add a new task"
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={() => useEditorStore.getState().createTaskFromSelection()}
-      >
-        <CheckCheck size={16} />
-        <span>Task</span>
-      </button>
-    </div>
+    </>
   );
 }

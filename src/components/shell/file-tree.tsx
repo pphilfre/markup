@@ -462,6 +462,8 @@ function FolderItem({
   mobileDraggingTabId,
   onStartMobileDrag,
   onMobileDropTab,
+  onOpenDocument,
+  onDocumentCreated,
 }: {
   folder: Folder;
   tabs: Tab[];
@@ -478,18 +480,19 @@ function FolderItem({
   mobileDraggingTabId?: string | null;
   onStartMobileDrag?: (tabId: string) => void;
   onMobileDropTab?: (folderId: string) => void;
+  onOpenDocument: (id: string) => void;
+  onDocumentCreated?: () => void;
 }) {
   const [renaming, setRenaming] = useState(false);
   const renameFolder = useEditorStore((s) => s.renameFolder);
   const colorFolder = useEditorStore((s) => s.colorFolder);
   const deleteFolder = useEditorStore((s) => s.deleteFolder);
   const createFolder = useEditorStore((s) => s.createFolder);
-  const requestCreateTab = useEditorStore((s) => s.requestCreateTab);
-  const createWhiteboard = useEditorStore((s) => s.createWhiteboard);
-  const createMindmap = useEditorStore((s) => s.createMindmap);
-  const createKanban = useEditorStore((s) => s.createKanban);
-  const createPdf = useEditorStore((s) => s.createPdf);
-  const switchTab = useEditorStore((s) => s.switchTab);
+  const createDocument = useEditorStore((s) => s.createProjectDocument);
+  const createInFolder = (type: Tab["noteType"]) => {
+    createDocument(type, undefined, folder.id);
+    onDocumentCreated?.();
+  };
   const deleteTab = useEditorStore((s) => s.deleteTab);
   const moveTabToFolder = useEditorStore((s) => s.moveTabToFolder);
   const reorderFolder = useEditorStore((s) => s.reorderFolder);
@@ -591,7 +594,7 @@ function FolderItem({
           />
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onClick={() => requestCreateTab(folder.id)}>
+          <ContextMenuItem onClick={() => createInFolder("note")}>
             <Plus className="mr-2 h-3.5 w-3.5" /> New File
           </ContextMenuItem>
           <ContextMenuItem
@@ -602,16 +605,16 @@ function FolderItem({
           >
             <FolderPlus className="mr-2 h-3.5 w-3.5" /> New Subfolder
           </ContextMenuItem>
-          <ContextMenuItem onClick={() => createWhiteboard(folder.id)}>
+          <ContextMenuItem onClick={() => createInFolder("whiteboard")}>
             <PenTool className="mr-2 h-3.5 w-3.5" /> New Whiteboard
           </ContextMenuItem>
-          <ContextMenuItem onClick={() => createMindmap(folder.id)}>
+          <ContextMenuItem onClick={() => createInFolder("mindmap")}>
             <GitBranch className="mr-2 h-3.5 w-3.5" /> New Mindmap
           </ContextMenuItem>
-          <ContextMenuItem onClick={() => createKanban(folder.id)}>
+          <ContextMenuItem onClick={() => createInFolder("kanban")}>
             <KanbanSquare className="mr-2 h-3.5 w-3.5" /> New Kanban
           </ContextMenuItem>
-          <ContextMenuItem onClick={() => createPdf(folder.id)}>
+          <ContextMenuItem onClick={() => createInFolder("pdf")}>
             <FileType className="mr-2 h-3.5 w-3.5" /> New PDF
           </ContextMenuItem>
           <ContextMenuItem onClick={() => setRenaming(true)}>
@@ -660,7 +663,7 @@ function FolderItem({
                 key={tab.id}
                 tab={tab}
                 isActive={tab.id === activeTabId}
-                onSwitch={() => switchTab(tab.id)}
+                onSwitch={() => onOpenDocument(tab.id)}
                 onClose={() => deleteTab(tab.id)}
                 hideMd={hideMd}
                 mobile={mobile}
@@ -1460,7 +1463,7 @@ function WorkspaceSettingsForm({
 }
 
 /** Workspace switcher dropdown and workspace create/edit dialog flow. */
-export function ProfileSelector() {
+export function ProfileSelector({ onWorkspaceChanged }: { onWorkspaceChanged?: () => void }) {
   const profiles = useEditorStore((s) => s.profiles);
   const activeProfileId = useEditorStore((s) => s.activeProfileId);
   const workspaceSettings = useEditorStore((s) => s.workspaceSettings);
@@ -1533,7 +1536,8 @@ export function ProfileSelector() {
     });
     switchProfile(workspaceId);
     setCreateOpen(false);
-  }, [createDraft, createProfile, switchProfile]);
+    onWorkspaceChanged?.();
+  }, [createDraft, createProfile, onWorkspaceChanged, switchProfile]);
 
   const submitEdit = useCallback(() => {
     if (!editWorkspaceId || !editDraft) return;
@@ -1557,21 +1561,24 @@ export function ProfileSelector() {
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 gap-1 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+            className="workspace-switch-trigger h-6 gap-1 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
             title="Switch workspace"
             aria-label={"Switch workspace, current workspace " + (active?.name ?? "Workspace")}
           >
             <Box size={14} aria-hidden />
-            <span className="max-w-[90px] truncate">{active?.name ?? "Workspace"}</span>
+            <span className="workspace-switch-name truncate">{active?.name ?? "Workspace"}</span>
             <ChevronDown size={11} aria-hidden />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-[220px]">
+        <DropdownMenuContent align="start" className="workspace-switch-menu">
           {profiles.map((profile) => {
             return (
               <DropdownMenuItem
                 key={profile.id}
-                onClick={() => switchProfile(profile.id)}
+                onSelect={() => {
+                  switchProfile(profile.id);
+                  onWorkspaceChanged?.();
+                }}
                 className={cn("flex items-center gap-2 text-xs", profile.id === activeProfileId && "bg-accent")}
               >
                 <span className="h-2.5 w-2.5 rounded-full" style={{ background: profile.color }} />
@@ -2119,6 +2126,7 @@ function FileTreeRootArea({
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
+          data-file-tree-root
           className="flex-1 overflow-y-auto px-1 py-1"
           onDragOver={onRootDragOver}
           onDrop={onRootDrop}
@@ -2359,11 +2367,17 @@ export function FileTree({ mobile, onMobileClose, embedded, projectScope, toolba
   const activeProfileId = useEditorStore((s) => s.activeProfileId);
   const folders = useEditorStore((s) => s.folders);
   const createFolder = useEditorStore((s) => s.createFolder);
-  const requestCreateTab = useEditorStore((s) => s.requestCreateTab);
-  const createWhiteboard = useEditorStore((s) => s.createWhiteboard);
-  const createMindmap = useEditorStore((s) => s.createMindmap);
-  const createKanban = useEditorStore((s) => s.createKanban);
-  const createPdf = useEditorStore((s) => s.createPdf);
+  const createDocument = useEditorStore((s) => s.createProjectDocument);
+  const scopeFolder = useEditorStore((s) => projectScope ? s.projectData.projects[projectScope]?.folderId : undefined);
+  const createFromTree = (type: Tab["noteType"], folderId?: string | null) => {
+    createDocument(type, undefined, folderId ?? scopeFolder);
+    onMobileClose?.();
+  };
+  const requestCreateTab = (folderId?: string | null) => createFromTree("note", folderId);
+  const createWhiteboard = (folderId?: string | null) => createFromTree("whiteboard", folderId);
+  const createMindmap = (folderId?: string | null) => createFromTree("mindmap", folderId);
+  const createKanban = (folderId?: string | null) => createFromTree("kanban", folderId);
+  const createPdf = (folderId?: string | null) => createFromTree("pdf", folderId);
   const selectTab = useEditorStore((s) => s.switchTab);
   const switchTab = useCallback((id: string) => { selectTab(id); onMobileClose?.(); }, [selectTab, onMobileClose]);
   const deleteTab = useEditorStore((s) => s.deleteTab);
@@ -2523,6 +2537,8 @@ export function FileTree({ mobile, onMobileClose, embedded, projectScope, toolba
         mobileDraggingTabId={mobileDraggedTabId}
         onStartMobileDrag={startMobileDrag}
         onMobileDropTab={(folderId) => dropMobileDraggedTab(folderId)}
+        onOpenDocument={switchTab}
+        onDocumentCreated={onMobileClose}
       />
     );
   }

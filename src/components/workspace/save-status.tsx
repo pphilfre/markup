@@ -26,16 +26,16 @@ export function SaveStatus({ compact = false, iconOnly = false }: { compact?: bo
   const error =
     local.status === "error" ||
     cloud.status === "error" ||
-    files.status === "error";
+    Boolean(folder && files.status === "error");
   const saving = local.status === "saving";
   const Icon = error ? AlertCircle : saving ? Loader2 : Check;
   const label =
     local.status === "error"
       ? "Device save failed"
       : error
-        ? "Sync needs attention"
+        ? (cloud.status === "error" ? "Cloud sync failed" : "Folder sync failed")
         : saving
-          ? "Saving…"
+          ? "Saving to this device…"
           : local.status === "saved"
             ? cloud.status === "synced" ? "Cloud synced" : cloud.status === "syncing" ? "Syncing changes..." : "Saved on this device"
             : "Device storage ready";
@@ -87,7 +87,9 @@ export function SaveStatus({ compact = false, iconOnly = false }: { compact?: bo
                     ? "Syncing changes…"
                     : cloud.status === "offline"
                       ? "Offline. Changes will sync when connected."
-                      : "Sign in to sync across devices."}
+                      : cloud.status === "disabled"
+                        ? "Cloud sync is off."
+                        : "Sign in to sync across devices."}
             </span>
           </p>
         </div>
@@ -112,9 +114,6 @@ export function SaveStatus({ compact = false, iconOnly = false }: { compact?: bo
             </p>
           </div>
         )}
-        <p className="save-popover-footnote">
-          A device save, cloud sync, and a folder mirror are separate copies.
-        </p>
       </PopoverContent>
     </Popover>
   );

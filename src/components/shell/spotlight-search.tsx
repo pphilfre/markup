@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, useId } from "react";
 import {
   Search,
   FileText,
@@ -86,10 +86,7 @@ function useFeatures(): Feature[] {
   const setViewMode = useEditorStore((s) => s.setViewMode);
   const requestCreateTab = useEditorStore((s) => s.requestCreateTab);
   const closeTab = useEditorStore((s) => s.closeTab);
-  const createWhiteboard = useEditorStore((s) => s.createWhiteboard);
-  const createMindmap = useEditorStore((s) => s.createMindmap);
-  const createKanban = useEditorStore((s) => s.createKanban);
-  const createPdf = useEditorStore((s) => s.createPdf);
+  const createDocument = useEditorStore((s) => s.createProjectDocument);
   const createFolder = useEditorStore((s) => s.createFolder);
   const toggleFileTree = useEditorStore((s) => s.toggleFileTree);
   const zoomLevel = useEditorStore((s) => s.zoomLevel);
@@ -303,25 +300,25 @@ function useFeatures(): Feature[] {
         label: "New Whiteboard",
         keywords: ["whiteboard", "canvas", "draw"],
         icon: <PenTool className="h-4 w-4" />,
-        action: () => createWhiteboard(),
+        action: () => createDocument("whiteboard"),
       },
       {
         label: "New Mindmap",
         keywords: ["mindmap", "map", "nodes"],
         icon: <GitBranch className="h-4 w-4" />,
-        action: () => createMindmap(),
+        action: () => createDocument("mindmap"),
       },
       {
         label: "New Kanban",
         keywords: ["kanban", "board", "tasks"],
         icon: <KanbanSquare className="h-4 w-4" />,
-        action: () => createKanban(),
+        action: () => createDocument("kanban"),
       },
       {
         label: "New PDF",
         keywords: ["pdf", "document"],
         icon: <FileType className="h-4 w-4" />,
-        action: () => createPdf(),
+        action: () => createDocument("pdf"),
       },
       {
         label: "New Folder",
@@ -1096,10 +1093,7 @@ function useFeatures(): Feature[] {
     toggleTheme,
     setViewMode,
     requestCreateTab,
-    createWhiteboard,
-    createMindmap,
-    createKanban,
-    createPdf,
+    createDocument,
     createFolder,
     closeTab,
     toggleFileTree,
@@ -1157,6 +1151,7 @@ export function SpotlightSearch() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const resultsId = useId();
 
   const tabs = useEditorStore((s) => s.tabs);
   const activeProfileId = useEditorStore((s) => s.activeProfileId);
@@ -1356,10 +1351,7 @@ export function SpotlightSearch() {
           switchTab(item.tab.id);
           break;
         case "folder":
-          useEditorStore.getState().navigate("files");
-          useEditorStore.setState((s) => ({
-            navigation: { ...s.navigation, folderId: item.folder.id },
-          }));
+          useEditorStore.getState().navigate("files", null, item.folder.id);
           break;
         case "feature":
           item.feature.action();
@@ -1371,6 +1363,7 @@ export function SpotlightSearch() {
   );
 
   const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.nativeEvent.isComposing) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setSelectedIndex((i) => (i + 1) % Math.max(1, totalItems));
@@ -1404,11 +1397,16 @@ export function SpotlightSearch() {
           <input
             ref={inputRef}
             aria-label="Search query"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={allItems.length > 0}
+            aria-controls={resultsId}
+            aria-activedescendant={allItems[selectedIndex] ? `${resultsId}-${selectedIndex}` : undefined}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
             placeholder="Search files, content, and commands…"
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
           />
           <button
             onClick={() => setOpen(false)}
@@ -1422,19 +1420,31 @@ export function SpotlightSearch() {
         </div>
 
         {/* Results list */}
-        <div
-          ref={listRef}
-          className="spotlight-results max-h-[min(60dvh,480px)] overflow-y-auto p-1"
-        >
-          {allItems.length === 0 ? (
-            <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+        {allItems.length === 0 && (
+            <p role="status" className="px-3 py-6 text-center text-xs text-muted-foreground">
               {isTextSearch && !textQuery
                 ? "Type after ? to search text in all files"
                 : "No results found"}
             </p>
-          ) : (
-            allItems.map((item, i) => {
+        )}
+        <div
+          ref={listRef}
+          id={resultsId}
+          role="listbox"
+          aria-label="Search results"
+          hidden={allItems.length === 0}
+          className="spotlight-results max-h-[min(60dvh,480px)] overflow-y-auto p-1"
+        >
+            {allItems.map((item, i) => {
               const isActive = i === selectedIndex;
+              const optionProps = {
+                id: `${resultsId}-${i}`,
+                role: "option",
+                tabIndex: -1,
+                "aria-selected": isActive,
+                "data-active": isActive,
+                onClick: () => execute(i),
+              };
               const cls = cn(
                 "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
                 isActive
@@ -1450,8 +1460,7 @@ export function SpotlightSearch() {
                   return (
                     <button
                       key={`file-${item.tab.id}`}
-                      data-active={isActive}
-                      onClick={() => execute(i)}
+                      {...optionProps}
                       className={cls}
                     >
                       <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -1468,8 +1477,7 @@ export function SpotlightSearch() {
                   return (
                     <button
                       key={`folder-${item.folder.id}`}
-                      data-active={isActive}
-                      onClick={() => execute(i)}
+                      {...optionProps}
                       className={cls}
                     >
                       <FolderOpen
@@ -1485,9 +1493,8 @@ export function SpotlightSearch() {
                 case "feature":
                   return (
                     <button
-                      key={`feat-${item.feature.label}`}
-                      data-active={isActive}
-                      onClick={() => execute(i)}
+                      key={`feat-${item.feature.label}-${i}`}
+                      {...optionProps}
                       className={cls}
                     >
                       <span className="text-muted-foreground">
@@ -1500,8 +1507,7 @@ export function SpotlightSearch() {
                   return (
                     <button
                       key={`text-${item.match.tabId}-${item.match.lineNumber}-${i}`}
-                      data-active={isActive}
-                      onClick={() => execute(i)}
+                      {...optionProps}
                       className={cn(cls, "items-start")}
                     >
                       <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -1521,8 +1527,7 @@ export function SpotlightSearch() {
                     </button>
                   );
               }
-            })
-          )}
+            })}
         </div>
 
         {/* Footer hint */}

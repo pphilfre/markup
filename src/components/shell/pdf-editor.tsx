@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useAuthState } from "@/components/convex-client-provider";
 import { useDbMutation, useDbQuery } from "@/lib/db-hooks";
 import { useEditorStore } from "@/lib/store";
+import { useLayoutSize } from "@/lib/use-layout-size";
 import { cn } from "@/lib/utils";
 import { getDbProvider } from "@/lib/db-provider";
 import { getDesktopToken, isTauri } from "@/lib/tauri";
@@ -121,6 +122,7 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 }
 
 export function PdfEditorView() {
+  const { ref: pane, width } = useLayoutSize<HTMLDivElement>();
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
   const updateContent = useEditorStore((s) => s.updateContent);
@@ -606,7 +608,7 @@ export function PdfEditorView() {
   }
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden bg-background">
+    <div ref={pane} className="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-background">
       {!hasPdf ? (
         <div className="flex h-full flex-col items-center justify-center gap-4 px-4 text-center">
           <input
@@ -652,7 +654,7 @@ export function PdfEditorView() {
             onSave={saveAnnotations}
             layoutStyle={{ width: "100%", height: "100%" }}
             enableNativeAnnotations
-            defaultShowAnnotationsSidebar
+            defaultShowAnnotationsSidebar={width >= 740}
           />
           <div
             className={cn(

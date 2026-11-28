@@ -59,6 +59,7 @@ type ModelListResponse =
 
 type AiChatState = {
   panelOpen: boolean;
+  draft: string;
   models: AiChatModel[];
   modelStatus: AiChatModelStatus;
   modelError: AiChatError | null;
@@ -68,6 +69,7 @@ type AiChatState = {
   messages: AiChatMessage[];
   attachedNoteIds: string[];
   setPanelOpen: (open: boolean) => void;
+  setDraft: (draft: string) => void;
   togglePanel: () => void;
   setSelectedModelId: (modelId: string | null) => void;
   setSendStatus: (status: AiChatSendStatus, error?: AiChatError | null) => void;
@@ -151,6 +153,7 @@ function buildModelError(data: ModelListResponse | null): { status: AiChatModelS
 
 export const useAiChatStore = create<AiChatState>((set, get) => ({
   panelOpen: false,
+  draft: "",
   models: [],
   modelStatus: "idle",
   modelError: null,
@@ -159,6 +162,7 @@ export const useAiChatStore = create<AiChatState>((set, get) => ({
   sendError: null,
   messages: [],
   attachedNoteIds: [],
+  setDraft: (draft) => set({ draft }),
 
   setPanelOpen: (open) => {
     set({ panelOpen: open });

@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import {
-  ChevronDown, ChevronRight, Clock3, Cloud, FileText, Folder, FolderOpen,
-  HardDrive, Home, Inbox, LogIn, LogOut, MoreHorizontal, Network, PanelLeftClose,
+  ChevronDown, ChevronRight, Clock3, FileText, Folder, FolderOpen, FolderPlus,
+  Home, Inbox, LogIn, LogOut, MoreHorizontal, Network, PanelLeftClose,
   Plus, Settings, SquareCheck, Trash2,
 } from "lucide-react";
 import { FileItem, FileTree, ProfileSelector } from "@/components/shell/file-tree";
@@ -15,12 +15,13 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
   DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SaveStatus } from "./save-status";
 
 const mainDestinations = [
-  { page: "home", label: "Home", Icon: Home },
-  { page: "recent", label: "Recent", Icon: Clock3 },
-  { page: "tasks", label: "Tasks", Icon: SquareCheck },
+  { page: "home", label: "Home", Icon: Home, shortcut: "Alt+Shift+1" },
+  { page: "files", label: "Files", Icon: FileText, shortcut: null },
+  { page: "recent", label: "Recent", Icon: Clock3, shortcut: "Alt+Shift+2" },
+  { page: "tasks", label: "Tasks", Icon: SquareCheck, shortcut: "Alt+Shift+3" },
+  { page: "unfiled", label: "Inbox", Icon: Inbox, shortcut: null },
 ] as const;
 
 export function Navigator({
@@ -33,7 +34,6 @@ export function Navigator({
   const data = useEditorStore((s) => s.projectData);
   const tabs = useEditorStore((s) => s.tabs);
   const workspaceId = useEditorStore((s) => s.activeProfileId);
-  const workspace = useEditorStore((s) => s.profiles.find((profile) => profile.id === s.activeProfileId));
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const mode = useEditorStore((s) => s.viewMode);
   const navigation = useEditorStore((s) => s.navigation);
@@ -61,31 +61,18 @@ export function Navigator({
     setScopes((previous) => ({ ...previous, [workspaceId]: id }));
     go(id ? "overview" : "files", id || null);
   };
-  const showSettings = () => {
-    onNavigate?.();
-    document.dispatchEvent(new CustomEvent("open-settings"));
-  };
-
   return (
     <aside className="markup-navigator" data-hide-navigation-icons={!showIcons || undefined} aria-label="Workspace navigation">
       <div className="navigator-brand">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="markup-wordmark" aria-label="Markup menu">
+            <button className="markup-wordmark" aria-label="Markup account menu">
               <span className="markup-symbol" aria-hidden="true">M</span>
               <span>Markup</span>
               <ChevronDown size={13} aria-hidden />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuItem onSelect={() => go("home")}><Home /> Home</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => {
-              useEditorStore.getState().setViewMode("graph");
-              onNavigate?.();
-            }}><Network /> Knowledge graph</DropdownMenuItem>
-            <DropdownMenuItem onSelect={showSettings}><Settings /> Settings</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => go("trash")}><Trash2 /> Trash</DropdownMenuItem>
-            <DropdownMenuSeparator />
             {isAuthenticated ? (
               <DropdownMenuItem title={user?.email} onSelect={() => signOut(() => window.location.reload())}><LogOut /> Sign out</DropdownMenuItem>
             ) : (
@@ -93,21 +80,21 @@ export function Navigator({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
-        <div className="navigator-brand-divider" />
-        <ProfileSelector />
         {onNavigate && (
           <button className="workspace-icon-button sidebar-close" aria-label="Close navigation" onClick={onNavigate}>
             <PanelLeftClose size={17} />
           </button>
         )}
       </div>
+      <div className="navigator-space-switcher"><ProfileSelector onWorkspaceChanged={onNavigate} /></div>
+      <div className="navigator-scroll">
       <nav className="navigator-destinations" aria-label="Main destinations">
-        {mainDestinations.map(({ page, label, Icon }, index) => (
-          <button key={page} aria-label={label} onClick={() => go(page)} aria-current={!activeTabId && mode !== "graph" && navigation.page === page ? "page" : undefined}>
+        {mainDestinations.map(({ page, label, Icon, shortcut }) => (
+          <button key={page} aria-keyshortcuts={shortcut ?? undefined} onClick={() => go(page)} aria-current={!activeTabId && mode !== "graph" && navigation.page === page ? "page" : undefined}>
             <Icon size={18} aria-hidden />
             <span>{label}</span>
             {page === "tasks" && openTasks > 0 && <span className="navigator-task-count" aria-label={openTasks + " open tasks"}>{openTasks}</span>}
-            <kbd aria-hidden>Alt⇧{index + 1}</kbd>
+            {shortcut && <kbd aria-hidden title={shortcut}>{shortcut.replace("+Shift+", "+⇧")}</kbd>}
           </button>
         ))}
       </nav>
@@ -135,6 +122,11 @@ export function Navigator({
             {workspaceExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             Workspace
           </button>
+          <button className="workspace-icon-button" title="New folder" aria-label="New folder" onClick={() => {
+            useEditorStore.getState().createFolder("New Folder", scope?.folderId);
+            setFilesExpanded(true);
+            setWorkspaceExpanded(true);
+          }}><FolderPlus size={16} /></button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="workspace-icon-button" aria-label="Workspace actions"><MoreHorizontal size={16} /></button>
@@ -143,8 +135,6 @@ export function Navigator({
               <DropdownMenuItem onSelect={() => { useEditorStore.getState().requestCreateTab(); onNavigate?.(); }}><Plus /> New document</DropdownMenuItem>
               <DropdownMenuItem onSelect={onCreateProject}><Folder /> New project</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => go("files")}><FileText /> Browse files</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => go("unfiled")}><Inbox /> Organise inbox</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => {
                 setToolbarVisible(!toolbarVisible);
                 setFilesExpanded(true);
@@ -175,11 +165,15 @@ export function Navigator({
           <FileTree embedded mobile={Boolean(onNavigate)} onMobileClose={onNavigate} projectScope={scope?.id} toolbarVisible={toolbarVisible} />
         </div>
       </section>
-      <div className="navigator-footer">
-        {isAuthenticated ? <Cloud size={17} /> : <HardDrive size={16} />}
-        <span className="navigator-footer-label">{workspace?.name ?? "Workspace"} ({isAuthenticated ? "Cloud" : "Local"})</span>
-        <SaveStatus compact iconOnly />
       </div>
+      <nav className="navigator-footer navigator-utilities" aria-label="Workspace tools">
+        <button aria-current={mode === "graph" ? "page" : undefined} onClick={() => {
+          useEditorStore.getState().setViewMode("graph");
+          onNavigate?.();
+        }}><Network size={15} /> Graph</button>
+        <button aria-current={!activeTabId && mode !== "graph" && navigation.page === "trash" ? "page" : undefined}
+          onClick={() => go("trash")}><Trash2 size={15} /> Trash</button>
+      </nav>
     </aside>
   );
 }

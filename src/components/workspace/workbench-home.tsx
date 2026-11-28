@@ -107,14 +107,6 @@ export function WorkbenchHome({
     <div className="workspace-page workbench-home">
       <div className="workbench-page-title">
         <h1>Home</h1>
-        <button
-          onClick={() =>
-            document.dispatchEvent(new CustomEvent("open-spotlight"))
-          }
-        >
-          <Search size={15} />
-          Search workspace
-        </button>
       </div>
       <CaptureTypes />
       <div className="home-content-grid">
@@ -141,14 +133,6 @@ export function WorkbenchHome({
               <div className="home-empty">
                 <FileText size={24} />
                 <p>Files you open appear here.</p>
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    useEditorStore.getState().createProjectDocument()
-                  }
-                >
-                  New note
-                </Button>
               </div>
             )}
           </section>
@@ -409,42 +393,52 @@ export function WorkspaceLibrary({ inbox = false }: { inbox?: boolean }) {
     data = useEditorStore((s) => s.projectData),
     folders = useEditorStore((s) => s.folders),
     workspaceId = useEditorStore((s) => s.activeProfileId);
-  const folderId = useEditorStore((s) => s.navigation.folderId);
+  const requestedFolderId = useEditorStore((s) => s.navigation.folderId);
+  const folderId = inbox ? undefined : folders.find((folder) => folder.id === requestedFolderId)?.id;
   const [query, setQuery] = useState(""),
-    [selected, setSelected] = useState<string[]>([]),
+    [selection, setSelection] = useState({ folderId, workspaceId, ids: [] as string[] }),
     [type, setType] = useState("all"),
     [newFolder, setNewFolder] = useState("");
-  const docs = useMemo(
-    () =>
-      tabs.filter(
-        (tab) =>
-          getTabWorkspaceId(tab) === workspaceId &&
-          (!folderId || tab.folderId === folderId) &&
-          (!inbox ||
-            (!data.documents[tab.id]?.projectId &&
-              (!tab.folderId ||
-                folders.find((folder) => folder.id === tab.folderId)?.name ===
-                  "Inbox"))) &&
-          (type === "all" || tab.noteType === type) &&
-          `${tab.title} ${tab.tags.join(" ")}`
-            .toLowerCase()
-            .includes(query.toLowerCase()),
-      ),
-    [tabs, workspaceId, inbox, data.documents, folders, type, query, folderId],
-  );
+  const selectionMatches = selection.folderId === folderId && selection.workspaceId === workspaceId;
+  if (!selectionMatches) setSelection({ folderId, workspaceId, ids: [] });
+  const selected = selectionMatches ? selection.ids : [];
+  const setSelected = (ids: string[]) => setSelection({ folderId, workspaceId, ids });
+  const search = query.trim().toLowerCase();
+  const folderOptions = useMemo(() => folders.map((folder) => ({
+    ...folder, path: folderPath(folder.id, folders),
+  })).sort((a, b) => a.path.localeCompare(b.path)), [folders]);
+  const docs = useMemo(() => {
+    const projectFolderIds = new Set(Object.values(data.projects).map((project) => project.folderId));
+    const inboxFolders = new Set(folders.filter((folder) =>
+      !folder.parentId && folder.name === "Inbox" && !projectFolderIds.has(folder.id),
+    ).map((folder) => folder.id));
+    return tabs.filter((tab) =>
+      getTabWorkspaceId(tab) === workspaceId &&
+      (!folderId || tab.folderId === folderId) &&
+      (!inbox || (!data.documents[tab.id]?.projectId &&
+        (!tab.folderId || inboxFolders.has(tab.folderId)))) &&
+      (type === "all" || tab.noteType === type) &&
+      `${tab.title} ${tab.tags.join(" ")}`.toLowerCase().includes(search),
+    );
+  }, [tabs, workspaceId, inbox, data.documents, data.projects, folders, type, search, folderId]);
   const groups = useMemo(() => {
     const map = new Map<string, typeof docs>();
     for (const tab of docs) {
       const key = tab.folderId ?? "root";
-      map.set(key, [...(map.get(key) ?? []), tab]);
+      const group = map.get(key);
+      if (group) group.push(tab);
+      else map.set(key, [tab]);
     }
     return [...map].sort(([a], [b]) =>
       folderPath(a, folders).localeCompare(folderPath(b, folders)),
     );
   }, [docs, folders]);
+  const selectedIds = docs.filter((tab) => selected.includes(tab.id)).map((tab) => tab.id);
+  const allSelected = docs.length > 0 && selectedIds.length === docs.length;
+  const hasFilters = Boolean(folderId || search || type !== "all");
   const move = (folderId: string) => {
-    for (const id of selected)
-      useEditorStore.getState().moveTabToFolder(id, folderId || null);
+    for (const id of selectedIds)
+      useEditorStore.getState().moveTabToFolder(id, folderId);
     setSelected([]);
   };
   return (
@@ -454,40 +448,38 @@ export function WorkspaceLibrary({ inbox = false }: { inbox?: boolean }) {
         <CreateMenu />
       </div>
       <div className="document-library-tools">
-        <select
-          className="workspace-select"
-          aria-label="Filter by folder"
-          value={folderId ?? ""}
-          onChange={(event) =>
-            useEditorStore.setState((s) => ({
-              navigation: {
-                ...s.navigation,
-                folderId: event.target.value || undefined,
-              },
-            }))
-          }
-        >
-          <option value="">All folders</option>
-          {folders.map((folder) => (
-            <option key={folder.id} value={folder.id}>
-              {folder.name}
-            </option>
-          ))}
-        </select>
+        {!inbox && (
+          <select
+            className="workspace-select"
+            aria-label="Filter by folder"
+            value={folderId ?? ""}
+            onChange={(event) => {
+              useEditorStore.getState().navigate("files", null, event.target.value || undefined);
+              setSelected([]);
+            }}
+          >
+            <option value="">All folders</option>
+            {folderOptions.map((folder) => (
+              <option key={folder.id} value={folder.id}>
+                {folder.path}
+              </option>
+            ))}
+          </select>
+        )}
         <label className="workspace-search-field">
           <Search size={15} />
           <input
-            placeholder="Filter files…"
+            placeholder="Filter by name or tag"
             aria-label="Filter files"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => { setQuery(event.target.value); setSelected([]); }}
           />
         </label>
         <select
           className="workspace-select"
           aria-label="File type"
           value={type}
-          onChange={(event) => setType(event.target.value)}
+          onChange={(event) => { setType(event.target.value); setSelected([]); }}
         >
           <option value="all">All types</option>
           {TYPES.map((entry) => (
@@ -498,16 +490,18 @@ export function WorkspaceLibrary({ inbox = false }: { inbox?: boolean }) {
         </select>
         <button
           className="workspace-text-button"
+          disabled={!docs.length}
           onClick={() =>
-            setSelected(selected.length ? [] : docs.map((tab) => tab.id))
+            setSelected(allSelected ? [] : docs.map((tab) => tab.id))
           }
         >
-          {selected.length ? "Clear selection" : "Select all"}
+          {allSelected ? "Clear selection" : "Select all"}
         </button>
       </div>
-      {selected.length > 0 && (
+      {selectedIds.length > 0 && (
         <div className="file-bulk-actions">
-          <strong>{selected.length} selected</strong>
+          <strong aria-live="polite">{selectedIds.length} selected</strong>
+          {!allSelected && <button onClick={() => setSelected([])}>Clear selection</button>}
           <select
             aria-label="Move selected files to folder"
             value=""
@@ -516,9 +510,9 @@ export function WorkspaceLibrary({ inbox = false }: { inbox?: boolean }) {
             }}
           >
             <option value="">Move to folder…</option>
-            {folders.map((folder) => (
+            {folderOptions.map((folder) => (
               <option key={folder.id} value={folder.id}>
-                {folder.name}
+                {folder.path}
               </option>
             ))}
           </select>
@@ -544,17 +538,18 @@ export function WorkspaceLibrary({ inbox = false }: { inbox?: boolean }) {
             Move to new folder
           </button>
           <select
-            aria-label="Move selected files to project"
+            aria-label="Assign selected files to a project"
             value=""
             onChange={(event) => {
-              for (const id of selected)
+              if (!event.target.value) return;
+              for (const id of selectedIds)
                 useEditorStore
                   .getState()
-                  .assignDocument(id, event.target.value || null);
+                  .assignDocument(id, event.target.value);
               setSelected([]);
             }}
           >
-            <option value="">Move to project…</option>
+            <option value="">Assign to project…</option>
             {Object.values(data.projects)
               .filter(
                 (project) =>
@@ -595,13 +590,18 @@ export function WorkspaceLibrary({ inbox = false }: { inbox?: boolean }) {
         </section>
       ))}
       {!docs.length && (
-        <p className="workspace-muted-note">
-          {query
-            ? "No matching files"
-            : inbox
-              ? "Inbox is clear"
-              : "No files yet"}
-        </p>
+        <div className="workspace-empty-inline">
+          <FolderOpen size={24} aria-hidden />
+          <h3>{hasFilters ? "No matching files" : inbox ? "Inbox is clear" : "No files yet"}</h3>
+          {hasFilters && (
+            <button className="workspace-text-button" onClick={() => {
+              setQuery("");
+              setType("all");
+              setSelected([]);
+              useEditorStore.getState().navigate(inbox ? "unfiled" : "files");
+            }}>Clear filters</button>
+          )}
+        </div>
       )}
     </div>
   );

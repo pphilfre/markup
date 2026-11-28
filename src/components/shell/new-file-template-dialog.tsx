@@ -40,7 +40,7 @@ export function NewFileTemplateDialog() {
     >
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Create New File</DialogTitle>
+          <DialogTitle>New note</DialogTitle>
           <DialogDescription>
             Pick a template for your new note.
           </DialogDescription>
@@ -54,6 +54,7 @@ export function NewFileTemplateDialog() {
               <button
                 key={template.id}
                 type="button"
+                aria-pressed={active}
                 onClick={() => setSelectedTemplate(template.id)}
                 className={cn(
                   "flex items-start gap-3 rounded-md border px-3 py-2 text-left transition-colors",
@@ -78,6 +79,7 @@ export function NewFileTemplateDialog() {
             <p className="text-[11px] text-muted-foreground">Turn this off to create blank files immediately.</p>
           </div>
           <Switch
+            aria-label="Show template picker when creating a note"
             checked={promptForTemplateOnNewFile}
             onCheckedChange={(checked) => updateSettings({ promptForTemplateOnNewFile: !!checked })}
           />

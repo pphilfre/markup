@@ -1,107 +1,90 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { CheckCheck, Link2 } from "lucide-react";
 import { useEditorStore } from "@/lib/store";
-import { cn } from "@/lib/utils";
 
 const OPEN_LINK_PICKER_EVENT = "open-link-picker";
 
 type ToolbarPosition = {
   x: number;
   y: number;
+  above: boolean;
 };
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
+/** Keep the toolbar within the viewport beside the active selection. */
+function getToolbarPosition(x: number, top: number, bottom: number): ToolbarPosition {
+  const width = Math.min(200, window.innerWidth - 16);
+  const above = top >= 44 || bottom + 44 > window.innerHeight;
+  return {
+    x: Math.min(window.innerWidth - width - 8, Math.max(8, x - width / 2)),
+    y: above ? Math.min(window.innerHeight - 8, Math.max(40, top - 6)) : Math.max(8, bottom + 6),
+    above,
+  };
 }
 
+/** Show document actions beside an active Markdown selection. */
 export function SelectionToolbar() {
   const editorView = useEditorStore((s) => s.editorView);
   const inlineSelection = useEditorStore((s) => s.inlineSelection);
   const inlineTextarea = useEditorStore((s) => s.inlineTextarea);
 
   const [position, setPosition] = useState<ToolbarPosition | null>(null);
-  const [visible, setVisible] = useState(false);
-
-  const updateFromEditor = useCallback(() => {
-    if (!editorView || !editorView.hasFocus) return false;
-    const { from, to } = editorView.state.selection.main;
-    if (from === to) return false;
-
-    const coords = editorView.coordsAtPos(to);
-    if (!coords) return false;
-
-    const x = clamp(coords.left, 16, window.innerWidth - 16);
-    const y = clamp(coords.top - 8, 16, window.innerHeight - 16);
-    setPosition({ x, y });
-    setVisible(true);
-    return true;
-  }, [editorView]);
-
   useEffect(() => {
-    if (!editorView) return;
-
-    const handleBlur = () => setVisible(false);
-    const handle = () => {
-      const shown = updateFromEditor();
-      if (!shown) setVisible(false);
+    const element = editorView?.dom ?? inlineTextarea;
+    if (!element) return undefined;
+    let frame = 0;
+    /** Measure the selection against the visible editor before placing the toolbar. */
+    const measure = () => {
+      if (editorView?.hasFocus) {
+        const { from, to } = editorView.state.selection.main;
+        const coords = from !== to ? editorView.coordsAtPos(to) : null;
+        const pane = editorView.scrollDOM.getBoundingClientRect();
+        setPosition(coords && coords.bottom >= pane.top && coords.top <= pane.bottom
+          ? getToolbarPosition(coords.left, coords.top, coords.bottom)
+          : null);
+      } else if (inlineSelection && inlineTextarea && inlineSelection.from !== inlineSelection.to) {
+        const rect = inlineTextarea.getBoundingClientRect();
+        setPosition(rect.bottom > 0 && rect.top < window.innerHeight
+          ? getToolbarPosition(rect.right - 8, rect.top, rect.bottom)
+          : null);
+      } else {
+        setPosition(null);
+      }
     };
-
-    const scroller = editorView.scrollDOM;
-    editorView.dom.addEventListener("mouseup", handle);
-    editorView.dom.addEventListener("keyup", handle);
-    editorView.dom.addEventListener("touchend", handle);
-    editorView.dom.addEventListener("blur", handleBlur);
-    scroller?.addEventListener("scroll", handle, { passive: true });
+    /** Coalesce viewport and editor events into one measurement per frame. */
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    const editorEvents = ["mouseup", "keyup", "touchend", "focusout"];
+    for (const event of editorEvents) element.addEventListener(event, schedule);
+    window.addEventListener("scroll", schedule, true);
+    window.addEventListener("resize", schedule);
+    const observer = new ResizeObserver(schedule);
+    observer.observe(element);
+    schedule();
 
     return () => {
-      editorView.dom.removeEventListener("mouseup", handle);
-      editorView.dom.removeEventListener("keyup", handle);
-      editorView.dom.removeEventListener("touchend", handle);
-      editorView.dom.removeEventListener("blur", handleBlur);
-      scroller?.removeEventListener("scroll", handle);
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      for (const event of editorEvents) element.removeEventListener(event, schedule);
+      window.removeEventListener("scroll", schedule, true);
+      window.removeEventListener("resize", schedule);
     };
-  }, [editorView, updateFromEditor]);
-
-  const inlinePosition = useMemo<ToolbarPosition | null>(() => {
-    if (editorView && editorView.hasFocus) return null;
-    if (!inlineSelection || !inlineTextarea) return null;
-    if (inlineSelection.from === inlineSelection.to) return null;
-
-    const rect = inlineTextarea.getBoundingClientRect();
-    const x = clamp(rect.left + rect.width - 8, 16, window.innerWidth - 16);
-    const y = clamp(rect.top - 8, 16, window.innerHeight - 16);
-    return { x, y };
   }, [editorView, inlineSelection, inlineTextarea]);
 
-  const showEditorPosition = Boolean(visible && position && editorView?.hasFocus);
-  const activePosition = showEditorPosition ? position : inlinePosition;
+  if (!position || (!editorView && !inlineTextarea)) return null;
 
-  const style = useMemo<CSSProperties | undefined>(() => {
-    if (!activePosition) return undefined;
-    return {
-      left: activePosition.x,
-      top: activePosition.y,
-    };
-  }, [activePosition]);
-
-  if (!activePosition) return null;
-
-  return (
+  return createPortal(
     <div
-      className="fixed z-50"
-      style={style}
+      className="fixed z-40 flex w-[min(200px,calc(100dvw-16px))] items-center justify-center gap-1 rounded-full border border-border bg-background/95 px-2 py-1 text-xs text-foreground shadow-sm"
+      style={{ left: position.x, top: position.y, transform: position.above ? "translateY(-100%)" : undefined }}
     >
-      <div
-        className={cn(
-          "flex items-center gap-1 rounded-full border border-border bg-background/95 shadow-sm px-2 py-1",
-          "text-xs text-foreground"
-        )}
-        style={{ transform: "translate(-50%, -100%)" }}
-      >
         <button
           type="button"
+          onMouseDown={(event) => event.preventDefault()}
           onClick={() => document.dispatchEvent(new CustomEvent(OPEN_LINK_PICKER_EVENT))}
           className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
@@ -109,7 +92,7 @@ export function SelectionToolbar() {
           Link file
         </button>
         <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => useEditorStore.getState().createTaskFromSelection()} className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted"><CheckCheck className="h-3 w-3" />Create task</button>
-      </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

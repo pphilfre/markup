@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   AlertTriangle,
   Check,
@@ -12,6 +12,7 @@ import {
   Plus,
   RefreshCw,
   Send,
+  Sparkles,
   X,
 } from "lucide-react";
 import {
@@ -20,7 +21,9 @@ import {
   type AiChatModel,
 } from "@/lib/ai-chat-store";
 import { getTabWorkspaceId, useEditorStore, type Tab } from "@/lib/store";
-import { useIsMobile } from "@/lib/use-mobile";
+import { MIN_AI_WIDTH } from "@/lib/workbench-layout";
+import { getDesktopToken, isTauri } from "@/lib/tauri";
+import { PaneResizeHandle } from "@/components/workspace/pane-resize-handle";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,8 +48,6 @@ import { MarkdownPreviewStandalone } from "@/components/editor/markdown-preview-
 const OPEN_LINK_PICKER_EVENT = "open-link-picker";
 const CHAT_ENDPOINT = "/api/ai/openrouter";
 const DEFAULT_PANEL_WIDTH = 360;
-const MIN_PANEL_WIDTH = 260;
-const MAX_PANEL_WIDTH = 720;
 
 function stripExtension(title: string): string {
   return title.replace(/\.(md|canvas|mindmap|kanban|pdf)$/i, "");
@@ -464,7 +465,8 @@ function AiChatPanelContent({
   const hideMd = useEditorStore((s) => s.settings.hideMdExtensions);
   const { activeTab } = useActiveTab();
 
-  const [draft, setDraft] = useState("");
+  const draft = useAiChatStore((s) => s.draft);
+  const setDraft = useAiChatStore((s) => s.setDraft);
   const [dropActive, setDropActive] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -578,9 +580,13 @@ function AiChatPanelContent({
           .filter((m) => m.role === "user" || m.role === "assistant")
           .map((m) => ({ role: m.role, content: m.content }));
         const systemPrompt = buildSystemPrompt(attachedNotes, hideMd);
+        const desktopToken = isTauri() ? getDesktopToken() : null;
         const res = await fetch(CHAT_ENDPOINT, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(desktopToken ? { Authorization: `Bearer ${desktopToken}` } : {}),
+          },
           body: JSON.stringify({
             model: modelId,
             messages: [
@@ -680,7 +686,7 @@ function AiChatPanelContent({
       modelId: selectedModelId,
       history: messages,
     });
-  }, [addMessage, canSend, draft, messages, selectedModelId, sendRequest]);
+  }, [addMessage, canSend, draft, messages, selectedModelId, sendRequest, setDraft]);
 
   // Retry: find the last user message before this assistant/error message, replay with chosen model
   const handleRetry = useCallback(
@@ -771,27 +777,25 @@ function AiChatPanelContent({
       )}
     >
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-3 py-2">
-        <span className="text-xs font-semibold text-muted-foreground">
-          Markup AI
-        </span>
+      <div className="workbench-ai-header">
+        <h2><Sparkles size={17} /> Markup AI</h2>
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
-            size="icon-xs"
+            size="icon-sm"
             onClick={handleNewChat}
             aria-label="New chat"
             title="New chat"
           >
-            <MessageSquarePlus className="h-4 w-4" />
+            <MessageSquarePlus size={17} />
           </Button>
           <Button
             variant="ghost"
-            size="icon-xs"
+            size="icon-sm"
             onClick={onClose}
             aria-label="Close Markup AI"
           >
-            <X className="h-4 w-4" />
+            <X size={17} />
           </Button>
         </div>
       </div>
@@ -833,7 +837,7 @@ function AiChatPanelContent({
       </div>
 
       {/* Input area */}
-      <div className="shrink-0 border-t border-border p-3 space-y-2">
+      <div className="workbench-ai-composer shrink-0 border-t border-border p-3 space-y-2">
         <ChatAttachments
           activeTab={activeTab}
           activeAttached={activeAttached}
@@ -865,95 +869,75 @@ function AiChatPanelContent({
   );
 }
 
-/** Show AI alongside the editor on desktop, or in the phone chat dialog. */
-export function AiChatPanel() {
-  const isMobile = useIsMobile();
+export function AiChatPanel({ docked, maxWidth, zoom, trigger }: {
+  docked: boolean;
+  maxWidth: number;
+  zoom: number;
+  trigger: RefObject<HTMLButtonElement | null>;
+}) {
   const panelOpen = useAiChatStore((s) => s.panelOpen);
   const setPanelOpen = useAiChatStore((s) => s.setPanelOpen);
   const [width, setWidth] = useState(DEFAULT_PANEL_WIDTH);
-  const isDragging = useRef(false);
-  const startX = useRef(0);
-  const startWidth = useRef(DEFAULT_PANEL_WIDTH);
-
+  const [previewWidth, setPreviewWidth] = useState<number | null>(null);
   useEffect(() => {
-    if (!panelOpen) return undefined;
-    /** Close the assistant with Escape while its panel is open. */
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setPanelOpen(false);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [panelOpen, setPanelOpen]);
+    if (docked && panelOpen) return;
+    const frame = requestAnimationFrame(() => setPreviewWidth(null));
+    return () => cancelAnimationFrame(frame);
+  }, [docked, panelOpen]);
 
-  const onMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      isDragging.current = true;
-      startX.current = e.clientX;
-      startWidth.current = width;
-
-      /** Resize the pane within its supported width range. */
-      const onMouseMove = (e: MouseEvent) => {
-        if (!isDragging.current) return;
-        const delta = startX.current - e.clientX;
-        const next = Math.min(
-          MAX_PANEL_WIDTH,
-          Math.max(MIN_PANEL_WIDTH, startWidth.current + delta),
-        );
-        setWidth(next);
-      };
-      /** End resizing and release the temporary pointer listeners. */
-      const onMouseUp = () => {
-        isDragging.current = false;
-        window.removeEventListener("mousemove", onMouseMove);
-        window.removeEventListener("mouseup", onMouseUp);
-      };
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("mouseup", onMouseUp);
-    },
-    [width],
-  );
-
-  if (isMobile) return <AiChatMobileModal />;
+  if (!docked) return <AiChatMobileModal trigger={trigger} />;
   if (!panelOpen) return null;
+  const visibleWidth = Math.min(maxWidth, previewWidth ?? width);
+  const close = () => {
+    setPanelOpen(false);
+    trigger.current?.focus();
+  };
   return (
-    <div
+    <aside
       id="markup-ai-panel"
-      style={{ width }}
-      className={cn(
-        "workbench-ai-panel relative h-full shrink-0 border-l border-border bg-background",
-        panelOpen ? "translate-x-0" : "translate-x-full pointer-events-none",
-      )}
-      aria-hidden={!panelOpen}
+      style={{ width: visibleWidth }}
+      className="workbench-ai-panel"
+      aria-label="Markup AI"
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && !event.defaultPrevented) close();
+      }}
     >
-      {/* Resize handle */}
-      <div
-        onMouseDown={onMouseDown}
-        className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors"
-        aria-hidden
+      <PaneResizeHandle
+        className="workbench-ai-resize"
+        label="Resize Markup AI"
+        axis="x"
+        value={visibleWidth}
+        min={MIN_AI_WIDTH}
+        max={maxWidth}
+        step={10}
+        unitsPerPixel={-1 / zoom}
+        onPreview={setPreviewWidth}
+        onCommit={setWidth}
       />
-      <AiChatPanelContent onClose={() => setPanelOpen(false)} />
-    </div>
+      <AiChatPanelContent onClose={close} />
+    </aside>
   );
 }
 
-export function AiChatMobileModal() {
+export function AiChatMobileModal({ trigger }: { trigger?: RefObject<HTMLButtonElement | null> } = {}) {
   const panelOpen = useAiChatStore((s) => s.panelOpen);
   const setPanelOpen = useAiChatStore((s) => s.setPanelOpen);
   return (
     <Dialog open={panelOpen} onOpenChange={setPanelOpen}>
       <DialogContent
         showCloseButton={false}
-        className="h-[100dvh] w-[100dvw] max-w-none rounded-none p-0"
+        className="workbench-ai-dialog"
+        onCloseAutoFocus={(event) => {
+          if (!trigger?.current) return;
+          event.preventDefault();
+          trigger.current.focus();
+        }}
       >
         <DialogTitle className="sr-only">Markup AI</DialogTitle>
         <DialogDescription className="sr-only">
           Chat with attached notes and choose a model.
         </DialogDescription>
-        <AiChatPanelContent onClose={() => setPanelOpen(false)} compact />
+        <AiChatPanelContent onClose={() => setPanelOpen(false)} />
       </DialogContent>
     </Dialog>
   );

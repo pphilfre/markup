@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAuthUser } from "@/lib/server/api";
 
 export const runtime = "nodejs";
 
@@ -227,6 +228,14 @@ export async function POST(req: NextRequest) {
       undefined,
       400
     );
+  }
+
+  if (!(await getAuthUser(req))) {
+    return jsonError("auth_failed", "auth_failed", "Sign in to use Markup AI.", undefined, 401);
+  }
+
+  if (req.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !== "application/json") {
+    return jsonError("invalid_request", "invalid_request", "Expected a JSON request.", undefined, 415);
   }
 
   let body: ChatRequestBody | null = null;

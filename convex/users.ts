@@ -1,4 +1,5 @@
 import { query, mutation } from "./_generated/server";
+import { requireUser } from "./auth";
 import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 
@@ -10,6 +11,7 @@ import { v } from "convex/values";
 export const getByWorkosId = query({
   args: { workosId: v.string() },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.workosId);
     return await ctx.db
       .query("users")
       .withIndex("by_workos_id", (q) => q.eq("workosId", args.workosId))
@@ -31,6 +33,7 @@ export const upsert = mutation({
     profilePictureUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.workosId);
     const existing = await ctx.db
       .query("users")
       .withIndex("by_workos_id", (q) => q.eq("workosId", args.workosId))

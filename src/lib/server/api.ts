@@ -1,10 +1,10 @@
 import type { NextRequest } from "next/server";
-
-type JwtClaims = Record<string, unknown>;
+import type { createRemoteJWKSet, JWTVerifyGetKey } from "jose";
 
 export type AuthUser = {
   id: string;
   email: string;
+  emailVerified: boolean;
   firstName: string | null;
   lastName: string | null;
   profilePictureUrl: string | null;
@@ -31,73 +31,73 @@ export function forbidden(message = "Forbidden"): ApiError {
   return new ApiError(403, message);
 }
 
-function decodeJwtPayload(token: string): JwtClaims | null {
-  try {
-    const parts = token.split(".");
-    if (parts.length < 2) return null;
-    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
-    const json = Buffer.from(padded, "base64").toString("utf8");
-    return JSON.parse(json) as JwtClaims;
-  } catch {
-    return null;
-  }
+let workosKeys: ReturnType<typeof createRemoteJWKSet> | undefined;
+
+export async function verifyWorkOSSessionToken(token: string, clientId: string, keys: JWTVerifyGetKey) {
+  const { jwtVerify } = await import("jose");
+  const legacyIssuer = "https://api.workos.com/";
+  const { payload } = await jwtVerify(token, keys, {
+    algorithms: ["RS256"],
+    issuer: [`https://api.workos.com/user_management/${clientId}`, legacyIssuer],
+    requiredClaims: ["exp", "sub", "sid"],
+  });
+  if (!payload.sub || typeof payload.sid !== "string" || !payload.sid) return null;
+  if (payload.iss === legacyIssuer && ![payload.aud].flat().includes(clientId)) return null;
+  return { userId: payload.sub, sessionId: payload.sid };
 }
 
-function userFromClaims(claims: JwtClaims, userId: string): AuthUser {
-  return {
-    id: userId,
-    email: typeof claims.email === "string" ? claims.email : "",
-    firstName: typeof claims.given_name === "string" ? claims.given_name : null,
-    lastName: typeof claims.family_name === "string" ? claims.family_name : null,
-    profilePictureUrl: typeof claims.picture === "string" ? claims.picture : null,
-  };
-}
-
-export async function getAuthUser(req: NextRequest): Promise<AuthUser | null> {
+export async function getAuthSession(req: NextRequest, reportUnavailable = false): Promise<{
+  accessToken: string;
+  sessionId: string;
+  user: AuthUser;
+} | null> {
   try {
     const { withAuth } = await import("@workos-inc/authkit-nextjs");
     const session = await withAuth();
-
-    if (session?.user) {
+    if (session.user) {
       return {
-        id: session.user.id,
-        email: session.user.email,
-        firstName: session.user.firstName,
-        lastName: session.user.lastName,
-        profilePictureUrl: session.user.profilePictureUrl,
+        accessToken: session.accessToken,
+        sessionId: session.sessionId,
+        user: session.user,
       };
     }
   } catch {
-    // Fallback to bearer token below.
+    // Desktop requests can authenticate with a WorkOS bearer token.
   }
 
   const authHeader = req.headers.get("authorization");
   const bearer = authHeader?.startsWith("Bearer ")
     ? authHeader.slice("Bearer ".length).trim()
     : null;
-
-  if (!bearer) return null;
-
-  const claims = decodeJwtPayload(bearer);
-  const userId = typeof claims?.sub === "string" ? claims.sub : null;
-
-  if (!userId) return null;
+  const clientId = process.env.WORKOS_CLIENT_ID;
+  if (!bearer || !clientId) return null;
 
   try {
     const { getWorkOS } = await import("@workos-inc/authkit-nextjs");
+    const { createRemoteJWKSet } = await import("jose");
     const workos = getWorkOS();
-    const user = await workos.userManagement.getUser(userId);
-    return {
-      id: user.id,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      profilePictureUrl: user.profilePictureUrl,
-    };
-  } catch {
-    return userFromClaims(claims ?? {}, userId);
+    workosKeys ??= createRemoteJWKSet(new URL(workos.userManagement.getJwksUrl(clientId)));
+    const identity = await verifyWorkOSSessionToken(bearer, clientId, workosKeys);
+    if (!identity) return null;
+
+    const user = await workos.userManagement.getUser(identity.userId);
+    return { accessToken: bearer, sessionId: identity.sessionId, user };
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? error.code : null;
+    const rejected = code === "ERR_JWT_EXPIRED" || code === "ERR_JWT_INVALID" ||
+      code === "ERR_JWT_CLAIM_VALIDATION_FAILED" || code === "ERR_JWS_INVALID" ||
+      code === "ERR_JWS_SIGNATURE_VERIFICATION_FAILED" || code === "ERR_JOSE_ALG_NOT_ALLOWED" ||
+      code === "ERR_JWKS_NO_MATCHING_KEY" ||
+      (error && typeof error === "object" && "status" in error && error.status === 404);
+    if (reportUnavailable && !rejected) {
+      throw new ApiError(503, "Session verification is temporarily unavailable.");
+    }
+    return null;
   }
+}
+
+export async function getAuthUser(req: NextRequest): Promise<AuthUser | null> {
+  return (await getAuthSession(req))?.user ?? null;
 }
 
 export async function requireAuthUser(req: NextRequest): Promise<AuthUser> {

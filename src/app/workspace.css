@@ -1261,10 +1261,7 @@
   border: 0;
 }
 .workspace-mobile-navigation {
-  inset: 0 auto 0 0 !important;
   transform: none !important;
-  width: 280px !important;
-  max-width: 85vw !important;
   height: 100dvh;
   padding: 0 !important;
   border-radius: 0 !important;
@@ -1303,9 +1300,6 @@
   }
 }
 @media (max-width: 800px) {
-  .workspace-desktop-sidebar {
-    display: none;
-  }
   .workspace-menu-button {
     display: flex !important;
   }

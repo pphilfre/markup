@@ -1,5 +1,7 @@
 "use client";
 import { useFramePointer } from "@/lib/use-frame-pointer";
+import { boundsOverlap, canvasPointer } from "@/lib/canvas-selection";
+import { useCanvasSelection } from "@/lib/use-canvas-selection";
 
 import {
   useRef,
@@ -863,6 +865,8 @@ export function MindmapView() {
   // Canvas transform
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
+  const { start: startSelection, move: moveSelection, finish: finishSelection, rectangle } = useCanvasSelection(pan, zoom);
+  const groupMoved = useRef(false);
 
   // Tool state
   const [activeTool, setActiveTool] = useState<MindmapTool>("select");
@@ -1245,6 +1249,7 @@ export function MindmapView() {
 
   const handlePointerDown = useCallback(
     (e: ReactPointerEvent<HTMLCanvasElement>) => {
+      if (!e.isPrimary || (e.button !== 0 && e.button !== 1)) return;
       const canvas = canvasRef.current;
       if (!canvas) return;
 
@@ -1252,10 +1257,7 @@ export function MindmapView() {
       setEditNode(null);
       setContextMenu(null);
 
-      const rect = canvas.getBoundingClientRect();
-      const sx = e.clientX - rect.left;
-      const sy = e.clientY - rect.top;
-      const cp = screenToCanvas(sx, sy, pan, zoom);
+      const cp = canvasPointer(e, canvas, pan, zoom);
 
       if (activeTool === "pan" || e.button === 1) {
         isPanningRef.current = true;
@@ -1303,10 +1305,12 @@ export function MindmapView() {
       // Select tool
       canvas.setPointerCapture(e.pointerId);
       drawingRef.current = true;
+      groupMoved.current = false;
 
       // Check for resize handles on selected nodes first
+      const singleSelection = nodes.filter((node) => node.selected).length === 1;
       for (let i = nodes.length - 1; i >= 0; i--) {
-        if (nodes[i].selected) {
+        if (singleSelection && !e.shiftKey && nodes[i].selected) {
           const handle = hitTestResizeHandle(nodes[i], cp.x, cp.y);
           if (handle) {
             pushUndo();
@@ -1329,8 +1333,12 @@ export function MindmapView() {
       for (let i = nodes.length - 1; i >= 0; i--) {
         if (hitTestNode(nodes[i], cp.x, cp.y)) {
           const node = nodes[i];
+          if (e.shiftKey) {
+            setNodes((prev) => prev.map((entry) => entry.id === node.id ? { ...entry, selected: !entry.selected } : entry));
+            drawingRef.current = false;
+            return;
+          }
           if (!node.selected) {
-            pushUndo();
             setNodes((prev) =>
               prev.map((n) => ({ ...n, selected: n.id === node.id })),
             );
@@ -1357,13 +1365,10 @@ export function MindmapView() {
         }
       }
 
-      // Deselect all
-      setNodes((prev) => prev.map((n) => ({ ...n, selected: false })));
-      setConnections((prev) => prev.map((c) => ({ ...c, selected: false })));
+      startSelection(cp, e.shiftKey);
       dragNodeRef.current = null;
-      drawingRef.current = false;
     },
-    [activeTool, pan, zoom, nodes, connections, addNode, pushUndo],
+    [activeTool, pan, zoom, nodes, connections, addNode, pushUndo, startSelection],
   );
 
   const handlePointerMove = useCallback(
@@ -1386,8 +1391,9 @@ export function MindmapView() {
             const sy = e.clientY - rect.top;
             const cp = screenToCanvas(sx, sy, pan, zoom);
             let cursor = "";
+            const singleSelection = nodes.filter((node) => node.selected).length === 1;
             for (let i = nodes.length - 1; i >= 0; i--) {
-              if (nodes[i].selected) {
+              if (singleSelection && nodes[i].selected) {
                 const handle = hitTestResizeHandle(nodes[i], cp.x, cp.y);
                 if (handle) {
                   const cursors: Record<string, string> = {
@@ -1413,10 +1419,8 @@ export function MindmapView() {
 
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      const sx = e.clientX - rect.left;
-      const sy = e.clientY - rect.top;
-      const cp = screenToCanvas(sx, sy, pan, zoom);
+      const cp = canvasPointer(e, canvas, pan, zoom);
+      if (moveSelection(cp)) return;
 
       // Connection preview
       if (activeTool === "connect" && connectFromRef.current) {
@@ -1477,20 +1481,29 @@ export function MindmapView() {
       // Drag node
       const dragging = dragNodeRef.current;
       if (dragging) {
+        if (!groupMoved.current) {
+          if (Math.hypot(cp.x - dragOffsetRef.current.x - dragging.x, cp.y - dragOffsetRef.current.y - dragging.y) * zoom <= 3) return;
+          groupMoved.current = true;
+          pushUndo();
+        }
         const nx = snap(cp.x - dragOffsetRef.current.x);
         const ny = snap(cp.y - dragOffsetRef.current.y);
-        setNodes((prev) =>
-          prev.map((n) => (n.id === dragging.id ? { ...n, x: nx, y: ny } : n)),
-        );
+        setNodes((prev) => {
+          const anchor = prev.find((node) => node.id === dragging.id);
+          if (!anchor || (nx === anchor.x && ny === anchor.y)) return prev;
+          const dx = nx - anchor.x;
+          const dy = ny - anchor.y;
+          return prev.map((node) => node.selected ? { ...node, x: node.x + dx, y: node.y + dy } : node);
+        });
       }
     },
-    [activeTool, pan, zoom, nodes, snap],
+    [activeTool, moveSelection, pan, zoom, nodes, pushUndo, snap],
   );
 
   const framePointer = useFramePointer(handlePointerMove);
 
   const handlePointerUp = useCallback(
-    (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    (e: ReactPointerEvent<HTMLCanvasElement>, cancelled = false) => {
       if (isPanningRef.current) {
         isPanningRef.current = false;
         return;
@@ -1502,15 +1515,23 @@ export function MindmapView() {
         return;
       }
 
+      const selection = finishSelection(cancelled ? null : canvasPointer(e, e.currentTarget, pan, zoom));
+      if (selection) {
+        const { bounds, additive } = selection;
+        setNodes((previous) => previous.map((node) => {
+          const selected = Boolean((additive && node.selected) ||
+            (bounds && boundsOverlap(bounds, { x: node.x, y: node.y, w: node.width, h: node.height })));
+          return selected === Boolean(node.selected) ? node : { ...node, selected };
+        }));
+        if (!additive) setConnections((previous) => previous.map((entry) => entry.selected ? { ...entry, selected: false } : entry));
+      }
+
       // Complete connection
       const fromId = connectFromRef.current;
       if (activeTool === "connect" && fromId) {
         const canvas = canvasRef.current;
-        if (canvas) {
-          const rect = canvas.getBoundingClientRect();
-          const sx = e.clientX - rect.left;
-          const sy = e.clientY - rect.top;
-          const cp = screenToCanvas(sx, sy, pan, zoom);
+        if (canvas && !cancelled) {
+          const cp = canvasPointer(e, canvas, pan, zoom);
 
           // Use latest nodes via functional update to avoid stale closure
           setNodes((currentNodes) => {
@@ -1551,7 +1572,7 @@ export function MindmapView() {
       drawingRef.current = false;
       dragNodeRef.current = null;
     },
-    [activeTool, pan, zoom, isDark],
+    [activeTool, finishSelection, pan, zoom, isDark],
   );
 
   const handleContextMenu = useCallback(
@@ -1732,12 +1753,8 @@ export function MindmapView() {
         drawNode(ctx, node);
       }
 
-      // Draw resize handles on selected nodes
-      for (const node of nodes) {
-        if (node.selected) {
-          drawResizeHandles(ctx, node);
-        }
-      }
+      const selectedNodes = nodes.filter((node) => node.selected);
+      if (selectedNodes.length === 1) drawResizeHandles(ctx, selectedNodes[0]);
 
       ctx.restore();
     };
@@ -1798,19 +1815,22 @@ export function MindmapView() {
         aria-label="Mind map canvas"
         className={cn("absolute inset-0", cursorClass)}
         onPointerDown={handlePointerDown}
-        onPointerMove={framePointer.push}
+        onPointerMove={(event) => { if (event.isPrimary) framePointer.push(event); }}
         onPointerUp={(event) => {
+          if (!event.isPrimary) return;
           framePointer.flush();
           handlePointerUp(event);
         }}
         onPointerCancel={(event) => {
+          if (!event.isPrimary) return;
           framePointer.flush();
-          handlePointerUp(event);
+          handlePointerUp(event, true);
         }}
         onDoubleClick={handleDoubleClick}
         onContextMenu={handleContextMenu}
         style={{ touchAction: "none" }}
       />
+      {rectangle && <div className="canvas-selection-rectangle" style={rectangle} aria-hidden />}
 
       {/* Edit node overlay */}
       {editNode && (

@@ -14,6 +14,8 @@ import remarkMath from "remark-math";
 import remarkSupersub from "remark-supersub";
 import { remarkDefinitionList, defListHastHandlers } from "remark-definition-list";
 import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
+import { markdownSanitizeSchema } from "@/lib/markdown-sanitize";
 import rehypeKatex from "rehype-katex";
 import rehypeHighlight from "rehype-highlight";
 import { markdownLanguage } from "@codemirror/lang-markdown";
@@ -192,7 +194,7 @@ function InlineLine({ lineIndex, text, isActive, onFocus, onBlur, onToggleTask, 
       <ReactMarkdown
         remarkPlugins={[[remarkGfm, { singleTilde: false }], remarkMath, remarkSupersub, remarkDefinitionList]}
         remarkRehypeOptions={{ handlers: defListHastHandlers, allowDangerousHtml: true }}
-        rehypePlugins={[rehypeRaw, rehypeKatex]}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema], rehypeKatex]}
         components={{
           input: ({ type, checked }) => type === "checkbox" ? (
             <input type="checkbox" aria-label="Toggle checklist item" checked={Boolean(checked)} onChange={(event) => onToggleTask(lineIndex, event.target.checked)} />

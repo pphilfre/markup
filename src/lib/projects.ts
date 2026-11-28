@@ -1,5 +1,6 @@
 /** Versioned project records shared by the desktop, web and storage adapters. */
 export type TaskStatus = "todo" | "in-progress" | "done";
+export const TASK_PRIORITY_ORDER = { high: 0, medium: 1, low: 2 } as const;
 export type ProjectPage =
   | "home"
   | "tasks"
@@ -68,6 +69,11 @@ export interface ProjectBoard {
   showCompleted: boolean;
   updatedAt: number;
 }
+export const DEFAULT_BOARD_COLUMNS: readonly BoardColumn[] = [
+  { id: "todo", title: "To do", color: "#2563eb", wipLimit: null, status: "todo" },
+  { id: "in-progress", title: "In progress", color: "#7c3aed", wipLimit: null, status: "in-progress" },
+  { id: "done", title: "Done", color: "#16a34a", wipLimit: null, status: "done" },
+];
 export interface StoredDocument {
   id: string;
   title: string;
@@ -266,6 +272,16 @@ export function defaultDocumentMeta(id: string): DocumentMeta {
     relatedDocumentIds: [],
   };
 }
+/** Read a board document with an explicit columns array. */
+function parseBoardContent(content: string): (Record<string, unknown> & { columns: unknown[] }) | null {
+  try {
+    const raw: unknown = JSON.parse(content);
+    return isRecord(raw) && Array.isArray(raw.columns) ? { ...raw, columns: raw.columns } : null;
+  } catch {
+    return null;
+  }
+}
+
 export function migrateProjectData(
   data: ProjectData,
   tabs: StoredDocument[],
@@ -278,13 +294,8 @@ export function migrateProjectData(
         documents: { ...next.documents, [tab.id]: defaultDocumentMeta(tab.id) },
       };
     if (tab.noteType !== "kanban" || next.boards[tab.id]) continue;
-    let raw: Record<string, unknown>;
-    try {
-      raw = JSON.parse(tab.content);
-    } catch {
-      continue;
-    }
-    if (!raw || !Array.isArray(raw.columns)) continue;
+    const raw: Record<string, unknown> & { columns: unknown[] } =
+      parseBoardContent(tab.content) ?? { columns: [] };
     const columns: BoardColumn[] = [];
     const tasks: Record<string, ProjectTask> = {};
     for (const [index, column] of raw.columns.entries()) {
@@ -354,7 +365,7 @@ export function migrateProjectData(
             typeof raw.boardTitle === "string"
               ? raw.boardTitle
               : titleWithoutExtension(tab.title),
-          columns,
+          columns: columns.length ? columns : DEFAULT_BOARD_COLUMNS.map((column) => ({ ...column })),
           showCompleted: raw.showCompleted !== false,
           updatedAt: 0,
         },
@@ -398,6 +409,10 @@ export function applyBoardContent(
   data: ProjectData,
   document: StoredDocument,
 ): ProjectData {
+  if (!parseBoardContent(document.content))
+    throw new Error(
+      "This board could not be read. Its previous data has been kept.",
+    );
   const boards = { ...data.boards };
   delete boards[document.id];
   const otherTasks = Object.fromEntries(

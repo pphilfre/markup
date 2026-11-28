@@ -2258,11 +2258,24 @@ function AboutSection() {
 export function SettingsPanel() {
   const [open, setOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionId>("general");
+  const sectionNav = useRef<HTMLElement>(null);
   const [userTabOverride, setUserTabOverride] = useState<"profile" | "sessions" | "security" | null>(null);
   const settings = useEditorStore((s) => s.settings);
   const updateSettings = useEditorStore((s) => s.updateSettings);
   const theme = useEditorStore((s) => s.theme);
   const toggleTheme = useEditorStore((s) => s.toggleTheme);
+
+  useEffect(() => {
+    if (!open) return;
+    const nav = sectionNav.current;
+    const revealSection = () => {
+      nav?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    };
+    revealSection();
+    const observer = new ResizeObserver(revealSection);
+    if (nav) observer.observe(nav);
+    return () => observer.disconnect();
+  }, [activeSection, open]);
 
 
   // Listen for custom event
@@ -2351,7 +2364,7 @@ export function SettingsPanel() {
         <div className="settings-dialog-heading"><DialogTitle>Settings</DialogTitle></div>
         <DialogDescription className="sr-only">Workspace, editor, account, and storage preferences.</DialogDescription>
         <div className="settings-dialog-body">
-          <nav aria-label="Settings sections">
+          <nav ref={sectionNav} aria-label="Settings sections">
             {SETTINGS_GROUPS.map((group) => (
               <div className="settings-category" key={group}>
                 <h3>{group}</h3>
@@ -2368,7 +2381,6 @@ export function SettingsPanel() {
             {settingsContent}
           </div>
         </div>
-        <div className="settings-dialog-footer">Saved automatically</div>
       </DialogContent>
     </Dialog>
   );

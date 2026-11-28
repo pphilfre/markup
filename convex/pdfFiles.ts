@@ -1,10 +1,12 @@
 import { mutation, query } from "./_generated/server";
+import { requireUser } from "./auth";
 import { v } from "convex/values";
 
 /** Generate a signed upload URL for Convex file storage. */
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
+    await requireUser(ctx);
     return await ctx.storage.generateUploadUrl();
   },
 });
@@ -20,6 +22,7 @@ export const upsert = mutation({
     size: v.number(),
   },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.userId);
     if (args.size <= 0) {
       throw new Error("Refusing to save an empty PDF file.");
     }
@@ -70,6 +73,7 @@ export const getFileUrl = query({
     tabId: v.string(),
   },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.userId);
     const doc = await ctx.db
       .query("pdfFiles")
       .withIndex("by_user_tab", (q) => q.eq("userId", args.userId).eq("tabId", args.tabId))

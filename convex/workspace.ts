@@ -1,4 +1,5 @@
 import { query, mutation } from "./_generated/server";
+import { requireUser } from "./auth";
 import { v } from "convex/values";
 import {
   mergeProjectData,
@@ -95,6 +96,7 @@ const profileValidator = v.object({
 export const get = query({
   args: { userId: v.string() },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.userId);
     return await ctx.db
       .query("workspaces")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
@@ -122,6 +124,7 @@ export const save = mutation({
     projectData: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.userId);
     const { userId, ...data } = args;
 
     const existing = await ctx.db
@@ -166,6 +169,7 @@ export const save = mutation({
 export const remove = mutation({
   args: { userId: v.string() },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.userId);
     const existing = await ctx.db
       .query("workspaces")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))

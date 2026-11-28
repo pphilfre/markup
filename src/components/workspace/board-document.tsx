@@ -1,39 +1,19 @@
 "use client";
-import { useState } from "react";
-import { Columns3, List } from "lucide-react";
-import { KanbanView } from "@/components/shell/kanban";
+
 import { useEditorStore } from "@/lib/store";
+import { useLayoutSize } from "@/lib/use-layout-size";
 import { TaskView } from "./task-view";
+
 export function BoardDocument() {
-  const [view, setView] = useState<"board" | "list">("board");
-  const id = useEditorStore((s) => s.activeTabId);
+  const id = useEditorStore((state) => state.activeTabId);
+  const { ref, width } = useLayoutSize<HTMLDivElement>();
   return (
-    <div className="flex flex-1 min-w-0 min-h-0 flex-col overflow-hidden">
-      <div className="px-5 py-2 border-b border-border">
-        <div className="view-switch w-fit">
-          <button
-            aria-pressed={view === "board"}
-            onClick={() => setView("board")}
-          >
-            <Columns3 size={14} />
-            Board
-          </button>
-          <button
-            aria-pressed={view === "list"}
-            onClick={() => setView("list")}
-          >
-            <List size={14} />
-            List
-          </button>
+    <div ref={ref} className="workbench-page-scroll">
+      {id && width > 0 && (
+        <div className="workspace-page">
+          <TaskView key={id} boardId={id} initialView={width < 520 ? "list" : "board"} />
         </div>
-      </div>
-      {view === "board" ? (
-        <KanbanView />
-      ) : id ? (
-        <div className="p-5 overflow-y-auto">
-          <TaskView boardId={id} listOnly />
-        </div>
-      ) : null}
+      )}
     </div>
   );
 }

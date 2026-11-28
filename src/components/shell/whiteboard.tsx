@@ -1,5 +1,7 @@
 "use client";
 import { useFramePointer } from "@/lib/use-frame-pointer";
+import { boundsOverlap, canvasPointer } from "@/lib/canvas-selection";
+import { useCanvasSelection } from "@/lib/use-canvas-selection";
 
 import {
   useRef,
@@ -191,18 +193,6 @@ function isSizedShape(type: string): type is SizedShape {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-
-function screenToCanvas(
-  sx: number,
-  sy: number,
-  pan: Point,
-  zoom: number,
-): Point {
-  return {
-    x: (sx - pan.x) / zoom,
-    y: (sy - pan.y) / zoom,
-  };
-}
 
 function pointInPolygon(px: number, py: number, polygon: Point[]): boolean {
   let inside = false;
@@ -960,6 +950,8 @@ export function WhiteboardView() {
   // Canvas transform state
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
+  const { start: startSelection, move: moveSelection, finish: finishSelection, rectangle } = useCanvasSelection(pan, zoom);
+  const groupMoved = useRef(false);
 
   // Tool state
   const [activeTool, setActiveTool] = useState<Tool>("select");
@@ -1042,6 +1034,7 @@ export function WhiteboardView() {
   const startRef = useRef<Point>({ x: 0, y: 0 });
   const panStartRef = useRef<Point>({ x: 0, y: 0 });
   const currentElementRef = useRef<WhiteboardElement | null>(null);
+  const gestureTool = useRef<Tool | null>(null);
   const dragOffsetRef = useRef<Point>({ x: 0, y: 0 });
   const isPanningRef = useRef(false);
 
@@ -1276,6 +1269,7 @@ export function WhiteboardView() {
         }
       }
       // Tool shortcuts
+      if (drawingRef.current || isPanningRef.current) return;
       if (e.key === "v" || e.key === "1") setActiveTool("select");
       if (e.key === "h" || e.key === "2") setActiveTool("pan");
       if (e.key === "r") setActiveTool("rectangle");
@@ -1361,16 +1355,14 @@ export function WhiteboardView() {
 
   const handlePointerDown = useCallback(
     (e: ReactPointerEvent<HTMLCanvasElement>) => {
+      if (!e.isPrimary || (e.button !== 0 && e.button !== 1)) return;
       // Close context menu on any click
       setContextMenu(null);
 
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      const rect = canvas.getBoundingClientRect();
-      const sx = e.clientX - rect.left;
-      const sy = e.clientY - rect.top;
-      const cp = screenToCanvas(sx, sy, pan, zoom);
+      const cp = canvasPointer(e, canvas, pan, zoom);
 
       if (activeTool === "pan" || e.button === 1) {
         // Middle click or pan tool
@@ -1382,10 +1374,12 @@ export function WhiteboardView() {
 
       // Space+drag for pan (handled by panning ref when space is held)
       drawingRef.current = true;
+      gestureTool.current = activeTool;
       startRef.current = { x: snap(cp.x), y: snap(cp.y) };
       canvas.setPointerCapture(e.pointerId);
 
       if (activeTool === "select") {
+        groupMoved.current = false;
         // Hit test
         let hit: WhiteboardElement | null = null;
         for (let i = elements.length - 1; i >= 0; i--) {
@@ -1395,9 +1389,14 @@ export function WhiteboardView() {
           }
         }
         if (hit) {
+          if (e.shiftKey) {
+            const hitId = hit.id;
+            setElements((prev) => prev.map((item) => item.id === hitId ? { ...item, selected: !item.selected } : item));
+            drawingRef.current = false;
+            return;
+          }
           if (!hit.selected) {
             const hitId = hit.id;
-            pushUndo();
             setElements((prev) =>
               prev.map((el) => ({ ...el, selected: el.id === hitId })),
             );
@@ -1405,7 +1404,7 @@ export function WhiteboardView() {
           dragOffsetRef.current = { x: cp.x - hit.x, y: cp.y - hit.y };
           currentElementRef.current = hit;
         } else {
-          setElements((prev) => prev.map((el) => ({ ...el, selected: false })));
+          startSelection(cp, e.shiftKey);
           currentElementRef.current = null;
         }
         return;
@@ -1491,6 +1490,7 @@ export function WhiteboardView() {
       pan,
       zoom,
       elements,
+      startSelection,
       strokeColor,
       fillColor,
       strokeWidth,
@@ -1509,41 +1509,48 @@ export function WhiteboardView() {
         return;
       }
 
-      if (!drawingRef.current || !currentElementRef.current) return;
+      if (!drawingRef.current) return;
 
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      const rect = canvas.getBoundingClientRect();
-      const sx = e.clientX - rect.left;
-      const sy = e.clientY - rect.top;
-      const cp = screenToCanvas(sx, sy, pan, zoom);
+      const cp = canvasPointer(e, canvas, pan, zoom);
+      if (moveSelection(cp)) return;
       const cur = currentElementRef.current;
+      if (!cur) return;
 
-      if (activeTool === "select" && cur) {
-        // Drag selected element
-        setElements((prev) =>
-          prev.map((el) => {
-            if (el.id !== cur.id) return el;
-            const nx = snap(cp.x - dragOffsetRef.current.x);
-            const ny = snap(cp.y - dragOffsetRef.current.y);
-            const dx = nx - el.x;
-            const dy = ny - el.y;
+      if (gestureTool.current === "select") {
+        if (!groupMoved.current) {
+          if (Math.hypot(cp.x - dragOffsetRef.current.x - cur.x, cp.y - dragOffsetRef.current.y - cur.y) * zoom <= 3) return;
+          groupMoved.current = true;
+          pushUndo();
+        }
+        setElements((prev) => {
+          const anchor = prev.find((el) => el.id === cur.id);
+          if (!anchor) return prev;
+          const nx = snap(cp.x - dragOffsetRef.current.x);
+          const ny = snap(cp.y - dragOffsetRef.current.y);
+          const dx = nx - anchor.x;
+          const dy = ny - anchor.y;
+          if (!dx && !dy) return prev;
+          return prev.map((el) => {
+            if (!el.selected) return el;
+            const x = el.x + dx;
+            const y = el.y + dy;
             if (el.type === "line" || el.type === "arrow") {
-              const el2 = el as LineElement | ArrowElement;
-              return { ...el2, x: nx, y: ny, x2: el2.x2 + dx, y2: el2.y2 + dy };
+              return { ...el, x, y, x2: el.x2 + dx, y2: el.y2 + dy };
             }
             if (el.type === "pen") {
               return {
                 ...el,
-                x: nx,
-                y: ny,
+                x,
+                y,
                 points: el.points.map((p) => ({ x: p.x + dx, y: p.y + dy })),
               };
             }
-            return { ...el, x: nx, y: ny };
-          }),
-        );
+            return { ...el, x, y };
+          });
+        });
         return;
       }
 
@@ -1574,19 +1581,28 @@ export function WhiteboardView() {
         }),
       );
     },
-    [activeTool, pan, zoom, snap],
+    [moveSelection, pan, pushUndo, zoom, snap],
   );
 
   const framePointer = useFramePointer(handlePointerMove, activeTool === "pen");
 
-  const handlePointerUp = useCallback(() => {
+  const handlePointerUp = useCallback((event: ReactPointerEvent<HTMLCanvasElement>, cancelled = false) => {
     if (isPanningRef.current) {
       isPanningRef.current = false;
       return;
     }
 
+    const selection = finishSelection(cancelled ? null : canvasPointer(event, event.currentTarget, pan, zoom));
+    if (selection) {
+      const { bounds, additive } = selection;
+      setElements((previous) => previous.map((element) => {
+        const selected = Boolean((additive && element.selected) || (bounds && boundsOverlap(bounds, getElementBounds(element))));
+        return selected === Boolean(element.selected) ? element : { ...element, selected };
+      }));
+    }
+
     // Normalize negative-sized shapes
-    if (currentElementRef.current) {
+    if (gestureTool.current !== "select" && currentElementRef.current) {
       const cur = currentElementRef.current;
       if (isSizedShape(cur.type)) {
         setElements((prev) =>
@@ -1610,7 +1626,8 @@ export function WhiteboardView() {
 
     drawingRef.current = false;
     currentElementRef.current = null;
-  }, []);
+    gestureTool.current = null;
+  }, [finishSelection, pan, zoom]);
 
   // ── Context menu handler ──────────────────────────────────────────────
 
@@ -1821,18 +1838,21 @@ export function WhiteboardView() {
         aria-label="Whiteboard canvas"
         className={cn("absolute inset-0", cursorClass)}
         onPointerDown={handlePointerDown}
-        onPointerMove={framePointer.push}
-        onPointerUp={() => {
+        onPointerMove={(event) => { if (event.isPrimary) framePointer.push(event); }}
+        onPointerUp={(event) => {
+          if (!event.isPrimary) return;
           framePointer.flush();
-          handlePointerUp();
+          handlePointerUp(event);
         }}
-        onPointerCancel={() => {
+        onPointerCancel={(event) => {
+          if (!event.isPrimary) return;
           framePointer.flush();
-          handlePointerUp();
+          handlePointerUp(event, true);
         }}
         onContextMenu={handleContextMenu}
         style={{ touchAction: "none" }}
       />
+      {rectangle && <div className="canvas-selection-rectangle" style={rectangle} aria-hidden />}
 
       {/* Text input overlay */}
       {textInput?.visible && (

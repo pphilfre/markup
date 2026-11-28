@@ -10,6 +10,8 @@ import { remarkDefinitionList, defListHastHandlers } from "remark-definition-lis
 import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
+import { markdownSanitizeSchema } from "@/lib/markdown-sanitize";
 import "katex/dist/katex.min.css";
 import { emojify } from "node-emoji";
 import { useEditorStore } from "@/lib/store";
@@ -100,7 +102,7 @@ export function MermaidBlock({ chart }: { chart: string }) {
             lineColor: color("--muted-foreground", isDark ? "#aba8b5" : "#625c6c"),
             fontFamily: styles.getPropertyValue("--font-geist-sans").trim(),
           },
-          securityLevel: "loose",
+          securityLevel: "strict",
           suppressErrorRendering: true,
         });
         const { svg: rendered } = await mermaid.render(renderId, chart);
@@ -158,11 +160,13 @@ export function MarkdownPreview({
   onScroll,
   content: contentProp,
   standalone,
+  split = false,
 }: {
   id?: string;
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
   content?: string;
   standalone?: boolean;
+  split?: boolean;
 } = {}) {
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const tabs = useEditorStore((s) => s.tabs);
@@ -315,7 +319,8 @@ export function MarkdownPreview({
                 {...props}
                 onClick={(e) => {
                   e.preventDefault();
-                  const target = document.getElementById(href.slice(1));
+                  const id = href.slice(1);
+                  const target = document.getElementById(id) ?? document.getElementById(`user-content-${id}`);
                   target?.scrollIntoView({ behavior: "smooth", block: "start" });
                 }}
               >
@@ -406,15 +411,15 @@ export function MarkdownPreview({
 
   if (!rawContent.trim()) {
     return (
-      <div className="flex flex-1 items-center justify-center text-muted-foreground">
-        <p className="text-sm">Nothing to preview</p>
+      <div id={id} className={split ? "markdown-split-empty" : "flex flex-1 items-center justify-center text-muted-foreground"}>
+        <p className="text-sm">{split ? "Start writing in Source to see the preview." : "Nothing to preview"}</p>
       </div>
     );
   }
 
   return (
-    <div id={id} onScroll={onScroll} className="flex-1 overflow-auto">
-      <article className="markdown-body mx-auto max-w-3xl px-8 py-6">
+    <div id={id} onScroll={onScroll} className="min-w-0 flex-1 overflow-auto">
+      <article className={split ? "markdown-body markdown-split-sheet" : "markdown-body mx-auto max-w-3xl px-8 py-6"}>
         <ReactMarkdown
           remarkPlugins={[
             [remarkGfm, { singleTilde: false, breaks: true }],
@@ -424,6 +429,7 @@ export function MarkdownPreview({
           ]}
           rehypePlugins={[
             rehypeRaw,
+            [rehypeSanitize, markdownSanitizeSchema],
             rehypeHighlight,
             rehypeKatex,
           ]}
@@ -434,7 +440,7 @@ export function MarkdownPreview({
         </ReactMarkdown>
 
         {/* Backlinks section */}
-        {backlinks.length > 0 && (
+        {!split && backlinks.length > 0 && (
           <div className="mt-8 border-t border-border pt-4">
             <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Backlinks

@@ -24,6 +24,43 @@ const {
 } = require("../src/lib/projects.ts");
 const { projectSlice } = require("../src/lib/project-actions.ts");
 const { applyLinePrefix } = require("../src/lib/markdown-format.ts");
+const { getWorkbenchLayout, getSplitLayout } = require("../src/lib/workbench-layout.ts");
+
+test("navigation becomes a drawer before a narrow window loses writing space", () => {
+  for (const width of [320, 390, 768, 879]) {
+    const layout = getWorkbenchLayout(width, 440, true);
+    assert.equal(layout.navigationIsDrawer, true);
+    assert.equal(layout.inspectorCanDock, false);
+    assert.equal(layout.aiCanDock, false);
+  }
+
+  for (const width of [880, 900, 1024, 1280, 1920]) {
+    const layout = getWorkbenchLayout(width, 440, true);
+    assert.equal(layout.navigationIsDrawer, false);
+    assert.ok(width - layout.navigationWidth >= 620);
+    assert.ok(layout.navigationWidth <= 440);
+  }
+});
+
+test("inspector and AI docking use the space remaining after navigation", () => {
+  assert.equal(getWorkbenchLayout(1120, 300, true).inspectorCanDock, false);
+  assert.equal(getWorkbenchLayout(1120, 300, false).inspectorCanDock, true);
+  assert.equal(getWorkbenchLayout(1200, 300, true).aiCanDock, false);
+  assert.equal(getWorkbenchLayout(1220, 300, true).aiCanDock, true);
+
+  const layout = getWorkbenchLayout(1440, 320, true);
+  assert.ok(1440 - layout.navigationWidth - layout.inspectorWidth >= 620);
+  assert.ok(1440 - layout.navigationWidth - layout.maxAiWidth >= 620);
+});
+
+test("split editing keeps portrait and short landscape panes usable", () => {
+  assert.equal(getSplitLayout(390, 540).stacked, true);
+  assert.equal(getSplitLayout(620, 520).stacked, true);
+  assert.equal(getSplitLayout(620, 260).stacked, false);
+  assert.equal(getSplitLayout(780, 520).stacked, false);
+  assert.deepEqual(getSplitLayout(320, 170), { stacked: true, minimum: 50, maximum: 50 });
+  assert.ok(getSplitLayout(620, 260).minimum * 620 / 100 >= 240);
+});
 test("heading choices change the current level and can return to a paragraph", () => {
   assert.equal(applyLinePrefix("# Project brief", "### "), "### Project brief");
   assert.equal(
@@ -126,10 +163,19 @@ test("copied board card IDs do not collide", () => {
   assert.equal(Object.keys(data.tasks).length, 2);
 });
 test("invalid board content is preserved without inventing tasks", () => {
-  const tab = { ...board(), content: "not valid JSON" };
+  for (const content of ["not valid JSON", "{}", ""]) {
+    const tab = { ...board(), content };
+    const data = migrateProjectData(emptyProjectData(), [tab]);
+    assert.equal(Object.keys(data.tasks).length, 0);
+    assert.ok(data.boards[tab.id].columns.length);
+    assert.equal(tab.content, content);
+  }
+});
+test("blank board replacements do not delete existing cards", () => {
+  const tab = board();
   const data = migrateProjectData(emptyProjectData(), [tab]);
-  assert.equal(Object.keys(data.tasks).length, 0);
-  assert.equal(tab.content, "not valid JSON");
+  assert.throws(() => applyBoardContent(data, { ...tab, content: "   " }), /previous data has been kept/);
+  assert.equal(data.tasks["board-a:card-1"].deletedAt, null);
 });
 test("board projection round-trips titles, custom columns, labels, and dates", () => {
   const data = migrateProjectData(emptyProjectData(), [board()]);
@@ -375,14 +421,51 @@ function resetEditor() {
   useEditorStore.setState(useEditorStore.getInitialState(), true);
 }
 
-test("create task from a note without a selection opens a linked editable task", () => {
+test("completing a card creates a unique column after a status change", () => {
+  resetEditor();
+  const state = useEditorStore.getState();
+  state.createKanban();
+  const id = useEditorStore.getState().activeTabId;
+  const columns = useEditorStore.getState().projectData.boards[id].columns
+    .filter((column) => column.status !== "done");
+  state.updateBoard(id, { columns });
+  const first = state.addTask("First", { boardId: id });
+  state.updateTask(first, { status: "done" });
+  const afterFirst = useEditorStore.getState().projectData.boards[id];
+  state.updateBoard(id, { columns: afterFirst.columns.map((column) => (
+    column.status === "done" ? { ...column, status: "in-progress" } : column
+  )) });
+  const second = state.addTask("Second", { boardId: id });
+  state.updateTask(second, { status: "done" });
+  const board = useEditorStore.getState().projectData.boards[id];
+  assert.equal(new Set(board.columns.map((column) => column.id)).size, board.columns.length);
+});
+
+test("manual drops insert cards between neighbours with tied order values", () => {
+  resetEditor();
+  const state = useEditorStore.getState();
+  const first = state.addTask("First");
+  const target = state.addTask("Target");
+  const dragged = state.addTask("Dragged");
+  state.updateTask(first, { order: 0 });
+  state.updateTask(target, { order: 0 });
+  state.moveTask(dragged, [first, target], { status: "todo", columnId: null }, target);
+  const tasks = useEditorStore.getState().projectData.tasks;
+  assert.deepEqual([tasks[first].order, tasks[dragged].order, tasks[target].order], [0, 1, 2]);
+});
+
+test("creating a task from a note requires confirmation and preserves the source link", () => {
   resetEditor();
   useEditorStore.getState().createTab();
   const noteId = useEditorStore.getState().activeTabId;
   useEditorStore.getState().createTaskFromSelection();
   const state = useEditorStore.getState();
-  const task = state.projectData.tasks[state.selectedTaskId];
-  assert.equal(task.title, "Untitled task");
+  assert.equal(Object.keys(state.projectData.tasks).length, 0);
+  assert.equal(state.taskDraft.title, "");
+  assert.equal(state.submitTaskDraft("   ", {}), null);
+  const id = state.submitTaskDraft("Check the release", {});
+  const task = useEditorStore.getState().projectData.tasks[id];
+  assert.equal(task.title, "Check the release");
   assert.deepEqual(task.relatedDocumentIds, [noteId]);
 });
 
@@ -400,10 +483,50 @@ test("selection task preserves the selected text and source note", () => {
   });
   useEditorStore.getState().createTaskFromSelection();
   const state = useEditorStore.getState();
-  const task = state.projectData.tasks[state.selectedTaskId];
+  const task = state.taskDraft;
   assert.equal(task.title, "Ship the mobile fix");
   assert.ok(task.description.includes("Keep keyboard access"));
   assert.deepEqual(task.relatedDocumentIds, [noteId]);
+  state.cancelTaskDraft();
+  assert.equal(Object.keys(useEditorStore.getState().projectData.tasks).length, 0);
+});
+
+test("adding a card to a new board preserves its column and chosen priority", () => {
+  resetEditor();
+  const state = useEditorStore.getState();
+  state.createKanban();
+  const boardId = useEditorStore.getState().activeTabId;
+  state.beginTask({ boardId, columnId: "in-progress" });
+  const id = state.submitTaskDraft("Review", { priority: "high" });
+  const latest = useEditorStore.getState();
+  assert.equal(latest.taskDraft, null);
+  assert.equal(latest.projectData.tasks[id].columnId, "in-progress");
+  assert.equal(latest.projectData.tasks[id].priority, "high");
+  assert.equal(JSON.parse(latest.tabs.find((tab) => tab.id === boardId).content).columns[1].cards[0].priority, "high");
+});
+
+test("removing a board column moves its cards without changing task identity", () => {
+  resetEditor();
+  const state = useEditorStore.getState();
+  state.createKanban();
+  const boardId = useEditorStore.getState().activeTabId;
+  const id = state.addTask("Review", { boardId, columnId: "in-progress" });
+  const board = useEditorStore.getState().projectData.boards[boardId];
+  state.updateBoard(boardId, { columns: board.columns.filter((column) => column.id !== "in-progress") });
+  const latest = useEditorStore.getState();
+  assert.equal(latest.projectData.tasks[id].title, "Review");
+  assert.equal(latest.projectData.tasks[id].columnId, "todo");
+  assert.equal(latest.projectData.tasks[id].status, "todo");
+});
+
+test("selection rectangles support reverse drags and scaled canvases", () => {
+  const { selectionBounds, boundsOverlap, canvasPointer } = require("../src/lib/canvas-selection.ts");
+  const bounds = selectionBounds({ x: 90, y: 70 }, { x: 10, y: 20 });
+  assert.deepEqual(bounds, { x: 10, y: 20, w: 80, h: 50 });
+  assert.equal(boundsOverlap(bounds, { x: 85, y: 65, w: 20, h: 20 }), true);
+  assert.equal(boundsOverlap(bounds, { x: 95, y: 65, w: 20, h: 20 }), false);
+  const canvas = { clientWidth: 400, clientHeight: 200, getBoundingClientRect: () => ({ left: 100, top: 100, width: 200, height: 100 }) };
+  assert.deepEqual(canvasPointer({ clientX: 150, clientY: 125 }, canvas, { x: 20, y: 10 }, 2), { x: 40, y: 20 });
 });
 
 test("capture inherits a project's folder, then the current note folder", () => {
@@ -454,6 +577,91 @@ test("loose captures share one Inbox folder", () => {
   } finally {
     global.requestAnimationFrame = previous;
   }
+});
+
+test("new notes and boards use the selected folder and its project", () => {
+  resetEditor();
+  const state = useEditorStore.getState();
+  const projectId = state.createProject("Release");
+  const root = useEditorStore.getState().projectData.projects[projectId].folderId;
+  const folderId = state.createFolder("Research", root);
+  state.navigate("files", null, folderId);
+  state.requestCreateTab();
+  state.createProjectDocument("kanban");
+
+  const current = useEditorStore.getState();
+  assert.equal(current.tabs.length, 2);
+  for (const tab of current.tabs) {
+    assert.equal(tab.folderId, folderId);
+    assert.equal(current.projectData.documents[tab.id].projectId, projectId);
+  }
+});
+
+test("the template picker retains the requested folder until the note is created", () => {
+  resetEditor();
+  const state = useEditorStore.getState();
+  const projectId = state.createProject("Release");
+  const folderId = useEditorStore.getState().projectData.projects[projectId].folderId;
+  state.updateSettings({ promptForTemplateOnNewFile: true });
+  state.createProjectDocument();
+  assert.equal(useEditorStore.getState().tabs.length, 0);
+  assert.equal(useEditorStore.getState().newTabTemplateDialogOpen, true);
+  state.navigate("home");
+  state.createTabFromTemplate("todo");
+
+  const current = useEditorStore.getState();
+  const [note] = current.tabs;
+  assert.match(note.content, /Todo List/);
+  assert.equal(note.folderId, folderId);
+  assert.equal(current.projectData.documents[note.id].projectId, projectId);
+  assert.equal(current.newTabTemplateDialogOpen, false);
+});
+
+test("a workspace switch clears the previous project's destination and pending template", () => {
+  resetEditor();
+  const state = useEditorStore.getState();
+  state.createProject("Release");
+  state.updateSettings({ promptForTemplateOnNewFile: true });
+  state.requestCreateTab();
+  const workspaceId = state.createProfile("Other");
+  state.switchProfile(workspaceId);
+
+  const current = useEditorStore.getState();
+  assert.equal(current.activeProfileId, workspaceId);
+  assert.deepEqual(current.navigation, { page: "home", projectId: null });
+  assert.equal(current.newTabTemplateDialogOpen, false);
+  assert.equal(current.newTabTemplateContext, null);
+});
+
+test("closing or deleting a board returns to the next note in source mode", () => {
+  resetEditor();
+  const state = useEditorStore.getState();
+  state.createTab();
+  const noteId = useEditorStore.getState().activeTabId;
+  state.createProjectDocument("kanban");
+  const boardId = useEditorStore.getState().activeTabId;
+  state.closeTab(boardId);
+  assert.equal(useEditorStore.getState().activeTabId, noteId);
+  assert.equal(useEditorStore.getState().viewMode, "editor");
+  state.openTab(boardId);
+  state.deleteTab(boardId);
+  assert.equal(useEditorStore.getState().activeTabId, noteId);
+  assert.equal(useEditorStore.getState().viewMode, "editor");
+});
+
+test("opening and closing a file keeps the library folder selected", () => {
+  resetEditor();
+  const state = useEditorStore.getState();
+  const folderId = state.createFolder("Reference");
+  state.createTab(folderId);
+  const noteId = useEditorStore.getState().activeTabId;
+  state.closeTab(noteId);
+  state.navigate("files", null, folderId);
+  state.openTab(noteId);
+  state.closeTab(noteId);
+
+  assert.equal(useEditorStore.getState().activeTabId, null);
+  assert.deepEqual(useEditorStore.getState().navigation, { page: "files", projectId: null, folderId });
 });
 
 test("pointer frames coalesce drags, preserve freehand samples, and flush the last move", () => {

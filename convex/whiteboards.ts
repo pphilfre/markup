@@ -1,9 +1,11 @@
 import { query, mutation } from "./_generated/server";
+import { requireUser } from "./auth";
 import { v } from "convex/values";
 
 export const get = query({
   args: { userId: v.string() },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.userId);
     return await ctx.db
       .query("whiteboards")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
@@ -18,6 +20,7 @@ export const save = mutation({
     canvasSettings: v.string(),
   },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.userId);
     const { userId, ...data } = args;
 
     const existing = await ctx.db

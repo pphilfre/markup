@@ -126,8 +126,10 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   userScalable: true,
+  interactiveWidget: "resizes-content",
 };
 
+/** Render the shared document shell and app-wide providers for all routes. */
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -175,7 +177,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className="antialiased h-screen overflow-hidden"
+        className="antialiased h-dvh overflow-hidden"
       >
         <DatabaseClientProvider>
           <TooltipProvider delayDuration={300}>

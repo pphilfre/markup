@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.1
+
+- Improve workspace navigation and panel resizing across window sizes, including Markdown split view and the AI panel.
+- Make task creation explicit and keep priorities, filters, and sorting consistent across board and list views.
+- Support drag selection on whiteboards and mind maps.
+- Harden authentication, sharing, and Markdown rendering, and update dependencies.
+
 ## v1.2.0
 
 ### Workspace redesign

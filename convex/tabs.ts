@@ -1,4 +1,5 @@
 import { query, mutation } from "./_generated/server";
+import { requireUser } from "./auth";
 import { v } from "convex/values";
 
 // ---------------------------------------------------------------------------
@@ -9,6 +10,7 @@ import { v } from "convex/values";
 export const list = query({
   args: { userId: v.string() },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.userId);
     return await ctx.db
       .query("tabs")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
@@ -36,6 +38,7 @@ export const upsert = mutation({
     iconColor: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.userId);
     const { userId, tabId, ...data } = args;
 
     const existing = await ctx.db
@@ -73,6 +76,7 @@ export const syncAll = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.userId);
     const { userId, tabs } = args;
 
     // Get existing tabs
@@ -117,6 +121,7 @@ export const syncAll = mutation({
 export const remove = mutation({
   args: { userId: v.string(), tabId: v.string() },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.userId);
     const doc = await ctx.db
       .query("tabs")
       .withIndex("by_user_tab", (q) =>
@@ -134,6 +139,7 @@ export const remove = mutation({
 export const removeAll = mutation({
   args: { userId: v.string() },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.userId);
     const docs = await ctx.db
       .query("tabs")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
