@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
+import DOMPurify from "dompurify";
 import { getTabWorkspaceId, useEditorStore } from "@/lib/store";
 import { isTauri } from "@/lib/tauri";
 import {
@@ -73,7 +74,14 @@ function generateHtml(
   fontSize: number,
   pdfOrientation: PdfOrientation = "portrait"
 ): string {
-  const escapedTitle = title.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const escapedTitle = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // The same fragment feeds downloaded HTML and the in-app print frame.
+  const article = DOMPurify.sanitize(markdownToRichHtml(content), {
+    USE_PROFILES: { html: true },
+    FORBID_TAGS: ["style", "form"],
+    FORBID_ATTR: ["style"],
+    ALLOW_DATA_ATTR: false,
+  });
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -162,7 +170,7 @@ function generateHtml(
   </style>
 </head>
 <body>
-  <article>${markdownToRichHtml(content)}</article>
+  <article>${article}</article>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       document.querySelectorAll('pre code').forEach(function(el) {
@@ -185,12 +193,12 @@ const ADMONITION_META: Record<string, { icon: string; label: string }> = {
 /** Convert markdown to rich HTML supporting admonitions, footnotes, tables, task lists */
 function markdownToRichHtml(md: string): string {
   // Collect footnote definitions
-  const footnotes: Record<string, string> = {};
+  const footnotes = new Map<string, string>();
   const fnOrder: string[] = [];
 
   // Extract footnote definitions [^id]: text
   const processed = md.replace(/^\[\^([^\]]+)\]:\s*(.+)$/gm, (_m, id, text) => {
-    footnotes[id] = text;
+    footnotes.set(id, text);
     return "";
   });
 
@@ -288,7 +296,7 @@ function markdownToRichHtml(md: string): string {
   // Append footnotes section
   if (fnOrder.length > 0) {
     const fnItems = fnOrder.map((id) => {
-      const text = footnotes[id] ?? "";
+      const text = footnotes.get(id) ?? "";
       return `<li id="fn-${id}">${text} <a href="#fnref-${id}">↩</a></li>`;
     }).join("\n");
     html += `\n<div class="footnotes"><h4>Footnotes</h4><ol>${fnItems}</ol></div>`;

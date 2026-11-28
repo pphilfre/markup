@@ -11,7 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { getClientAuthToken } from "@/lib/tauri";
+import { getClientAuthToken, signIn } from "@/lib/tauri";
 import { getDbProvider } from "@/lib/db-provider";
 import { useEditorStore } from "@/lib/store";
 
@@ -33,6 +33,7 @@ interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
   user: WorkOSUser | null;
+  desktopSessionEnded?: boolean;
 }
 
 let _authState: AuthState = {
@@ -43,6 +44,7 @@ let _authState: AuthState = {
 const _listeners = new Set<() => void>();
 const ConvexAuthStatus = createContext<ReturnType<typeof useConvexAuth> | null>(null);
 
+/** Publish the verified WorkOS session to active consumers. */
 function setAuthState(next: AuthState) {
   _authState = next;
   _listeners.forEach((fn) => fn());
@@ -52,6 +54,7 @@ function setAuthState(next: AuthState) {
 function useWorkOSAuthState(): AuthState {
   const [, rerender] = useState(0);
   useEffect(() => {
+    /** Refresh this subscriber when the shared session changes. */
     const cb = () => rerender((n) => n + 1);
     _listeners.add(cb);
     return () => {
@@ -61,6 +64,7 @@ function useWorkOSAuthState(): AuthState {
   return _authState;
 }
 
+/** Expose an authenticated user only after the active backend accepts the session. */
 export function useAuthState(): AuthState {
   const auth = useWorkOSAuthState();
   const convex = useContext(ConvexAuthStatus);
@@ -68,14 +72,41 @@ export function useAuthState(): AuthState {
   return { isLoading: convex.isLoading, isAuthenticated: false, user: null };
 }
 
+/** Supply WorkOS credentials to the configured Markup cloud client. */
 function useWorkOSForConvex() {
   const { isLoading, isAuthenticated } = useWorkOSAuthState();
   const fetchAccessToken = useCallback(async () => {
-    return (await getClientAuthToken()).accessToken;
+    const auth = await getClientAuthToken();
+    if (auth.desktopSessionEnded) {
+      setAuthState({ isLoading: false, isAuthenticated: false, user: null, desktopSessionEnded: true });
+    }
+    return auth.accessToken;
   }, []);
   return { isLoading, isAuthenticated, fetchAccessToken };
 }
 
+/** A self-hosted deployment cannot use the hosted Markup session. */
+const noAccessToken = async () => null;
+function useUnauthenticatedConvex() {
+  return { isLoading: false, isAuthenticated: false, fetchAccessToken: noAccessToken };
+}
+
+function DesktopSessionNotice() {
+  const { desktopSessionEnded } = useWorkOSAuthState();
+  const [error, setError] = useState(false);
+  if (!desktopSessionEnded) return null;
+  return (
+    <div role="status" className="fixed bottom-4 left-1/2 z-40 flex max-w-[90vw] -translate-x-1/2 flex-wrap items-center gap-2 rounded-lg border bg-card px-4 py-2 text-xs shadow-lg">
+      <span>{error ? "Could not start sign-in. Please try again." : "Your desktop session ended. Sign in again to resume sync."}</span>
+      <button type="button" className="font-medium underline" onClick={() => {
+        setError(false);
+        void signIn(() => window.location.reload()).catch(() => setError(true));
+      }}>Sign in again</button>
+    </div>
+  );
+}
+
+/** Expose Convex's authentication state without requiring Convex on PostgreSQL. */
 function ConvexAuthBoundary({ children }: { children: ReactNode }) {
   const auth = useConvexAuth();
   return <ConvexAuthStatus.Provider value={auth}>{children}</ConvexAuthStatus.Provider>;
@@ -99,6 +130,7 @@ export function AuthLoader() {
           isLoading: false,
           isAuthenticated: Boolean(data.accessToken && data.user),
           user: data.user ?? null,
+          desktopSessionEnded: data.desktopSessionEnded,
         });
       } catch {
         setAuthState({ isLoading: false, isAuthenticated: false, user: null });
@@ -148,6 +180,7 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
     return (
       <>
         <AuthLoader />
+        <DesktopSessionNotice />
         {children}
       </>
     );
@@ -157,6 +190,7 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
     return (
       <>
         <AuthLoader />
+        <DesktopSessionNotice />
         {/* Non-blocking banner so users understand why sync is unavailable */}
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs text-red-400 shadow-lg backdrop-blur-sm">
           <span className="mr-2 inline-block h-2 w-2 rounded-full bg-red-400 animate-pulse" />
@@ -168,8 +202,13 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <ConvexProviderWithAuth client={convex} useAuth={useWorkOSForConvex}>
+    <ConvexProviderWithAuth
+      key={convexUrl}
+      client={convex}
+      useAuth={convexUrl === defaultConvexUrl ? useWorkOSForConvex : useUnauthenticatedConvex}
+    >
       <AuthLoader />
+      <DesktopSessionNotice />
       <ConvexAuthBoundary>{children}</ConvexAuthBoundary>
     </ConvexProviderWithAuth>
   );

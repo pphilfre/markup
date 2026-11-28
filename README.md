@@ -149,6 +149,8 @@ If unsure, follow the WorkOS AuthKit for Next.js setup documentation and mirror 
 
 For Convex, set `WORKOS_CLIENT_ID` on the Convex deployment to the same client ID as the Next.js server. Use the matching WorkOS environment for development, preview and production. Deploy the Convex functions with the matching frontend so signed-in users can sync.
 
+Use the client-specific issuer (`https://api.workos.com/user_management/<client-id>`) for new deployments. If your WorkOS environment uses the legacy issuer (`https://api.workos.com/`), configure its JWT template to include an `aud` claim matching `WORKOS_CLIENT_ID`. Both Convex and the bearer-token API require it in legacy mode.
+
 To keep private note invitations working, add the following claims to the WorkOS environment's JWT template and preserve any existing claims. Invitees need a verified email address and a refreshed WorkOS session. [WorkOS JWT template documentation](https://workos.com/docs/authkit/jwt-templates)
 
 ```jsonc

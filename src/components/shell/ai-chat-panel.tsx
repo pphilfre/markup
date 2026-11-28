@@ -22,6 +22,7 @@ import {
 } from "@/lib/ai-chat-store";
 import { getTabWorkspaceId, useEditorStore, type Tab } from "@/lib/store";
 import { MIN_AI_WIDTH } from "@/lib/workbench-layout";
+import { getDesktopToken, isTauri } from "@/lib/tauri";
 import { PaneResizeHandle } from "@/components/workspace/pane-resize-handle";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -579,9 +580,13 @@ function AiChatPanelContent({
           .filter((m) => m.role === "user" || m.role === "assistant")
           .map((m) => ({ role: m.role, content: m.content }));
         const systemPrompt = buildSystemPrompt(attachedNotes, hideMd);
+        const desktopToken = isTauri() ? getDesktopToken() : null;
         const res = await fetch(CHAT_ENDPOINT, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(desktopToken ? { Authorization: `Bearer ${desktopToken}` } : {}),
+          },
           body: JSON.stringify({
             model: modelId,
             messages: [

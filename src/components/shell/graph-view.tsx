@@ -320,6 +320,7 @@ export function GraphView() {
 
     // Add manual links
     manualLinks.forEach((ml) => {
+      if (!nodeMap.has(ml.source) || !nodeMap.has(ml.target)) return;
       const exists = graphLinks.some(
         (l) =>
           (l.source === ml.source && l.target === ml.target) ||

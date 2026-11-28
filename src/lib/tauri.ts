@@ -20,6 +20,7 @@ export function isDocker(): boolean {
 const DEPLOYED_URL = "https://markup.freddiephilpot.dev";
 const DESKTOP_TOKEN_KEY = "desktop_token";
 const DESKTOP_USER_KEY = "desktop_user";
+let desktopSessionEnded = false;
 
 export interface DesktopUser {
   id: string;
@@ -33,6 +34,7 @@ interface AuthTokenResponse {
   accessToken: string | null;
   sessionId: string | null;
   user: DesktopUser | null;
+  desktopSessionEnded?: boolean;
 }
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -82,6 +84,7 @@ export function getDesktopUser(): DesktopUser | null {
 
 export function storeDesktopSession(token: string, user?: DesktopUser | null): void {
   if (typeof window === "undefined") return;
+  desktopSessionEnded = false;
   sessionStorage.setItem(DESKTOP_TOKEN_KEY, token);
   localStorage.setItem(DESKTOP_TOKEN_KEY, token);
   if (user) {
@@ -105,6 +108,18 @@ export function clearDesktopSession(): void {
  */
 export async function getClientAuthToken(): Promise<AuthTokenResponse> {
   const desktopToken = isTauri() ? getDesktopToken() : null;
+  const endDesktopSession = (): AuthTokenResponse => {
+    // A delayed response must not clear a newer sign-in.
+    if (getDesktopToken() === desktopToken) {
+      clearDesktopSession();
+      desktopSessionEnded = true;
+    }
+    return { accessToken: null, sessionId: null, user: null, desktopSessionEnded };
+  };
+  const expiresAt = desktopToken ? decodeJwtPayload(desktopToken)?.exp : undefined;
+  if (typeof expiresAt === "number" && expiresAt * 1000 <= Date.now()) {
+    return endDesktopSession();
+  }
   const headers: Record<string, string> = {};
   if (desktopToken) {
     headers.Authorization = `Bearer ${desktopToken}`;
@@ -124,8 +139,6 @@ export async function getClientAuthToken(): Promise<AuthTokenResponse> {
 
       if (isTauri() && token) {
         storeDesktopSession(token, user);
-      } else if (desktopToken) {
-        clearDesktopSession();
       }
 
       return {
@@ -134,6 +147,7 @@ export async function getClientAuthToken(): Promise<AuthTokenResponse> {
         user,
       };
     }
+    if (desktopToken && res.status === 401) return endDesktopSession();
   } catch {
     // Desktop fallback below.
   }
@@ -146,7 +160,7 @@ export async function getClientAuthToken(): Promise<AuthTokenResponse> {
     };
   }
 
-  return { accessToken: null, sessionId: null, user: null };
+  return { accessToken: null, sessionId: null, user: null, desktopSessionEnded };
 }
 
 /**

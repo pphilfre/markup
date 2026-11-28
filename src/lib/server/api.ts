@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
+import type { createRemoteJWKSet, JWTVerifyGetKey } from "jose";
 
 export type AuthUser = {
   id: string;
@@ -34,6 +34,7 @@ export function forbidden(message = "Forbidden"): ApiError {
 let workosKeys: ReturnType<typeof createRemoteJWKSet> | undefined;
 
 export async function verifyWorkOSSessionToken(token: string, clientId: string, keys: JWTVerifyGetKey) {
+  const { jwtVerify } = await import("jose");
   const legacyIssuer = "https://api.workos.com/";
   const { payload } = await jwtVerify(token, keys, {
     algorithms: ["RS256"],
@@ -45,7 +46,7 @@ export async function verifyWorkOSSessionToken(token: string, clientId: string, 
   return { userId: payload.sub, sessionId: payload.sid };
 }
 
-export async function getAuthSession(req: NextRequest): Promise<{
+export async function getAuthSession(req: NextRequest, reportUnavailable = false): Promise<{
   accessToken: string;
   sessionId: string;
   user: AuthUser;
@@ -73,6 +74,7 @@ export async function getAuthSession(req: NextRequest): Promise<{
 
   try {
     const { getWorkOS } = await import("@workos-inc/authkit-nextjs");
+    const { createRemoteJWKSet } = await import("jose");
     const workos = getWorkOS();
     workosKeys ??= createRemoteJWKSet(new URL(workos.userManagement.getJwksUrl(clientId)));
     const identity = await verifyWorkOSSessionToken(bearer, clientId, workosKeys);
@@ -80,7 +82,16 @@ export async function getAuthSession(req: NextRequest): Promise<{
 
     const user = await workos.userManagement.getUser(identity.userId);
     return { accessToken: bearer, sessionId: identity.sessionId, user };
-  } catch {
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? error.code : null;
+    const rejected = code === "ERR_JWT_EXPIRED" || code === "ERR_JWT_INVALID" ||
+      code === "ERR_JWT_CLAIM_VALIDATION_FAILED" || code === "ERR_JWS_INVALID" ||
+      code === "ERR_JWS_SIGNATURE_VERIFICATION_FAILED" || code === "ERR_JOSE_ALG_NOT_ALLOWED" ||
+      code === "ERR_JWKS_NO_MATCHING_KEY" ||
+      (error && typeof error === "object" && "status" in error && error.status === 404);
+    if (reportUnavailable && !rejected) {
+      throw new ApiError(503, "Session verification is temporarily unavailable.");
+    }
     return null;
   }
 }

@@ -79,6 +79,7 @@
     "codemirror": "^6.0.2",
     "convex": "^1.35.1",
     "d3-force": "^3.0.0",
+    "dompurify": "3.5.0",
     "file-saver": "^2.0.5",
     "idb-keyval": "^6.2.2",
     "jose": "^6.1.3",

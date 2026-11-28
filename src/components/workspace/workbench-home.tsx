@@ -396,9 +396,13 @@ export function WorkspaceLibrary({ inbox = false }: { inbox?: boolean }) {
   const requestedFolderId = useEditorStore((s) => s.navigation.folderId);
   const folderId = inbox ? undefined : folders.find((folder) => folder.id === requestedFolderId)?.id;
   const [query, setQuery] = useState(""),
-    [selected, setSelected] = useState<string[]>([]),
+    [selection, setSelection] = useState({ folderId, workspaceId, ids: [] as string[] }),
     [type, setType] = useState("all"),
     [newFolder, setNewFolder] = useState("");
+  const selectionMatches = selection.folderId === folderId && selection.workspaceId === workspaceId;
+  if (!selectionMatches) setSelection({ folderId, workspaceId, ids: [] });
+  const selected = selectionMatches ? selection.ids : [];
+  const setSelected = (ids: string[]) => setSelection({ folderId, workspaceId, ids });
   const search = query.trim().toLowerCase();
   const folderOptions = useMemo(() => folders.map((folder) => ({
     ...folder, path: folderPath(folder.id, folders),

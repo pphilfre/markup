@@ -13,6 +13,7 @@ type ToolbarPosition = {
   above: boolean;
 };
 
+/** Keep the toolbar within the viewport beside the active selection. */
 function getToolbarPosition(x: number, top: number, bottom: number): ToolbarPosition {
   const width = Math.min(200, window.innerWidth - 16);
   const above = top >= 44 || bottom + 44 > window.innerHeight;
@@ -23,6 +24,7 @@ function getToolbarPosition(x: number, top: number, bottom: number): ToolbarPosi
   };
 }
 
+/** Show document actions beside an active Markdown selection. */
 export function SelectionToolbar() {
   const editorView = useEditorStore((s) => s.editorView);
   const inlineSelection = useEditorStore((s) => s.inlineSelection);
@@ -31,8 +33,9 @@ export function SelectionToolbar() {
   const [position, setPosition] = useState<ToolbarPosition | null>(null);
   useEffect(() => {
     const element = editorView?.dom ?? inlineTextarea;
-    if (!element) return;
+    if (!element) return undefined;
     let frame = 0;
+    /** Measure the selection against the visible editor before placing the toolbar. */
     const measure = () => {
       if (editorView?.hasFocus) {
         const { from, to } = editorView.state.selection.main;
@@ -50,6 +53,7 @@ export function SelectionToolbar() {
         setPosition(null);
       }
     };
+    /** Coalesce viewport and editor events into one measurement per frame. */
     const schedule = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(measure);

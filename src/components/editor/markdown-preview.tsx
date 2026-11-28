@@ -11,6 +11,7 @@ import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
+import { markdownSanitizeSchema } from "@/lib/markdown-sanitize";
 import "katex/dist/katex.min.css";
 import { emojify } from "node-emoji";
 import { useEditorStore } from "@/lib/store";
@@ -428,7 +429,7 @@ export function MarkdownPreview({
           ]}
           rehypePlugins={[
             rehypeRaw,
-            rehypeSanitize,
+            [rehypeSanitize, markdownSanitizeSchema],
             rehypeHighlight,
             rehypeKatex,
           ]}

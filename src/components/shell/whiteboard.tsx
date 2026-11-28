@@ -1034,6 +1034,7 @@ export function WhiteboardView() {
   const startRef = useRef<Point>({ x: 0, y: 0 });
   const panStartRef = useRef<Point>({ x: 0, y: 0 });
   const currentElementRef = useRef<WhiteboardElement | null>(null);
+  const gestureTool = useRef<Tool | null>(null);
   const dragOffsetRef = useRef<Point>({ x: 0, y: 0 });
   const isPanningRef = useRef(false);
 
@@ -1268,6 +1269,7 @@ export function WhiteboardView() {
         }
       }
       // Tool shortcuts
+      if (drawingRef.current || isPanningRef.current) return;
       if (e.key === "v" || e.key === "1") setActiveTool("select");
       if (e.key === "h" || e.key === "2") setActiveTool("pan");
       if (e.key === "r") setActiveTool("rectangle");
@@ -1372,6 +1374,7 @@ export function WhiteboardView() {
 
       // Space+drag for pan (handled by panning ref when space is held)
       drawingRef.current = true;
+      gestureTool.current = activeTool;
       startRef.current = { x: snap(cp.x), y: snap(cp.y) };
       canvas.setPointerCapture(e.pointerId);
 
@@ -1516,7 +1519,7 @@ export function WhiteboardView() {
       const cur = currentElementRef.current;
       if (!cur) return;
 
-      if (activeTool === "select") {
+      if (gestureTool.current === "select") {
         if (!groupMoved.current) {
           if (Math.hypot(cp.x - dragOffsetRef.current.x - cur.x, cp.y - dragOffsetRef.current.y - cur.y) * zoom <= 3) return;
           groupMoved.current = true;
@@ -1578,7 +1581,7 @@ export function WhiteboardView() {
         }),
       );
     },
-    [activeTool, moveSelection, pan, pushUndo, zoom, snap],
+    [moveSelection, pan, pushUndo, zoom, snap],
   );
 
   const framePointer = useFramePointer(handlePointerMove, activeTool === "pen");
@@ -1599,7 +1602,7 @@ export function WhiteboardView() {
     }
 
     // Normalize negative-sized shapes
-    if (activeTool !== "select" && currentElementRef.current) {
+    if (gestureTool.current !== "select" && currentElementRef.current) {
       const cur = currentElementRef.current;
       if (isSizedShape(cur.type)) {
         setElements((prev) =>
@@ -1623,7 +1626,8 @@ export function WhiteboardView() {
 
     drawingRef.current = false;
     currentElementRef.current = null;
-  }, [activeTool, finishSelection, pan, zoom]);
+    gestureTool.current = null;
+  }, [finishSelection, pan, zoom]);
 
   // ── Context menu handler ──────────────────────────────────────────────
 

@@ -163,10 +163,19 @@ test("copied board card IDs do not collide", () => {
   assert.equal(Object.keys(data.tasks).length, 2);
 });
 test("invalid board content is preserved without inventing tasks", () => {
-  const tab = { ...board(), content: "not valid JSON" };
+  for (const content of ["not valid JSON", "{}", ""]) {
+    const tab = { ...board(), content };
+    const data = migrateProjectData(emptyProjectData(), [tab]);
+    assert.equal(Object.keys(data.tasks).length, 0);
+    assert.ok(data.boards[tab.id].columns.length);
+    assert.equal(tab.content, content);
+  }
+});
+test("blank board replacements do not delete existing cards", () => {
+  const tab = board();
   const data = migrateProjectData(emptyProjectData(), [tab]);
-  assert.equal(Object.keys(data.tasks).length, 0);
-  assert.equal(tab.content, "not valid JSON");
+  assert.throws(() => applyBoardContent(data, { ...tab, content: "   " }), /previous data has been kept/);
+  assert.equal(data.tasks["board-a:card-1"].deletedAt, null);
 });
 test("board projection round-trips titles, custom columns, labels, and dates", () => {
   const data = migrateProjectData(emptyProjectData(), [board()]);
@@ -411,6 +420,39 @@ const { useEditorStore } = require("../src/lib/store.ts");
 function resetEditor() {
   useEditorStore.setState(useEditorStore.getInitialState(), true);
 }
+
+test("completing a card creates a unique column after a status change", () => {
+  resetEditor();
+  const state = useEditorStore.getState();
+  state.createKanban();
+  const id = useEditorStore.getState().activeTabId;
+  const columns = useEditorStore.getState().projectData.boards[id].columns
+    .filter((column) => column.status !== "done");
+  state.updateBoard(id, { columns });
+  const first = state.addTask("First", { boardId: id });
+  state.updateTask(first, { status: "done" });
+  const afterFirst = useEditorStore.getState().projectData.boards[id];
+  state.updateBoard(id, { columns: afterFirst.columns.map((column) => (
+    column.status === "done" ? { ...column, status: "in-progress" } : column
+  )) });
+  const second = state.addTask("Second", { boardId: id });
+  state.updateTask(second, { status: "done" });
+  const board = useEditorStore.getState().projectData.boards[id];
+  assert.equal(new Set(board.columns.map((column) => column.id)).size, board.columns.length);
+});
+
+test("manual drops insert cards between neighbours with tied order values", () => {
+  resetEditor();
+  const state = useEditorStore.getState();
+  const first = state.addTask("First");
+  const target = state.addTask("Target");
+  const dragged = state.addTask("Dragged");
+  state.updateTask(first, { order: 0 });
+  state.updateTask(target, { order: 0 });
+  state.moveTask(dragged, [first, target], { status: "todo", columnId: null }, target);
+  const tasks = useEditorStore.getState().projectData.tasks;
+  assert.deepEqual([tasks[first].order, tasks[dragged].order, tasks[target].order], [0, 1, 2]);
+});
 
 test("creating a task from a note requires confirmation and preserves the source link", () => {
   resetEditor();

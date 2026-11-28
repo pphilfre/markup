@@ -62,6 +62,7 @@ function optionalString(value: unknown): string | undefined {
   return value;
 }
 
+/** Require visibility and permission values the sharing API supports. */
 function requireShareSettings(args: Record<string, unknown>) {
   const { visibility, permission } = args;
   if (visibility !== "public" && visibility !== "private") {
@@ -653,7 +654,7 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        await prisma.sharedNote.updateMany({
+        const result = await prisma.sharedNote.updateMany({
           where: {
             shareId,
             permission: "edit",
@@ -665,6 +666,9 @@ export async function POST(req: NextRequest) {
             content,
           },
         });
+        if (!result.count) {
+          throw new ApiError(409, "Sharing settings changed. Review your access before saving again.");
+        }
 
         return NextResponse.json(null);
       }

@@ -39,6 +39,7 @@ export interface ProjectSlice {
   cancelTaskDraft: () => void;
   submitTaskDraft: (title: string, options: NewTaskOptions) => string | null;
   updateBoard: (id: string, changes: Partial<Pick<ProjectBoard, "columns" | "showCompleted">>) => void;
+  moveTask: (id: string, laneIds: string[], placement: Pick<ProjectTask, "status" | "columnId">, beforeId?: string) => void;
   updateTask: (
     id: string,
     changes: Partial<
@@ -136,6 +137,12 @@ export function projectSlice(
         board,
         Object.values(data.tasks).filter((task) => task.boardId === tab.id),
       );
+      const previous = get().projectData;
+      const previousBoard = previous.boards[tab.id];
+      if (previousBoard && tab.content !== content && content === serializeBoard(
+        previousBoard,
+        Object.values(previous.tasks).filter((task) => task.boardId === tab.id),
+      )) return tab;
       return content === tab.content ? tab : { ...tab, content };
     }),
   });
@@ -361,6 +368,26 @@ export function projectSlice(
       }
       return withProjections({ ...state.projectData, boards: { ...state.projectData.boards, [id]: board }, tasks });
     }),
+    moveTask: (id, laneIds, placement, beforeId) => set((state) => {
+      const data = state.projectData;
+      const task = data.tasks[id];
+      if (!task || beforeId === id) return {};
+      const ordered = laneIds.flatMap((entryId) => {
+        const entry = data.tasks[entryId];
+        return entry && entryId !== id ? [entry] : [];
+      });
+      const index = ordered.findIndex((entry) => entry.id === beforeId);
+      ordered.splice(index < 0 ? ordered.length : index, 0, { ...task, ...placement });
+      const tasks = { ...data.tasks };
+      const now = Date.now();
+      ordered.forEach((entry, order) => {
+        const original = tasks[entry.id];
+        if (original.order !== order || original.status !== entry.status || original.columnId !== entry.columnId) {
+          tasks[entry.id] = { ...entry, order, updatedAt: Math.max(now, original.updatedAt + 1) };
+        }
+      });
+      return withProjections({ ...data, tasks });
+    }),
     updateTask: (id, changes) => {
       const s = get(),
         task = s.projectData.tasks[id];
@@ -384,7 +411,7 @@ export function projectSlice(
         if (column) next.columnId = column.id;
         else {
           const newColumn = {
-            id: `${board.id}-${changes.status}`,
+            id: crypto.randomUUID(),
             title:
               changes.status === "done"
                 ? "Done"

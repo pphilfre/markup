@@ -3,6 +3,7 @@ import { requireUser } from "./auth";
 import { v } from "convex/values";
 import { normalizeSlug } from "../src/lib/site-slug";
 
+/** Normalise the site slug and reject reserved names and invalid lengths. */
 function validateSlug(slug: string): string {
   const normalized = normalizeSlug(slug);
   if (!/^[a-z0-9-]{3,40}$/.test(normalized)) {

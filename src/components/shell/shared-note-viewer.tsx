@@ -276,6 +276,7 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
   const updateByShareId = useDbMutation("sharing.updateByShareId");
 
   const [editContent, setEditContent] = useState<string | null>(null);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [copied, setCopied] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -306,6 +307,7 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
   const handleContentChange = useCallback(
     (newContent: string) => {
       setEditContent(newContent);
+      setSaveFailed(false);
       lastPushedContent.current = newContent;
       if (saveTimeout.current) clearTimeout(saveTimeout.current);
       saveTimeout.current = setTimeout(() => {
@@ -313,7 +315,9 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
           shareId,
           content: newContent,
           title: sharedNote?.title ?? "Untitled",
-        }).catch(console.error);
+        }).catch(() => {
+          if (lastPushedContent.current === newContent) setSaveFailed(true);
+        });
       }, 500);
     },
     [shareId, sharedNote?.title, updateByShareId]
@@ -386,6 +390,7 @@ export function SharedNoteViewer({ shareId, onBack }: SharedNoteViewerProps) {
           )}
         </h1>
 
+        {saveFailed && <span role="alert" className="text-xs text-destructive">Changes could not be saved.</span>}
         <div className="shared-access flex items-center gap-2 text-xs text-muted-foreground">
           {sharedNote.visibility === "public" ? (
             <span className="flex items-center gap-1">

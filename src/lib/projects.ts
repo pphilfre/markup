@@ -272,6 +272,16 @@ export function defaultDocumentMeta(id: string): DocumentMeta {
     relatedDocumentIds: [],
   };
 }
+/** Read a board document with an explicit columns array. */
+function parseBoardContent(content: string): (Record<string, unknown> & { columns: unknown[] }) | null {
+  try {
+    const raw: unknown = JSON.parse(content);
+    return isRecord(raw) && Array.isArray(raw.columns) ? { ...raw, columns: raw.columns } : null;
+  } catch {
+    return null;
+  }
+}
+
 export function migrateProjectData(
   data: ProjectData,
   tabs: StoredDocument[],
@@ -284,13 +294,8 @@ export function migrateProjectData(
         documents: { ...next.documents, [tab.id]: defaultDocumentMeta(tab.id) },
       };
     if (tab.noteType !== "kanban" || next.boards[tab.id]) continue;
-    let raw: Record<string, unknown>;
-    try {
-      raw = tab.content.trim() ? JSON.parse(tab.content) : { columns: DEFAULT_BOARD_COLUMNS };
-    } catch {
-      continue;
-    }
-    if (!raw || !Array.isArray(raw.columns)) continue;
+    const raw: Record<string, unknown> & { columns: unknown[] } =
+      parseBoardContent(tab.content) ?? { columns: [] };
     const columns: BoardColumn[] = [];
     const tasks: Record<string, ProjectTask> = {};
     for (const [index, column] of raw.columns.entries()) {
@@ -404,6 +409,10 @@ export function applyBoardContent(
   data: ProjectData,
   document: StoredDocument,
 ): ProjectData {
+  if (!parseBoardContent(document.content))
+    throw new Error(
+      "This board could not be read. Its previous data has been kept.",
+    );
   const boards = { ...data.boards };
   delete boards[document.id];
   const otherTasks = Object.fromEntries(

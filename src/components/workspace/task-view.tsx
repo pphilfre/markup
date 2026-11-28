@@ -55,6 +55,7 @@ export function TaskView({ projectId, boardId, compact = false, initialView = "l
   const addTask = useEditorStore((state) => state.addTask);
   const beginTask = useEditorStore((state) => state.beginTask);
   const updateTask = useEditorStore((state) => state.updateTask);
+  const moveTask = useEditorStore((state) => state.moveTask);
   const updateBoard = useEditorStore((state) => state.updateBoard);
   const selectTask = useEditorStore((state) => state.selectTask);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
@@ -115,15 +116,15 @@ export function TaskView({ projectId, boardId, compact = false, initialView = "l
     event.currentTarget.querySelector("input")?.focus();
   };
   const move = (taskId: string, column: BoardColumn, beforeId?: string) => {
-    if (taskId === beforeId || !tasks.some((task) => task.id === taskId)) return;
+    const task = tasks.find((entry) => entry.id === taskId);
+    if (!task || taskId === beforeId) return;
+    const sameColumn = board ? task.columnId === column.id : task.status === column.status;
+    if (filters.sort === "priority" && sameColumn) return;
     const lane = tasks.filter((task) => task.id !== taskId &&
       (board ? task.columnId === column.id : task.status === column.status),
-    ).sort((a, b) => a.order - b.order);
-    const index = lane.findIndex((task) => task.id === beforeId);
-    const nextOrder = index === -1
-      ? (lane.at(-1)?.order ?? -1) + 1
-      : ((lane[index - 1]?.order ?? lane[index].order - 1) + lane[index].order) / 2;
-    updateTask(taskId, { ...(board ? { columnId: column.id } : { status: column.status }), order: nextOrder });
+    ).sort((a, b) => a.order - b.order || b.createdAt - a.createdAt);
+    moveTask(taskId, lane.map((entry) => entry.id), { columnId: board ? column.id : task.columnId, status: column.status },
+      filters.sort === "manual" ? beforeId : undefined);
     setDraggedTask(null);
     setDropTarget(null);
   };
@@ -215,10 +216,13 @@ export function TaskView({ projectId, boardId, compact = false, initialView = "l
           {columns.map((column, columnIndex) => {
             const items = filtered.filter((task) => board ? task.columnId === column.id : task.status === column.status);
             const activeCount = tasks.filter((task) => task.columnId === column.id && task.status !== "done").length;
+            const dragging = tasks.find((task) => task.id === draggedTask);
+            const canDropTask = dragging && (filters.sort === "manual" ||
+              (board ? dragging.columnId !== column.id : dragging.status !== column.status));
             return (
               <section key={column.id} className={cn("task-column", dropTarget === column.id && "task-column-drop")} aria-label={column.title}
                 style={{ "--column-colour": column.color } as React.CSSProperties}
-                onDragOver={(event) => { if (draggedTask || draggedColumn) { event.preventDefault(); setDropTarget(column.id); } }}
+                onDragOver={(event) => { if (canDropTask || draggedColumn) { event.preventDefault(); setDropTarget(column.id); } }}
                 onDragLeave={(event) => {
                   if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setDropTarget(null);
                 }}
@@ -238,7 +242,7 @@ export function TaskView({ projectId, boardId, compact = false, initialView = "l
                     setDropTarget(null);
                     return;
                   }
-                  if (!draggedTask) return;
+                  if (!canDropTask || !draggedTask) return;
                   event.preventDefault();
                   move(draggedTask, column);
                 }}>
@@ -265,7 +269,7 @@ export function TaskView({ projectId, boardId, compact = false, initialView = "l
                       draggable onDragStart={(event) => { event.dataTransfer.setData("text/markup-task", task.id); event.dataTransfer.effectAllowed = "move"; setDraggedTask(task.id); }}
                       onDragEnd={() => { setDraggedTask(null); setDropTarget(null); }}
                       onDrop={(event) => {
-                        if (!draggedTask) return;
+                        if (filters.sort !== "manual" || !draggedTask) return;
                         event.stopPropagation();
                         event.preventDefault();
                         move(draggedTask, column, task.id);

@@ -129,6 +129,7 @@ export const viewport: Viewport = {
   interactiveWidget: "resizes-content",
 };
 
+/** Render the shared document shell and app-wide providers for all routes. */
 export default function RootLayout({
   children,
 }: Readonly<{

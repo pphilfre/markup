@@ -6,7 +6,7 @@ const ts = require("typescript");
 require.extensions[".ts"] = (module, filename) =>
   module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
+      module: ts.ModuleKind.Node16,
       target: ts.ScriptTarget.ES2022,
     },
   }).outputText, filename);

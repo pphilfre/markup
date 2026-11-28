@@ -3,6 +3,7 @@ import { requireUser } from "./auth";
 import { v } from "convex/values";
 import type { Auth } from "convex/server";
 
+/** Check share visibility against the signed-in owner or verified invitee. */
 async function canAccessShare(
   auth: Auth,
   note: { visibility: string; ownerUserId: string; allowedUsers: string[] },
